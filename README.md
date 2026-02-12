@@ -31,10 +31,9 @@ ZTP Server automates the provisioning of network devices by:
 ### 1. Start the Server
 
 ```bash
-# Clone and start
 git clone <repo-url>
 cd ztp-server
-docker-compose up -d ztp-server
+docker compose up
 
 # Verify it's running
 curl http://localhost:8080/api/devices
@@ -42,7 +41,7 @@ curl http://localhost:8080/api/devices
 
 ### 2. Access the Web UI
 
-Open http://localhost:8080 in your browser.
+Open http://localhost:5174 in your browser (Vite dev server proxies to the Rust backend on port 8080).
 
 ### 3. Configure Settings
 
@@ -69,11 +68,8 @@ The mobile app lets you manage devices from your phone and scan barcodes/QR code
 ### Development Setup
 
 ```bash
-# Install dependencies
 cd mobile
 npm install
-
-# Start Expo dev server
 npm start
 ```
 
@@ -87,18 +83,6 @@ export const API_BASE_URL = __DEV__
   : 'http://your-production-server:8080';
 ```
 
-**Finding your computer's IP:**
-```bash
-# macOS
-ipconfig getifaddr en0
-
-# Linux
-hostname -I | awk '{print $1}'
-
-# Windows
-ipconfig | findstr IPv4
-```
-
 ### Running on Your Phone
 
 1. Install **Expo Go** from the App Store (iOS) or Play Store (Android)
@@ -106,53 +90,42 @@ ipconfig | findstr IPv4
 3. Run `npm start` in the mobile directory
 4. Scan the QR code with Expo Go (Android) or Camera app (iOS)
 
-### Mobile App Features
-
-- **Device List** - View all configured devices with status
-- **Add Device** - Add new devices with barcode scanner support
-- **Edit Device** - Modify device settings
-- **Settings** - Configure SSH defaults, DHCP, and OpenGear options
-- **Pull to Refresh** - Refresh device list by pulling down
-- **Barcode Scanner** - Scan device serial numbers to auto-fill hostname
-
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Docker Compose                                 │
-├──────────────────┬──────────────────┬────────────────┬──────────────────┤
-│   DHCP Server    │   TFTP Server    │   API + Web UI │   Test Client    │
-│   (dnsmasq)      │   (dnsmasq)      │   (Go + React) │   (alpine+ssh)   │
-│   Port 67/udp    │   Port 69/udp    │   Port 8080    │   For testing    │
-└──────────────────┴──────────────────┴────────────────┴──────────────────┘
-                                │
-                    ┌───────────┴───────────┐
-                    │      SQLite DB        │
-                    │   Device mappings     │
-                    │   Settings & config   │
-                    └───────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                       Docker Compose                         │
+├──────────────────┬──────────────────┬────────────────────────┤
+│   DHCP Server    │   TFTP Server    │   API + Web UI         │
+│   (dnsmasq)      │   (dnsmasq)      │   (Rust + React)       │
+│   Port 67/udp    │   Port 69/udp    │   Port 8080 / 5174     │
+└──────────────────┴──────────────────┴────────────────────────┘
+                              │
+                  ┌───────────┴───────────┐
+                  │      SQLite DB        │
+                  │   Device mappings     │
+                  │   Settings & config   │
+                  └───────────────────────┘
 ```
 
 ### Project Structure
 
 ```
 ztp-server/
-├── backend/              # Go API server
-│   ├── main.go
-│   ├── handlers/         # HTTP handlers
-│   ├── models/           # Data models
-│   ├── db/               # SQLite operations
-│   ├── dhcp/             # dnsmasq config generation
-│   ├── backup/           # SSH backup logic
-│   ├── config/           # Configuration management
-│   └── utils/            # Shared utilities
-├── frontend/             # React web UI
+├── backend-rust/         # Rust API server (Axum)
+│   ├── src/
+│   │   ├── handlers/     # HTTP handlers
+│   │   ├── models/       # Data models
+│   │   └── ...
+│   ├── Dockerfile
+│   └── Cargo.toml
+├── frontend/             # React web UI (Vite + TypeScript)
 │   └── src/
 │       ├── components/   # Reusable UI components
 │       └── core -> ../../shared/core
-├── mobile/               # React Native app
+├── mobile/               # React Native app (Expo)
 │   └── src/
 │       ├── screens/      # App screens
 │       ├── components/   # Mobile UI components
@@ -164,10 +137,10 @@ ztp-server/
 │       ├── services/     # API service layer
 │       ├── hooks/        # React hooks
 │       └── utils/        # Validation & formatting
+├── test-client/          # Simulated network switch for testing
 ├── configs/
 │   └── templates/        # Device config templates
-├── docker-compose.yml
-└── Dockerfile
+└── docker-compose.yml
 ```
 
 ---
@@ -251,7 +224,7 @@ curl -X POST http://localhost:8080/api/devices \
 | `TFTP_DIR` | `/tftp` | TFTP root directory |
 | `BACKUP_DIR` | `/backups` | Config backup directory |
 | `TEMPLATES_DIR` | `/configs/templates` | Config templates directory |
-| `LISTEN_ADDR` | `:8080` | API server listen address |
+| `RUST_LOG` | `info` | Log level |
 
 ### Settings (via UI or API)
 
@@ -273,7 +246,7 @@ curl -X POST http://localhost:8080/api/devices \
 
 ## Config Templates
 
-Place templates in `configs/templates/`. Use Go template syntax with these variables:
+Place templates in `configs/templates/`. Templates use `{{.Variable}}` syntax with these variables:
 
 | Variable | Description |
 |----------|-------------|
@@ -301,15 +274,6 @@ line vty 0 15
 end
 ```
 
-### Example: OpenGear Console Server
-
-```
-config.system.name={{.Hostname}}
-config.interfaces.wan.static.address={{.IP}}
-config.interfaces.wan.static.netmask={{.Subnet}}
-config.interfaces.wan.static.gateway={{.Gateway}}
-```
-
 ---
 
 ## Testing with Test Client
@@ -328,32 +292,22 @@ The included test client simulates a network device going through ZTP:
 #    Password: admin
 
 # 3. Start the test client
-docker-compose --profile test up test-client
+docker compose --profile test up test-client
 
 # 4. Watch the logs
-docker-compose logs -f ztp-server test-client
+docker compose logs -f backend-rust test-client
 ```
-
-The test client will:
-1. Request an IP via DHCP
-2. Fetch its config via TFTP
-3. Start an SSH server
-4. Get backed up by the ZTP server
 
 ---
 
 ## Development
 
-### Backend (Go)
+### Backend (Rust)
 
 ```bash
-cd backend
-go mod download
-go run .
-
-# Run with hot reload
-go install github.com/air-verse/air@latest
-air
+cd backend-rust
+cargo build
+cargo run
 ```
 
 ### Frontend (React)
@@ -370,12 +324,6 @@ npm run dev
 cd mobile
 npm install
 npm start
-
-# iOS Simulator
-npm run ios
-
-# Android Emulator
-npm run android
 ```
 
 ### Shared Core Module
@@ -391,16 +339,6 @@ Both `frontend/src/core` and `mobile/src/core` are symlinks to `shared/core/`.
 
 ---
 
-## Docker Volumes
-
-| Volume | Purpose |
-|--------|---------|
-| `ztp-data` | SQLite database |
-| `ztp-tftp` | Generated device configs |
-| `ztp-backups` | Backed up running configs |
-
----
-
 ## Troubleshooting
 
 ### Mobile app can't connect to API
@@ -412,22 +350,20 @@ Both `frontend/src/core` and `mobile/src/core` are symlinks to `shared/core/`.
 
 ### DHCP not working
 
-1. Ensure Docker is running with `--net=host` or proper network configuration
-2. Check dnsmasq logs: `docker-compose logs ztp-server | grep dnsmasq`
-3. Verify no other DHCP server is running on the network
+1. Check dnsmasq logs: `docker compose logs backend-rust | grep dnsmasq`
+2. Verify no other DHCP server is running on the network
 
 ### Backup failing
 
 1. Check SSH credentials in Settings
 2. Verify device is reachable: `ping <device-ip>`
 3. Test SSH manually: `ssh admin@<device-ip>`
-4. Check backup logs: `docker-compose logs ztp-server | grep backup`
+4. Check backup logs: `docker compose logs backend-rust | grep backup`
 
 ### Template not applying
 
 1. Verify template exists in `configs/templates/`
-2. Check template syntax with Go template validator
-3. Look for errors in logs during TFTP request
+2. Look for errors in logs during TFTP request
 
 ---
 

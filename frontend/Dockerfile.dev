@@ -1,0 +1,19 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY frontend/package*.json ./
+RUN npm install
+
+COPY <<'EOF' /entrypoint.sh
+#!/bin/sh
+set -e
+rm -rf /app/src/core
+ln -sf /shared/core /app/src/core
+exec npm run dev -- --host 0.0.0.0
+EOF
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 5173
+
+CMD ["/entrypoint.sh"]

@@ -57,8 +57,6 @@ export function TestContainers() {
   const [showSpawnDialog, setShowSpawnDialog] = useState(false);
   const [spawning, setSpawning] = useState(false);
   const [spawningCeos, setSpawningCeos] = useState(false);
-  const [spawningFrr, setSpawningFrr] = useState(false);
-  const [spawningGobgp, setSpawningGobgp] = useState(false);
   const [formData, setFormData] = useState<SpawnContainerRequest>({
     hostname: '',
     mac: '',
@@ -119,23 +117,6 @@ export function TestContainers() {
     }
   };
 
-  const handleSpawnFrr = async () => {
-    setSpawningFrr(true);
-    try {
-      await spawn({ image: 'ztp-server-frr-client' });
-    } finally {
-      setSpawningFrr(false);
-    }
-  };
-
-  const handleSpawnGobgp = async () => {
-    setSpawningGobgp(true);
-    try {
-      await spawn({ image: 'ztp-server-gobgp-client' });
-    } finally {
-      setSpawningGobgp(false);
-    }
-  };
 
   const handleOpenDialog = () => {
     // Generate initial MAC
@@ -161,8 +142,6 @@ export function TestContainers() {
               <li>You can specify a vendor MAC prefix to simulate specific equipment</li>
               <li>DHCP vendor class identifier helps identify the device type</li>
               <li>Config fetch method: TFTP (traditional), HTTP (modern), or both</li>
-              <li>FRR containers run real FRRouting daemons (zebra + bgpd) with ZTP config</li>
-              <li>GoBGP containers run the GoBGP daemon with YAML configuration via ZTP</li>
             </ul>
           </div>
         </InfoSection>
@@ -174,14 +153,6 @@ export function TestContainers() {
           <Button onClick={handleSpawnCeos} disabled={spawningCeos}>
             <PlusIcon size={16} />
             {spawningCeos ? 'Spawning cEOS...' : 'Spawn cEOS'}
-          </Button>
-          <Button onClick={handleSpawnFrr} disabled={spawningFrr}>
-            <PlusIcon size={16} />
-            {spawningFrr ? 'Spawning FRR...' : 'Spawn FRR'}
-          </Button>
-          <Button onClick={handleSpawnGobgp} disabled={spawningGobgp}>
-            <PlusIcon size={16} />
-            {spawningGobgp ? 'Spawning GoBGP...' : 'Spawn GoBGP'}
           </Button>
           <Button variant="secondary" onClick={refresh}>
             <RefreshIcon size={16} />

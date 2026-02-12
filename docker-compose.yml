@@ -1,16 +1,13 @@
-# Unified Docker Compose - Rust backend (primary) + all 3 APIs for testing
+# ZTP Server - Docker Compose
 #
 # Usage:
 #   docker compose up                    # Start Rust backend + frontend
-#   docker compose up --profile all      # Start all 3 backends + frontend
-#   docker compose up --profile test     # Include test-client
-#   docker compose --profile all up --build  # Rebuild everything
+#   docker compose up --profile test     # Include test clients
+#   docker compose up --build            # Rebuild everything
 #
 # Ports:
-#   5174 - Frontend (Vite dev server, proxies to Rust)
-#   8080 - Rust backend (primary)
-#   8081 - Go backend
-#   8082 - Python backend
+#   5174 - Frontend (Vite dev server)
+#   8080 - Rust backend
 
 services:
   # ===========================================
@@ -19,8 +16,7 @@ services:
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.dev
-      target: frontend-dev
+      dockerfile: frontend/Dockerfile.dev
     container_name: ztp-frontend
     networks:
       - ztp-net
@@ -37,7 +33,7 @@ services:
     restart: unless-stopped
 
   # ===========================================
-  # Rust backend (primary) - port 8080
+  # Rust backend - port 8080
   # ===========================================
   backend-rust:
     build:
@@ -69,70 +65,6 @@ services:
       # Docker configuration for spawning test containers
       - DOCKER_NETWORK=ztp-server_ztp-net
       - TEST_CLIENT_IMAGE=ztp-server-test-client
-      - FRR_CLIENT_IMAGE=ztp-server-frr-client
-      - GOBGP_CLIENT_IMAGE=ztp-server-gobgp-client
-    restart: unless-stopped
-
-  # ===========================================
-  # Go backend - port 8081
-  # ===========================================
-  backend-go:
-    build: .
-    container_name: ztp-backend-go
-    hostname: ztp-server-go
-    networks:
-      ztp-net:
-        ipv4_address: 172.30.0.3
-    ports:
-      - "8081:8080"
-    volumes:
-      - go-data:/data
-      - go-tftp:/tftp
-      - go-backups:/backups
-      - ./configs/templates:/configs/templates:ro
-      - /var/run/docker.sock:/var/run/docker.sock
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - DB_PATH=/data/ztp.db
-      - TFTP_DIR=/tftp
-      - BACKUP_DIR=/backups
-      - TEMPLATES_DIR=/configs/templates
-    profiles:
-      - all
-    restart: unless-stopped
-
-  # ===========================================
-  # Python backend - port 8082
-  # ===========================================
-  backend-python:
-    build:
-      context: ./backend-python
-      dockerfile: Dockerfile
-    container_name: ztp-backend-python
-    hostname: ztp-server-python
-    networks:
-      ztp-net:
-        ipv4_address: 172.30.0.4
-    ports:
-      - "8082:8080"
-    volumes:
-      - python-data:/data
-      - python-tftp:/tftp
-      - python-backups:/backups
-      - ./configs/templates:/configs/templates:ro
-      - ./frontend/dist:/app/frontend:ro
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - DB_PATH=/data/ztp.db
-      - TFTP_DIR=/tftp
-      - BACKUP_DIR=/backups
-      - TEMPLATES_DIR=/configs/templates
-      - LISTEN_ADDR=0.0.0.0:8080
-      - DHCP_INTERFACE=eth0
-    profiles:
-      - all
     restart: unless-stopped
 
   # ===========================================
@@ -155,59 +87,6 @@ services:
     profiles:
       - test
 
-  # ===========================================
-  # FRR client - FRRouting BGP daemon
-  # ===========================================
-  frr-client:
-    build:
-      context: ./frr-client
-      dockerfile: Dockerfile
-    container_name: ztp-frr-client
-    hostname: frr-router
-    networks:
-      ztp-net:
-        ipv4_address: 172.30.0.98
-    mac_address: "02:42:ac:1e:00:98"
-    cap_add:
-      - NET_ADMIN
-      - SYS_ADMIN
-    sysctls:
-      - net.ipv4.ip_forward=1
-    environment:
-      - VENDOR_CLASS=FRRouting
-      - USER_CLASS=FRR-9.1
-      - DEVICE_HOSTNAME=frr-router
-    depends_on:
-      - backend-rust
-    profiles:
-      - test
-
-  # ===========================================
-  # GoBGP client - GoBGP BGP daemon
-  # ===========================================
-  gobgp-client:
-    build:
-      context: ./gobgp-client
-      dockerfile: Dockerfile
-    container_name: ztp-gobgp-client
-    hostname: gobgp-router
-    networks:
-      ztp-net:
-        ipv4_address: 172.30.0.97
-    mac_address: "02:42:ac:1e:00:97"
-    cap_add:
-      - NET_ADMIN
-    sysctls:
-      - net.ipv4.ip_forward=1
-    environment:
-      - VENDOR_CLASS=GoBGP
-      - USER_CLASS=GoBGP-3.28
-      - DEVICE_HOSTNAME=gobgp-router
-    depends_on:
-      - backend-rust
-    profiles:
-      - test
-
 networks:
   ztp-net:
     driver: bridge
@@ -217,15 +96,6 @@ networks:
           gateway: 172.30.0.1
 
 volumes:
-  # Rust backend volumes
   rust-data:
   rust-tftp:
   rust-backups:
-  # Go backend volumes
-  go-data:
-  go-tftp:
-  go-backups:
-  # Python backend volumes
-  python-data:
-  python-tftp:
-  python-backups:

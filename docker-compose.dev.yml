@@ -1,54 +1,19 @@
 # Development compose with live reload
+#
 # Usage: docker compose -f docker-compose.dev.yml up
 #
-# Frontend: Runs Vite dev server with hot reload on port 5173
-# Backend: Runs Go server with Air for hot reload on port 8080
+# Frontend: Vite dev server with hot reload on port 5174
+# Backend: Rust source mounted for rebuild via `cargo build` inside container
+#
+# To rebuild the backend after code changes:
+#   docker compose -f docker-compose.dev.yml exec backend cargo build --release
+#   docker compose -f docker-compose.dev.yml restart backend
 
 services:
-  # Go backend with hot reload using Air
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-      target: backend-dev
-    container_name: ztp-backend-dev
-    hostname: ztp-server
-    networks:
-      ztp-net:
-        ipv4_address: 172.30.0.2
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./backend:/app
-      - ztp-data:/data
-      - ztp-tftp:/tftp
-      - ztp-backups:/backups
-      - ./configs/templates:/configs/templates:ro
-      - go-cache:/go/pkg/mod
-      # Mount Docker socket for spawning test containers
-      - /var/run/docker.sock:/var/run/docker.sock
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - DB_PATH=/data/ztp.db
-      - TFTP_DIR=/tftp
-      - BACKUP_DIR=/backups
-      - TEMPLATES_DIR=/configs/templates
-      - DNSMASQ_CONFIG=/dnsmasq/dnsmasq.conf
-      - LEASE_PATH=/var/lib/misc/dnsmasq.leases
-      - LISTEN_ADDR=:8080
-      - DEV_MODE=true
-      # Docker configuration for spawning test containers
-      - DOCKER_NETWORK=ztp-server_ztp-net
-      - TEST_CLIENT_IMAGE=ztp-server-test-client
-    restart: unless-stopped
-
-  # Vite dev server with hot reload
   frontend:
     build:
       context: .
-      dockerfile: Dockerfile.dev
-      target: frontend-dev
+      dockerfile: frontend/Dockerfile.dev
     container_name: ztp-frontend-dev
     networks:
       - ztp-net
@@ -59,9 +24,44 @@ services:
       - ./shared:/shared
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://ztp-server:8080
+      - VITE_API_URL=http://backend:8080
     depends_on:
       - backend
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend-rust
+      dockerfile: Dockerfile.dev
+    container_name: ztp-backend-dev
+    hostname: ztp-server
+    networks:
+      ztp-net:
+        ipv4_address: 172.30.0.2
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend-rust/src:/app/src:ro
+      - ./backend-rust/Cargo.toml:/app/Cargo.toml:ro
+      - ./backend-rust/Cargo.lock:/app/Cargo.lock:ro
+      - ./backend-rust/scripts:/scripts:ro
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-target:/app/target
+      - dev-data:/data
+      - dev-tftp:/tftp
+      - dev-backups:/backups
+      - ./configs/templates:/configs/templates:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - DB_PATH=/data/ztp.db
+      - TFTP_DIR=/tftp
+      - BACKUP_DIR=/backups
+      - TEMPLATES_DIR=/configs/templates
+      - RUST_LOG=debug
+      - DOCKER_NETWORK=ztp-app_ztp-net
+      - TEST_CLIENT_IMAGE=ztp-server-test-client
     restart: unless-stopped
 
   test-client:
@@ -90,7 +90,8 @@ networks:
           gateway: 172.30.0.1
 
 volumes:
-  ztp-data:
-  ztp-tftp:
-  ztp-backups:
-  go-cache:
+  cargo-registry:
+  cargo-target:
+  dev-data:
+  dev-tftp:
+  dev-backups:

@@ -38,14 +38,6 @@ yarn-error.*
 # TypeScript
 *.tsbuildinfo
 
-# Go
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-__debug_bin*
-
 # Rust
 backend-rust/target/
 

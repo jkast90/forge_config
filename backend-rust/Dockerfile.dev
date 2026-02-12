@@ -1,0 +1,40 @@
+FROM rust:1.85-alpine
+
+RUN apk add --no-cache \
+    musl-dev openssl-dev openssl-libs-static pkgconf \
+    libssh2-dev libssh2-static zlib-dev zlib-static \
+    dnsmasq openssh-client ca-certificates tzdata libssh2
+
+WORKDIR /app
+
+# Copy manifest files and cache dependencies
+COPY Cargo.toml Cargo.lock* ./
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src
+
+# Copy source and build
+COPY src ./src
+COPY scripts /scripts
+RUN chmod +x /scripts/*.sh && \
+    touch src/main.rs && \
+    cargo build --release
+
+# Create required directories
+RUN mkdir -p /data /tftp /backups /dnsmasq /configs/templates /var/lib/misc
+
+ENV DB_PATH=/data/ztp.db
+ENV DNSMASQ_CONFIG=/dnsmasq/dnsmasq.conf
+ENV TFTP_DIR=/tftp
+ENV TEMPLATES_DIR=/configs/templates
+ENV BACKUP_DIR=/backups
+ENV LEASE_PATH=/var/lib/misc/dnsmasq.leases
+ENV DNSMASQ_PID=/var/run/dnsmasq.pid
+ENV LISTEN_ADDR=0.0.0.0:8080
+ENV DHCP_INTERFACE=eth0
+ENV FRONTEND_DIR=/app/frontend
+ENV RUST_LOG=debug
+
+EXPOSE 8080 67/udp 69/udp
+
+CMD ["/app/target/release/ztp-server"]
