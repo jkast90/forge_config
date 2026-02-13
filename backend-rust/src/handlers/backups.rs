@@ -54,6 +54,7 @@ pub async fn get_backup(
         filename: backup.filename,
         size: backup.size,
         created_at: backup.created_at,
+        exists: content.is_some(),
         content,
     }))
 }
@@ -92,6 +93,7 @@ pub struct BackupWithContent {
     pub filename: String,
     pub size: i64,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub exists: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
 }
