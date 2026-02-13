@@ -3,11 +3,7 @@
 # Usage: docker compose -f docker-compose.dev.yml up
 #
 # Frontend: Vite dev server with hot reload on port 5174
-# Backend: Rust source mounted for rebuild via `cargo build` inside container
-#
-# To rebuild the backend after code changes:
-#   docker compose -f docker-compose.dev.yml exec backend cargo build --release
-#   docker compose -f docker-compose.dev.yml restart backend
+# Backend: rebuild with `docker compose -f docker-compose.dev.yml up -d --build backend`
 
 services:
   frontend:
@@ -42,6 +38,7 @@ services:
       - "8080:8080"
     volumes:
       - ./backend-rust/src:/app/src:ro
+      - ./backend-rust/migrations:/app/migrations:ro
       - ./backend-rust/Cargo.toml:/app/Cargo.toml:ro
       - ./backend-rust/Cargo.lock:/app/Cargo.lock:ro
       - ./backend-rust/scripts:/scripts:ro
@@ -60,6 +57,7 @@ services:
       - BACKUP_DIR=/backups
       - TEMPLATES_DIR=/configs/templates
       - RUST_LOG=debug
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me}
       - DOCKER_NETWORK=ztp-app_ztp-net
       - TEST_CLIENT_IMAGE=ztp-server-test-client
     restart: unless-stopped

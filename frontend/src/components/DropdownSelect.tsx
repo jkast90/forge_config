@@ -16,6 +16,7 @@ interface Props {
   icon?: string;
   showCheckmark?: boolean;
   className?: string;
+  triggerClassName?: string;
 }
 
 export function DropdownSelect({
@@ -26,6 +27,7 @@ export function DropdownSelect({
   icon = 'menu',
   showCheckmark = true,
   className = '',
+  triggerClassName,
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -68,7 +70,7 @@ export function DropdownSelect({
   return (
     <div className={`dropdown-select ${className}`} ref={dropdownRef}>
       <button
-        className="dropdown-select-trigger"
+        className={triggerClassName || 'dropdown-select-trigger'}
         onClick={() => setIsOpen(!isOpen)}
         aria-expanded={isOpen}
         aria-haspopup="listbox"

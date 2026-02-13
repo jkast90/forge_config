@@ -62,8 +62,9 @@ services:
       - BACKUP_DIR=/backups
       - TEMPLATES_DIR=/configs/templates
       - RUST_LOG=info
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       # Docker configuration for spawning test containers
-      - DOCKER_NETWORK=ztp-server_ztp-net
+      - DOCKER_NETWORK=ztp-app_ztp-net
       - TEST_CLIENT_IMAGE=ztp-server-test-client
     restart: unless-stopped
 

@@ -113,6 +113,14 @@ export const EMPTY_VENDOR_FORM = {
   default_template: '',
 };
 
+export const EMPTY_VENDOR_ACTION_FORM = {
+  id: '',
+  vendor_id: '',
+  label: '',
+  command: '',
+  sort_order: 0,
+};
+
 export const EMPTY_DHCP_OPTION_FORM = {
   id: '',
   option_number: 0,
@@ -132,6 +140,19 @@ export const EMPTY_TEMPLATE_FORM = {
   content: '',
 };
 
+export const EMPTY_TOPOLOGY_FORM = {
+  id: '',
+  name: '',
+  description: '',
+};
+
+export const TOPOLOGY_ROLE_OPTIONS = [
+  { value: '', label: 'No Role' },
+  { value: 'super-spine', label: 'Super-Spine' },
+  { value: 'spine', label: 'Spine' },
+  { value: 'leaf', label: 'Leaf' },
+] as const;
+
 /**
  * Sample device data for template preview
  */
@@ -142,6 +163,8 @@ export const SAMPLE_DEVICE_FOR_PREVIEW = {
     hostname: 'switch-01',
     vendor: 'cisco',
     serial_number: 'ABC123456',
+    topology_id: 'dc1-fabric',
+    topology_role: 'leaf',
   },
   subnet: '255.255.255.0',
   gateway: '192.168.1.1',

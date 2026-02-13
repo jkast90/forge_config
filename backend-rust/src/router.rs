@@ -12,6 +12,8 @@ use crate::AppState;
 /// Build the application router with all routes
 pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
     Router::new()
+        // Auth routes (public)
+        .route("/api/auth/login", post(handlers::auth::login))
         // Benchmark routes
         .route("/api/benchmark", get(handlers::benchmarks::benchmark_handler))
         .route("/api/mandelbrot", get(handlers::benchmarks::mandelbrot_handler))
@@ -30,6 +32,10 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/devices/:mac/config", get(handlers::devices::get_device_config))
         .route("/api/devices/:mac/preview-config", post(handlers::devices::preview_device_config))
         .route("/api/devices/:mac/deploy-config", post(handlers::devices::deploy_device_config))
+        .route("/api/devices/:mac/exec", post(handlers::devices::exec_command))
+        // Job routes
+        .route("/api/jobs", get(handlers::jobs::list_jobs))
+        .route("/api/jobs/:id", get(handlers::jobs::get_job))
         // Backup routes
         .route("/api/devices/:mac/backup", post(handlers::backups::trigger_backup))
         .route("/api/devices/:mac/backups", get(handlers::backups::list_backups))
@@ -46,6 +52,18 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/vendors/:id", get(handlers::vendors::get_vendor))
         .route("/api/vendors/:id", put(handlers::vendors::update_vendor))
         .route("/api/vendors/:id", delete(handlers::vendors::delete_vendor))
+        .route("/api/vendors/:id/actions", get(handlers::vendors::list_vendor_actions_by_vendor))
+        // Vendor action routes
+        .route("/api/vendor-actions", get(handlers::vendors::list_vendor_actions))
+        .route("/api/vendor-actions", post(handlers::vendors::create_vendor_action))
+        .route("/api/vendor-actions/:id", put(handlers::vendors::update_vendor_action))
+        .route("/api/vendor-actions/:id", delete(handlers::vendors::delete_vendor_action))
+        // Topology routes
+        .route("/api/topologies", get(handlers::topologies::list_topologies))
+        .route("/api/topologies", post(handlers::topologies::create_topology))
+        .route("/api/topologies/:id", get(handlers::topologies::get_topology))
+        .route("/api/topologies/:id", put(handlers::topologies::update_topology))
+        .route("/api/topologies/:id", delete(handlers::topologies::delete_topology))
         // Template routes
         .route("/api/templates", get(handlers::templates::list_templates))
         .route("/api/templates", post(handlers::templates::create_template))
@@ -85,7 +103,11 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/docker/containers", get(handlers::docker::list_containers))
         .route("/api/docker/containers", post(handlers::docker::spawn_container))
         .route("/api/docker/containers/:id", delete(handlers::docker::remove_container))
+        .route("/api/docker/containers/:id/start", post(handlers::docker::start_container))
         .route("/api/docker/containers/:id/restart", post(handlers::docker::restart_container))
+        // CLOS lab routes
+        .route("/api/docker/clos-lab", post(handlers::docker::build_clos_lab))
+        .route("/api/docker/clos-lab", delete(handlers::docker::teardown_clos_lab))
         // WebSocket route
         .route("/api/ws", get(crate::ws_upgrade_handler))
         // Config server route

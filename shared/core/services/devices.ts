@@ -1,7 +1,7 @@
 // Device service - handles all device-related API operations
 
 import { BaseService } from './base';
-import type { Device, Backup } from '../types';
+import type { Device, Backup, ExecCommandResult, Job } from '../types';
 
 export interface PingResult {
   reachable: boolean;
@@ -104,7 +104,20 @@ export class DeviceService extends BaseService {
     return this.post<ConfigPreviewResult>(`/devices/${encodeURIComponent(mac)}/preview-config`);
   }
 
-  async deployConfig(mac: string): Promise<DeployConfigResult> {
-    return this.post<DeployConfigResult>(`/devices/${encodeURIComponent(mac)}/deploy-config`);
+  async deployConfig(mac: string): Promise<Job> {
+    return this.post<Job>(`/devices/${encodeURIComponent(mac)}/deploy-config`);
+  }
+
+  async exec(mac: string, command: string): Promise<Job> {
+    return this.post<Job>(`/devices/${encodeURIComponent(mac)}/exec`, { command });
+  }
+
+  async getJob(id: string): Promise<Job> {
+    return this.get<Job>(`/jobs/${encodeURIComponent(id)}`);
+  }
+
+  async listJobs(mac?: string): Promise<Job[]> {
+    const params = mac ? `?device_mac=${encodeURIComponent(mac)}` : '';
+    return this.get<Job[]>(`/jobs${params}`);
   }
 }

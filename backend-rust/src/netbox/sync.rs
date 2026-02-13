@@ -215,6 +215,8 @@ pub async fn sync_pull(store: &Store, nb: &NetBoxClient) -> Result<SyncResult> {
                     config_template: String::new(),
                     ssh_user: None,
                     ssh_pass: None,
+                    topology_id: None,
+                    topology_role: None,
                 };
 
                 match store.create_device(&req).await {

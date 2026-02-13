@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Provider } from 'react-redux';
-import { store, useDevices, useWebTheme, useWebSocket, useVendors, useInflight, useModalRoute, useNotificationHistory, lookupVendorByMac, setVendorCache, addNotification, DeviceDiscoveredPayload, getServices, initTelemetry, trackEvent } from '@core';
+import { store, useAuth, useAuthState, AuthProvider, useDevices, useWebTheme, useWebSocket, useVendors, useInflight, useModalRoute, useNotificationHistory, lookupVendorByMac, setVendorCache, addNotification, DeviceDiscoveredPayload, getServices, initTelemetry, trackEvent } from '@core';
 import { DeviceList } from './components/DeviceList';
 import { DeviceForm } from './components/DeviceForm';
+import { LoginPage } from './components/LoginPage';
 import { SettingsDialog } from './components/SettingsDialog';
 import {
   ApiHistory,
@@ -24,6 +25,9 @@ import {
   PlusIcon,
   RefreshIcon,
   SpinnerIcon,
+  Jobs,
+  TopologyManagement,
+  VendorActions,
   VendorManagement,
 } from './components';
 import type { DropdownOption } from './components';
@@ -38,6 +42,9 @@ const PAGES: DropdownOption[] = [
   { id: 'templates', label: 'Templates', icon: 'description', description: 'Build config templates' },
   { id: 'vendors', label: 'Vendors', icon: 'business', description: 'Configure vendor settings' },
   { id: 'dhcp', label: 'DHCP Options', icon: 'lan', description: 'Manage DHCP options' },
+  { id: 'topologies', label: 'Topologies', icon: 'hub', description: 'CLOS fabric topologies' },
+  { id: 'actions', label: 'Actions', icon: 'terminal', description: 'Vendor quick commands' },
+  { id: 'jobs', label: 'Jobs', icon: 'schedule', description: 'View job history' },
   { id: 'explorer', label: 'Data Explorer', icon: 'storage', description: 'Inspect Redux store data' },
 ];
 
@@ -74,6 +81,20 @@ function InflightIndicator({ count }: { count: number }) {
 }
 
 function AppContent() {
+  const { isAuthenticated, username, logout, loading: authLoading } = useAuth();
+
+  if (authLoading) {
+    return null;
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
+
+  return <AuthenticatedApp username={username} onLogout={logout} />;
+}
+
+function AuthenticatedApp({ username, onLogout }: { username: string | null; onLogout: () => void }) {
   const [activePage, setActivePage] = useState(() => {
     return localStorage.getItem('ztp_active_page') || 'dashboard';
   });
@@ -227,12 +248,12 @@ function AppContent() {
         <div className="header-content">
           <img src={logo} alt="Logo" className="header-logo" />
           <h1>ZTP Manager</h1>
-          <div className="header-icons">
+          <div className="header-controls">
             <Tooltip content="Notifications" position="bottom">
               <button
-                className="icon-button"
+                className="header-control"
                 onClick={() => { setShowNotifications(true); modalRoute.openModal('notifications'); }}
-                style={{ position: 'relative' }}
+                style={{ position: 'relative', width: 40 }}
               >
                 <Icon name="notifications" size={20} />
                 {unreadCount > 0 && (
@@ -242,21 +263,32 @@ function AppContent() {
             </Tooltip>
             <Tooltip content="Notes" position="bottom">
               <button
-                className="icon-button"
+                className="header-control"
                 onClick={() => setShowScratchPad((v) => !v)}
+                style={{ width: 40 }}
               >
                 <Icon name="sticky_note_2" size={20} />
               </button>
             </Tooltip>
+            <Tooltip content={`Logout${username ? ` (${username})` : ''}`} position="bottom">
+              <button
+                className="header-control"
+                onClick={onLogout}
+                style={{ width: 40 }}
+              >
+                <Icon name="logout" size={20} />
+              </button>
+            </Tooltip>
+            <DropdownSelect
+              options={PAGES}
+              value={activePage}
+              onChange={handlePageChange}
+              placeholder="Select page..."
+              icon="menu"
+              className="header-nav"
+              triggerClassName="header-control header-control-dropdown"
+            />
           </div>
-          <DropdownSelect
-            options={PAGES}
-            value={activePage}
-            onChange={handlePageChange}
-            placeholder="Select page..."
-            icon="menu"
-            className="header-nav"
-          />
         </div>
       </header>
 
@@ -284,16 +316,12 @@ function AppContent() {
               </Button>
             </div>
 
-            {loading ? (
-              <div className="card">Loading devices...</div>
-            ) : (
-              <DeviceList
-                onEdit={handleEdit}
-                onDelete={deleteDevice}
-                onBackup={triggerBackup}
-                onRefresh={refresh}
-              />
-            )}
+            <DeviceList
+              onEdit={handleEdit}
+              onDelete={deleteDevice}
+              onBackup={triggerBackup}
+              onRefresh={refresh}
+            />
           </>
         )}
 
@@ -318,6 +346,18 @@ function AppContent() {
 
         {activePage === 'dhcp' && (
           <DhcpOptions />
+        )}
+
+        {activePage === 'topologies' && (
+          <TopologyManagement />
+        )}
+
+        {activePage === 'actions' && (
+          <VendorActions />
+        )}
+
+        {activePage === 'jobs' && (
+          <Jobs />
         )}
 
         {activePage === 'explorer' && (
@@ -438,11 +478,14 @@ function AppContent() {
 
 // Main App component wraps with providers
 function App() {
+  const auth = useAuthState();
   return (
     <Provider store={store}>
-      <LayoutProvider>
-        <AppContent />
-      </LayoutProvider>
+      <AuthProvider value={auth}>
+        <LayoutProvider>
+          <AppContent />
+        </LayoutProvider>
+      </AuthProvider>
     </Provider>
   );
 }

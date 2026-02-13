@@ -129,6 +129,13 @@ export function Discovery({ onAddDevice }: Props) {
           <Icon name="history" size={16} />
           {showLog ? 'Hide Log' : 'Show Log'}
         </Button>
+        <Button
+          variant="secondary"
+          onClick={async () => { await clearKnownDevices(); refresh(); }}
+        >
+          <Icon name="restart_alt" size={16} />
+          Clear &amp; Rediscover
+        </Button>
         <span className="helper-text-sm ml-auto">
           Auto-refreshing every 10s
         </span>
@@ -174,6 +181,7 @@ export function Discovery({ onAddDevice }: Props) {
             },
           ] as TableColumn<DiscoveredDevice>[]}
           getRowKey={(d) => d.mac}
+          tableId="discovery"
           actions={[
             {
               icon: (d) => loadingIcon(connectModal.loading && connectModal.item?.ip === d.ip, 'cable'),
@@ -242,6 +250,7 @@ export function Discovery({ onAddDevice }: Props) {
               },
             ] as TableColumn<DiscoveredDevice>[]}
             getRowKey={(d) => d.mac}
+            tableId="dhcp-leases"
             searchable
             searchPlaceholder="Search leases..."
             paginate
@@ -257,7 +266,7 @@ export function Discovery({ onAddDevice }: Props) {
           title={`Discovery Log (${logs.length})`}
           headerAction={
             <div className="flex-row">
-              <IconButton variant="secondary" onClick={loadLogs} disabled={logsLoading}>
+              <IconButton variant="secondary" onClick={() => loadLogs()} disabled={logsLoading}>
                 {logsLoading ? <SpinnerIcon size={14} /> : <RefreshIcon size={14} />}
               </IconButton>
               {logs.length > 0 && (

@@ -12,6 +12,7 @@ use super::{created, trigger_reload, ApiError};
 
 /// List all DHCP options
 pub async fn list_dhcp_options(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<DhcpOption>>, ApiError> {
     let options = state.store.list_dhcp_options().await?;
@@ -19,13 +20,16 @@ pub async fn list_dhcp_options(
 }
 
 /// Get default DHCP options
-pub async fn get_default_dhcp_options() -> Result<Json<Vec<DhcpOption>>, ApiError> {
+pub async fn get_default_dhcp_options(
+    _auth: crate::auth::AuthUser,
+) -> Result<Json<Vec<DhcpOption>>, ApiError> {
     let options = get_default_dhcp_options_models();
     Ok(Json(options))
 }
 
 /// Get a single DHCP option by ID
 pub async fn get_dhcp_option(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<DhcpOption>, ApiError> {
@@ -39,6 +43,7 @@ pub async fn get_dhcp_option(
 
 /// Create a new DHCP option
 pub async fn create_dhcp_option(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateDhcpOptionRequest>,
 ) -> Result<(axum::http::StatusCode, Json<DhcpOption>), ApiError> {
@@ -58,6 +63,7 @@ pub async fn create_dhcp_option(
 
 /// Update an existing DHCP option
 pub async fn update_dhcp_option(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
     Json(mut req): Json<CreateDhcpOptionRequest>,
@@ -70,6 +76,7 @@ pub async fn update_dhcp_option(
 
 /// Delete a DHCP option
 pub async fn delete_dhcp_option(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {

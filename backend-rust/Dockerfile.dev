@@ -13,8 +13,9 @@ RUN mkdir -p src && echo "fn main() {}" > src/main.rs && \
     cargo build --release && \
     rm -rf src
 
-# Copy source and build
+# Copy source, migrations, and build
 COPY src ./src
+COPY migrations ./migrations
 COPY scripts /scripts
 RUN chmod +x /scripts/*.sh && \
     touch src/main.rs && \
@@ -37,4 +38,4 @@ ENV RUST_LOG=debug
 
 EXPOSE 8080 67/udp 69/udp
 
-CMD ["/app/target/release/ztp-server"]
+CMD ["./target/release/ztp-server"]

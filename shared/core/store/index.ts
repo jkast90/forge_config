@@ -7,6 +7,9 @@ import discoveryReducer from './slices/discoverySlice';
 import containersReducer from './slices/containersSlice';
 import settingsReducer from './slices/settingsSlice';
 import backupsReducer from './slices/backupsSlice';
+import vendorActionsReducer from './slices/vendorActionsSlice';
+import jobsReducer from './slices/jobsSlice';
+import topologiesReducer from './slices/topologiesSlice';
 
 export const store = configureStore({
   reducer: {
@@ -18,6 +21,9 @@ export const store = configureStore({
     containers: containersReducer,
     settings: settingsReducer,
     backups: backupsReducer,
+    vendorActions: vendorActionsReducer,
+    jobs: jobsReducer,
+    topologies: topologiesReducer,
   },
 });
 

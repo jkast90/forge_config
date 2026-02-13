@@ -1,6 +1,40 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// User represents an authenticated user
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct User {
+    pub id: String,
+    pub username: String,
+    #[serde(skip_serializing)]
+    pub password_hash: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// LoginRequest for authenticating a user
+#[derive(Debug, Clone, Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+/// LoginResponse returned on successful authentication
+#[derive(Debug, Clone, Serialize)]
+pub struct LoginResponse {
+    pub token: String,
+    pub username: String,
+}
+
+/// JWT claims structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Claims {
+    pub sub: String,
+    pub username: String,
+    pub exp: usize,
+    pub iat: usize,
+}
+
 /// Canonical device status values
 pub mod device_status {
     pub const ONLINE: &str = "online";
@@ -14,6 +48,47 @@ pub mod discovery_event {
     pub const LEASE_RENEWED: &str = "lease_renewed";
     pub const ADDED: &str = "added";
     pub const LEASE_EXPIRED: &str = "lease_expired";
+}
+
+/// Canonical CLOS topology role values
+pub mod topology_role {
+    pub const SUPER_SPINE: &str = "super-spine";
+    pub const SPINE: &str = "spine";
+    pub const LEAF: &str = "leaf";
+
+    pub const ALL: &[&str] = &[SUPER_SPINE, SPINE, LEAF];
+
+    pub fn is_valid(role: &str) -> bool {
+        role.is_empty() || ALL.contains(&role)
+    }
+}
+
+/// Topology represents a named CLOS fabric topology
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Topology {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub super_spine_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spine_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub leaf_count: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// CreateTopologyRequest for creating new topologies
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateTopologyRequest {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 /// Device represents a network device managed by the ZTP server
@@ -33,6 +108,10 @@ pub struct Device {
     pub ssh_user: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ssh_pass: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topology_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topology_role: Option<String>,
     pub status: String, // online, offline, provisioning
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_seen: Option<DateTime<Utc>>,
@@ -62,6 +141,10 @@ pub struct CreateDeviceRequest {
     pub ssh_user: Option<String>,
     #[serde(default)]
     pub ssh_pass: Option<String>,
+    #[serde(default)]
+    pub topology_id: Option<String>,
+    #[serde(default)]
+    pub topology_role: Option<String>,
 }
 
 /// UpdateDeviceRequest for updating devices
@@ -81,6 +164,10 @@ pub struct UpdateDeviceRequest {
     pub ssh_user: Option<String>,
     #[serde(default)]
     pub ssh_pass: Option<String>,
+    #[serde(default)]
+    pub topology_id: Option<String>,
+    #[serde(default)]
+    pub topology_role: Option<String>,
 }
 
 /// Settings represents global ZTP server settings
@@ -446,6 +533,10 @@ pub struct TemplatePreviewDevice {
     pub ssh_user: Option<String>,
     #[serde(default)]
     pub ssh_pass: Option<String>,
+    #[serde(default)]
+    pub topology_id: Option<String>,
+    #[serde(default)]
+    pub topology_role: Option<String>,
 }
 
 /// TemplatePreviewRequest for previewing a template with device data
@@ -470,4 +561,81 @@ pub struct TemplateVariable {
     pub name: String,
     pub description: String,
     pub example: String,
+}
+
+/// VendorAction represents a quick-action command associated with a vendor
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VendorAction {
+    pub id: String,
+    pub vendor_id: String,
+    pub label: String,
+    pub command: String,
+    pub sort_order: i32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// CreateVendorActionRequest for creating/updating vendor actions
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateVendorActionRequest {
+    pub id: String,
+    pub vendor_id: String,
+    pub label: String,
+    pub command: String,
+    #[serde(default)]
+    pub sort_order: i32,
+}
+
+/// ExecRequest for executing a command on a device via SSH
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExecRequest {
+    pub command: String,
+}
+
+/// ExecResponse returned after executing a command
+#[derive(Debug, Clone, Serialize)]
+pub struct ExecResponse {
+    pub output: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Canonical job status values
+pub mod job_status {
+    pub const QUEUED: &str = "queued";
+    pub const RUNNING: &str = "running";
+    pub const COMPLETED: &str = "completed";
+    pub const FAILED: &str = "failed";
+}
+
+/// Canonical job type values
+pub mod job_type {
+    pub const COMMAND: &str = "command";
+    pub const DEPLOY: &str = "deploy";
+}
+
+/// Job represents an async task (command execution or config deploy)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Job {
+    pub id: String,
+    pub job_type: String,
+    pub device_mac: String,
+    pub command: String,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub created_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
+}
+
+/// CreateJobRequest for creating a new job
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateJobRequest {
+    pub device_mac: String,
+    pub job_type: String,
+    #[serde(default)]
+    pub command: String,
 }

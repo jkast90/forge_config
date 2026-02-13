@@ -18,6 +18,26 @@ impl ssh2::KeyboardInteractivePrompt for PasswordPrompt {
     }
 }
 
+/// Resolve SSH credentials for a device using the fallback chain:
+/// device -> vendor -> global settings
+pub async fn resolve_ssh_credentials(
+    store: &crate::db::Store,
+    device: &crate::models::Device,
+) -> (String, String) {
+    let settings = store.get_settings().await.unwrap_or_default();
+    let vendor = match device.vendor.as_deref() {
+        Some(v) if !v.is_empty() => store.get_vendor(v).await.ok().flatten(),
+        _ => None,
+    };
+    let ssh_user = device.ssh_user.clone().filter(|s| !s.is_empty())
+        .or_else(|| vendor.as_ref().and_then(|v| v.ssh_user.clone()))
+        .unwrap_or(settings.default_ssh_user);
+    let ssh_pass = device.ssh_pass.clone().filter(|s| !s.is_empty())
+        .or_else(|| vendor.as_ref().and_then(|v| v.ssh_pass.clone()))
+        .unwrap_or(settings.default_ssh_pass);
+    (ssh_user, ssh_pass)
+}
+
 /// Normalize MAC address to lowercase with colons
 pub fn normalize_mac(mac: &str) -> String {
     // Remove any existing separators
@@ -117,14 +137,95 @@ pub fn ssh_run_command(host: &str, user: &str, pass: &str, command: &str) -> Res
     channel.exec(command)
         .map_err(|e| format!("Failed to execute command: {}", e))?;
 
-    let mut output = String::new();
-    channel.read_to_string(&mut output)
+    let mut stdout = String::new();
+    channel.read_to_string(&mut stdout)
         .map_err(|e| format!("Failed to read output: {}", e))?;
+
+    let mut stderr = String::new();
+    channel.stderr().read_to_string(&mut stderr)
+        .map_err(|e| format!("Failed to read stderr: {}", e))?;
 
     channel.wait_close()
         .map_err(|e| format!("Failed to close channel: {}", e))?;
 
+    // Combine stdout and stderr
+    let output = if !stdout.is_empty() && !stderr.is_empty() {
+        format!("{}\n{}", stdout, stderr)
+    } else if !stderr.is_empty() {
+        stderr
+    } else {
+        stdout
+    };
+
     Ok(output)
+}
+
+/// Send multi-line commands via an interactive SSH shell (PTY).
+/// This is needed for network devices (EOS, IOS, JunOS) that require
+/// entering config mode interactively rather than via exec.
+pub fn ssh_run_interactive(host: &str, user: &str, pass: &str, commands: &str) -> Result<String, String> {
+    use std::io::Write;
+
+    let session = ssh_connect(host, user, pass, 60)?;
+
+    let mut channel = session.channel_session()
+        .map_err(|e| format!("Failed to open channel: {}", e))?;
+
+    // Request a PTY so EOS gives us an interactive CLI
+    channel.request_pty("xterm", None, None)
+        .map_err(|e| format!("Failed to request PTY: {}", e))?;
+
+    channel.shell()
+        .map_err(|e| format!("Failed to start shell: {}", e))?;
+
+    // Wait for the initial prompt
+    std::thread::sleep(Duration::from_secs(2));
+
+    // Send each line with a small delay between them
+    for line in commands.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('!') {
+            continue; // Skip empty lines and EOS comments
+        }
+        channel.write_all(format!("{}\n", line).as_bytes())
+            .map_err(|e| format!("Failed to write command: {}", e))?;
+        channel.flush()
+            .map_err(|e| format!("Failed to flush: {}", e))?;
+        // Small delay between commands so the device can process
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
+    // Send exit to close the session cleanly
+    channel.write_all(b"exit\n")
+        .map_err(|e| format!("Failed to write exit: {}", e))?;
+    channel.flush().ok();
+
+    // Wait for output
+    std::thread::sleep(Duration::from_secs(2));
+
+    // Read all available output
+    session.set_blocking(false);
+    let mut output = String::new();
+    let _ = channel.read_to_string(&mut output);
+
+    session.set_blocking(true);
+    channel.wait_close().ok();
+
+    Ok(output)
+}
+
+/// Async wrapper for ssh_run_interactive - runs in a blocking thread pool
+pub async fn ssh_run_interactive_async(host: &str, user: &str, pass: &str, commands: &str) -> Result<String, String> {
+    let host = host.to_string();
+    let user = user.to_string();
+    let pass = pass.to_string();
+    let commands = commands.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        ssh_run_interactive(&host, &user, &pass, &commands)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Async wrapper for ssh_run_command - runs in a blocking thread pool

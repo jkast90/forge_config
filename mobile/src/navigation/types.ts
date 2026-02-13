@@ -19,6 +19,7 @@ export type ConfigStackParamList = {
 
 // Stack navigator params (screens within tabs and modals)
 export type RootStackParamList = {
+  Login: undefined;
   Main: undefined;
   DeviceForm: {
     mac?: string;

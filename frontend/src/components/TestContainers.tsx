@@ -9,6 +9,8 @@ import {
   generateMac,
   getVendorPrefixOptions,
   getVendorClassForVendor,
+  getServices,
+  addNotification,
 } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
@@ -31,6 +33,7 @@ export function TestContainers() {
     error,
     refresh,
     spawn,
+    start,
     restart,
     remove,
   } = useTestContainers({ autoRefresh: true, refreshInterval: 5000 });
@@ -57,6 +60,7 @@ export function TestContainers() {
   const [showSpawnDialog, setShowSpawnDialog] = useState(false);
   const [spawning, setSpawning] = useState(false);
   const [spawningCeos, setSpawningCeos] = useState(false);
+  const [buildingClos, setBuildingClos] = useState(false);
   const [formData, setFormData] = useState<SpawnContainerRequest>({
     hostname: '',
     mac: '',
@@ -117,6 +121,30 @@ export function TestContainers() {
     }
   };
 
+  const handleBuildClosLab = async () => {
+    setBuildingClos(true);
+    try {
+      const result = await getServices().testContainers.buildClosLab();
+      addNotification('success', `CLOS lab ready: ${result.devices.length} cEOS switches in ${result.topology_name}`);
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to build CLOS lab: ${msg}`);
+    } finally {
+      setBuildingClos(false);
+    }
+  };
+
+  const handleTeardownClosLab = async () => {
+    try {
+      await getServices().testContainers.teardownClosLab();
+      addNotification('success', 'CLOS lab torn down');
+      refresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to teardown CLOS lab: ${msg}`);
+    }
+  };
 
   const handleOpenDialog = () => {
     // Generate initial MAC
@@ -154,6 +182,16 @@ export function TestContainers() {
             <PlusIcon size={16} />
             {spawningCeos ? 'Spawning cEOS...' : 'Spawn cEOS'}
           </Button>
+          <Button onClick={handleBuildClosLab} disabled={buildingClos}>
+            <Icon name="hub" size={16} />
+            {buildingClos ? 'Building CLOS Lab...' : 'Build CLOS Lab'}
+          </Button>
+          {containers.some(c => c.name.startsWith('clos-')) && (
+            <Button variant="danger" onClick={handleTeardownClosLab}>
+              <TrashIcon size={16} />
+              Teardown CLOS
+            </Button>
+          )}
           <Button variant="secondary" onClick={refresh}>
             <RefreshIcon size={16} />
             Refresh
@@ -179,6 +217,7 @@ export function TestContainers() {
             { header: 'Status', accessor: (c) => Cell.status(c.status, c.status === 'running' ? 'online' : 'offline') },
           ]}
           getRowKey={(c) => c.id}
+          tableId="test-containers"
           actions={[
             {
               icon: (c) => loadingIcon(connectModal.loading && connectModal.item?.ip === c.ip, 'cable'),
@@ -188,6 +227,14 @@ export function TestContainers() {
               tooltip: 'Test connectivity',
               disabled: (c) => !c.ip,
               loading: (c) => connectModal.loading && connectModal.item?.ip === c.ip,
+            },
+            {
+              icon: <Icon name="play_arrow" size={14} />,
+              label: 'Start',
+              onClick: (c) => start(c.id),
+              variant: 'secondary',
+              tooltip: 'Start container',
+              show: (c) => c.status !== 'running',
             },
             {
               icon: <Icon name="restart_alt" size={14} />,

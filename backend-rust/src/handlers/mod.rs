@@ -1,5 +1,7 @@
+pub mod auth;
 pub mod benchmarks;
 pub mod devices;
+pub mod jobs;
 pub mod settings;
 pub mod vendors;
 pub mod templates;
@@ -9,6 +11,7 @@ pub mod discovery;
 pub mod configs;
 pub mod docker;
 pub mod netbox;
+pub mod topologies;
 
 use axum::{
     http::StatusCode,
@@ -78,6 +81,13 @@ impl ApiError {
     pub fn conflict(msg: impl Into<String>) -> Self {
         Self {
             status: StatusCode::CONFLICT,
+            message: msg.into(),
+        }
+    }
+
+    pub fn unauthorized(msg: impl Into<String>) -> Self {
+        Self {
+            status: StatusCode::UNAUTHORIZED,
             message: msg.into(),
         }
     }

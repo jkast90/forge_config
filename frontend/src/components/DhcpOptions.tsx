@@ -251,6 +251,7 @@ export function DhcpOptions() {
           getRowKey={(opt) => opt.id}
           actions={optionActions}
           rowClassName={(opt) => !opt.enabled ? 'disabled-row' : undefined}
+          tableId="dhcp-options"
           searchable
           searchPlaceholder="Search options..."
           emptyMessage="No DHCP options configured."

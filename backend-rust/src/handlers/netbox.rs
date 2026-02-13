@@ -26,6 +26,7 @@ fn make_client(config: &NetBoxConfig) -> Result<NetBoxClient, ApiError> {
 
 /// Get NetBox connection status
 pub async fn get_status(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<NetBoxStatus>, ApiError> {
     let config = state.store.get_netbox_config().await?;
@@ -47,6 +48,7 @@ pub async fn get_status(
 
 /// Get NetBox configuration
 pub async fn get_config(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<NetBoxConfig>, ApiError> {
     let config = state.store.get_netbox_config().await?;
@@ -55,6 +57,7 @@ pub async fn get_config(
 
 /// Update NetBox configuration
 pub async fn update_config(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Json(config): Json<NetBoxConfig>,
 ) -> Result<Json<NetBoxConfig>, ApiError> {
@@ -64,6 +67,7 @@ pub async fn update_config(
 
 /// Push devices to NetBox
 pub async fn sync_push(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<netbox::SyncResult>, ApiError> {
     let config = state.store.get_netbox_config().await?;
@@ -76,6 +80,7 @@ pub async fn sync_push(
 
 /// Pull devices from NetBox
 pub async fn sync_pull(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<netbox::SyncResult>, ApiError> {
     let config = state.store.get_netbox_config().await?;
@@ -88,6 +93,7 @@ pub async fn sync_pull(
 
 /// Push vendors to NetBox as manufacturers
 pub async fn sync_vendors_push(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<netbox::SyncResult>, ApiError> {
     let config = state.store.get_netbox_config().await?;
@@ -100,6 +106,7 @@ pub async fn sync_vendors_push(
 
 /// Pull manufacturers from NetBox as vendors
 pub async fn sync_vendors_pull(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<netbox::SyncResult>, ApiError> {
     let config = state.store.get_netbox_config().await?;
@@ -112,6 +119,7 @@ pub async fn sync_vendors_pull(
 
 /// Get manufacturers from NetBox
 pub async fn get_manufacturers(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<NetBoxItem>>, ApiError> {
     let config = state.store.get_netbox_config().await?;
@@ -134,6 +142,7 @@ pub async fn get_manufacturers(
 
 /// Get sites from NetBox
 pub async fn get_sites(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<NetBoxItem>>, ApiError> {
     let config = state.store.get_netbox_config().await?;
@@ -156,6 +165,7 @@ pub async fn get_sites(
 
 /// Get device roles from NetBox
 pub async fn get_device_roles(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<NetBoxItem>>, ApiError> {
     let config = state.store.get_netbox_config().await?;

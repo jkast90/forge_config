@@ -6,6 +6,7 @@ export * from './types';
 
 // Services
 export {
+  AuthService,
   BaseService,
   DeviceService,
   SettingsService,
@@ -58,10 +59,19 @@ export {
   onNotificationsChange,
   type Notification,
   type NotificationLevel,
+  type LoginRequest,
+  type LoginResponse,
+  getTokenStorage,
+  setTokenStorage,
+  type TokenStorage,
 } from './services';
 
 // Hooks
 export {
+  useAuth,
+  useAuthState,
+  AuthProvider,
+  type UseAuthReturn,
   useDevices,
   useSettings,
   useBackups,
@@ -89,6 +99,15 @@ export {
   useTelemetry,
   useTableFeatures,
   useNotificationHistory,
+  useVendorActions,
+  type UseVendorActionsOptions,
+  type UseVendorActionsReturn,
+  useJobs,
+  type UseJobsOptions,
+  type UseJobsReturn,
+  useTopologies,
+  type UseTopologiesOptions,
+  type UseTopologiesReturn,
   getLocalApiUrl,
   setLocalApiUrl,
   getDefaultPageSize,
@@ -191,8 +210,11 @@ export {
   DEFAULT_DHCP_OPTIONS,
   DHCP_OPTION_TYPES,
   EMPTY_VENDOR_FORM,
+  EMPTY_VENDOR_ACTION_FORM,
   EMPTY_DHCP_OPTION_FORM,
   EMPTY_TEMPLATE_FORM,
+  EMPTY_TOPOLOGY_FORM,
+  TOPOLOGY_ROLE_OPTIONS,
   SAMPLE_DEVICE_FOR_PREVIEW,
   VENDOR_CLASS_OPTIONS,
   CONFIG_METHOD_OPTIONS,

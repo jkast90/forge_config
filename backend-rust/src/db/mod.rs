@@ -1,10 +1,14 @@
 mod devices;
 mod dhcp_options;
 mod discovery;
+mod jobs;
 mod row_helpers;
 pub mod seeds;
 mod settings;
 mod templates;
+mod topologies;
+mod users;
+mod vendor_actions;
 mod vendors;
 
 use anyhow::{Context, Result};
@@ -66,139 +70,10 @@ impl Store {
 
     /// Run database migrations
     async fn migrate(&self) -> Result<()> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS devices (
-                mac TEXT PRIMARY KEY,
-                ip TEXT NOT NULL,
-                hostname TEXT NOT NULL,
-                vendor TEXT DEFAULT '',
-                model TEXT DEFAULT '',
-                serial_number TEXT DEFAULT '',
-                config_template TEXT DEFAULT '',
-                ssh_user TEXT DEFAULT '',
-                ssh_pass TEXT DEFAULT '',
-                status TEXT DEFAULT 'offline',
-                last_seen DATETIME,
-                last_backup DATETIME,
-                last_error TEXT DEFAULT '',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS settings (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                data TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS backups (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                device_mac TEXT NOT NULL,
-                filename TEXT NOT NULL,
-                size INTEGER DEFAULT 0,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (device_mac) REFERENCES devices(mac) ON DELETE CASCADE
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_backups_device ON backups(device_mac);
-
-            CREATE TABLE IF NOT EXISTS vendors (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                backup_command TEXT DEFAULT 'show running-config',
-                ssh_port INTEGER DEFAULT 22,
-                mac_prefixes TEXT DEFAULT '[]',
-                vendor_class TEXT DEFAULT '',
-                default_template TEXT DEFAULT '',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS dhcp_options (
-                id TEXT PRIMARY KEY,
-                option_number INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                value TEXT DEFAULT '',
-                type TEXT DEFAULT 'string',
-                vendor_id TEXT DEFAULT '',
-                description TEXT DEFAULT '',
-                enabled INTEGER DEFAULT 1,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_dhcp_options_vendor ON dhcp_options(vendor_id);
-
-            CREATE TABLE IF NOT EXISTS templates (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT DEFAULT '',
-                vendor_id TEXT DEFAULT '',
-                content TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_templates_vendor ON templates(vendor_id);
-
-            CREATE TABLE IF NOT EXISTS discovery_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                event_type TEXT NOT NULL,
-                mac TEXT NOT NULL,
-                ip TEXT NOT NULL,
-                hostname TEXT DEFAULT '',
-                vendor TEXT DEFAULT '',
-                message TEXT DEFAULT '',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_discovery_logs_mac ON discovery_logs(mac);
-            CREATE INDEX IF NOT EXISTS idx_discovery_logs_created ON discovery_logs(created_at DESC);
-
-            CREATE TABLE IF NOT EXISTS netbox_config (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                url TEXT DEFAULT '',
-                token TEXT DEFAULT '',
-                site_id INTEGER DEFAULT 0,
-                role_id INTEGER DEFAULT 0,
-                sync_enabled INTEGER DEFAULT 0,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-
-            CREATE TABLE IF NOT EXISTS discovered_devices (
-                mac TEXT PRIMARY KEY,
-                ip TEXT NOT NULL,
-                hostname TEXT DEFAULT '',
-                vendor TEXT DEFAULT '',
-                vendor_class TEXT DEFAULT '',
-                user_class TEXT DEFAULT '',
-                dhcp_client_id TEXT DEFAULT '',
-                requested_options TEXT DEFAULT '',
-                relay_address TEXT DEFAULT '',
-                circuit_id TEXT DEFAULT '',
-                remote_id TEXT DEFAULT '',
-                subscriber_id TEXT DEFAULT '',
-                first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-                last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
-                expires_at DATETIME
-            );
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        // Add ssh_user, ssh_pass, and deploy_command columns to vendors (idempotent)
-        for col in ["ssh_user", "ssh_pass", "deploy_command"] {
-            let sql = format!("ALTER TABLE vendors ADD COLUMN {} TEXT DEFAULT ''", col);
-            let _ = sqlx::query(&sql).execute(&self.pool).await;
-        }
-
-        // Add model and serial_number columns to discovered_devices (idempotent)
-        for col in ["model", "serial_number"] {
-            let sql = format!("ALTER TABLE discovered_devices ADD COLUMN {} TEXT DEFAULT ''", col);
-            // Ignore "duplicate column" errors
-            let _ = sqlx::query(&sql).execute(&self.pool).await;
-        }
+        sqlx::migrate!("./migrations")
+            .run(&self.pool)
+            .await
+            .context("Failed to run database migrations")?;
 
         // Initialize default settings if not exists
         let count: (i32,) = sqlx::query_as("SELECT COUNT(*) FROM settings")
@@ -218,21 +93,24 @@ impl Store {
         self.seed_default_vendors().await?;
         self.seed_default_templates().await?;
         self.seed_default_dhcp_options().await?;
+        self.seed_default_user().await?;
+        self.seed_default_vendor_actions().await?;
 
         Ok(())
     }
 
     async fn seed_default_vendors(&self) -> Result<()> {
-        for (id, name, backup_command, ssh_port, mac_json, vendor_class, default_template) in seeds::seed_vendor_params() {
+        for (id, name, backup_command, deploy_command, ssh_port, mac_json, vendor_class, default_template) in seeds::seed_vendor_params() {
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO vendors (id, name, backup_command, ssh_port, mac_prefixes, vendor_class, default_template, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT OR IGNORE INTO vendors (id, name, backup_command, deploy_command, ssh_port, mac_prefixes, vendor_class, default_template, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 "#,
             )
             .bind(&id)
             .bind(&name)
             .bind(&backup_command)
+            .bind(&deploy_command)
             .bind(ssh_port)
             .bind(&mac_json)
             .bind(&vendor_class)
@@ -282,6 +160,60 @@ impl Store {
             .await?;
         }
         Ok(())
+    }
+
+    async fn seed_default_user(&self) -> Result<()> {
+        let count: (i32,) = sqlx::query_as("SELECT COUNT(*) FROM users")
+            .fetch_one(&self.pool)
+            .await?;
+
+        if count.0 == 0 {
+            let id = uuid::Uuid::new_v4().to_string();
+            let password_hash = bcrypt::hash("admin", bcrypt::DEFAULT_COST)
+                .map_err(|e| anyhow::anyhow!("Failed to hash default password: {}", e))?;
+
+            self.create_user(&id, "admin", &password_hash).await?;
+            tracing::info!("Created default admin user (username: admin, password: admin)");
+        }
+
+        Ok(())
+    }
+
+    async fn seed_default_vendor_actions(&self) -> Result<()> {
+        // Only seed if table is empty
+        let count: (i32,) = sqlx::query_as("SELECT COUNT(*) FROM vendor_actions")
+            .fetch_one(&self.pool)
+            .await?;
+        if count.0 > 0 {
+            return Ok(());
+        }
+
+        for (id, vendor_id, label, command, sort_order) in seeds::seed_vendor_action_params() {
+            sqlx::query(
+                r#"
+                INSERT OR IGNORE INTO vendor_actions (id, vendor_id, label, command, sort_order, created_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                "#,
+            )
+            .bind(&id)
+            .bind(&vendor_id)
+            .bind(&label)
+            .bind(&command)
+            .bind(sort_order)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    // ========== User Operations ==========
+
+    pub async fn get_user_by_username(&self, username: &str) -> Result<Option<User>> {
+        users::UserRepo::get_by_username(&self.pool, username).await
+    }
+
+    pub async fn create_user(&self, id: &str, username: &str, password_hash: &str) -> Result<()> {
+        users::UserRepo::create(&self.pool, id, username, password_hash).await
     }
 
     // ========== Device Operations ==========
@@ -458,6 +390,84 @@ impl Store {
 
     pub async fn save_netbox_config(&self, config: &NetBoxConfig) -> Result<()> {
         settings::NetBoxConfigRepo::save(&self.pool, config).await
+    }
+
+    // ========== Vendor Action Operations ==========
+
+    pub async fn list_vendor_actions(&self) -> Result<Vec<VendorAction>> {
+        vendor_actions::VendorActionRepo::list_all(&self.pool).await
+    }
+
+    pub async fn list_vendor_actions_by_vendor(&self, vendor_id: &str) -> Result<Vec<VendorAction>> {
+        vendor_actions::VendorActionRepo::list_by_vendor(&self.pool, vendor_id).await
+    }
+
+    pub async fn create_vendor_action(&self, req: &CreateVendorActionRequest) -> Result<VendorAction> {
+        vendor_actions::VendorActionRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_vendor_action(&self, id: &str, req: &CreateVendorActionRequest) -> Result<VendorAction> {
+        vendor_actions::VendorActionRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_vendor_action(&self, id: &str) -> Result<()> {
+        vendor_actions::VendorActionRepo::delete(&self.pool, id).await
+    }
+
+    // ========== Job Operations ==========
+
+    pub async fn create_job(&self, id: &str, req: &CreateJobRequest) -> Result<Job> {
+        jobs::JobRepo::create(&self.pool, id, req).await
+    }
+
+    pub async fn get_job(&self, id: &str) -> Result<Option<Job>> {
+        jobs::JobRepo::get(&self.pool, id).await
+    }
+
+    pub async fn update_job_started(&self, id: &str) -> Result<()> {
+        jobs::JobRepo::update_started(&self.pool, id).await
+    }
+
+    pub async fn update_job_completed(&self, id: &str, output: &str) -> Result<()> {
+        jobs::JobRepo::update_completed(&self.pool, id, output).await
+    }
+
+    pub async fn update_job_failed(&self, id: &str, error: &str) -> Result<()> {
+        jobs::JobRepo::update_failed(&self.pool, id, error).await
+    }
+
+    pub async fn list_jobs_by_device(&self, mac: &str, limit: i32) -> Result<Vec<Job>> {
+        jobs::JobRepo::list_by_device(&self.pool, mac, limit).await
+    }
+
+    pub async fn list_jobs_recent(&self, limit: i32) -> Result<Vec<Job>> {
+        jobs::JobRepo::list_recent(&self.pool, limit).await
+    }
+
+    pub async fn list_jobs_stuck(&self) -> Result<Vec<Job>> {
+        jobs::JobRepo::list_stuck(&self.pool).await
+    }
+
+    // ========== Topology Operations ==========
+
+    pub async fn list_topologies(&self) -> Result<Vec<Topology>> {
+        topologies::TopologyRepo::list(&self.pool).await
+    }
+
+    pub async fn get_topology(&self, id: &str) -> Result<Option<Topology>> {
+        topologies::TopologyRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_topology(&self, req: &CreateTopologyRequest) -> Result<Topology> {
+        topologies::TopologyRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_topology(&self, id: &str, req: &CreateTopologyRequest) -> Result<Topology> {
+        topologies::TopologyRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_topology(&self, id: &str) -> Result<()> {
+        topologies::TopologyRepo::delete(&self.pool, id).await
     }
 }
 

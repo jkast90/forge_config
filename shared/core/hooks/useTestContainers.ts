@@ -6,6 +6,7 @@ import { useAppDispatch, useAppSelector } from '../store';
 import {
   fetchContainers,
   spawnContainer as spawnContainerThunk,
+  startContainer as startContainerThunk,
   restartContainer as restartContainerThunk,
   removeContainer as removeContainerThunk,
 } from '../store/slices/containersSlice';
@@ -22,6 +23,7 @@ export interface UseTestContainersReturn {
   error: string | null;
   refresh: () => Promise<void>;
   spawn: (request: SpawnContainerRequest) => Promise<TestContainer | null>;
+  start: (id: string) => Promise<boolean>;
   restart: (id: string) => Promise<boolean>;
   remove: (id: string) => Promise<boolean>;
 }
@@ -60,6 +62,19 @@ export function useTestContainers(options: UseTestContainersOptions = {}): UseTe
     }
   }, [dispatch]);
 
+  const start = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      await dispatch(startContainerThunk(id)).unwrap();
+      addNotification('success', 'Container started successfully');
+      dispatch(fetchContainers());
+      return true;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Failed to start container';
+      addNotification('error', errMsg);
+      return false;
+    }
+  }, [dispatch]);
+
   const restart = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(restartContainerThunk(id)).unwrap();
@@ -92,6 +107,7 @@ export function useTestContainers(options: UseTestContainersOptions = {}): UseTe
     error,
     refresh,
     spawn,
+    start,
     restart,
     remove,
   };

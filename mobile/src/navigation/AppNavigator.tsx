@@ -14,6 +14,8 @@ import { DeviceFormScreen } from '../screens/DeviceFormScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ScannerScreen } from '../screens/ScannerScreen';
 import { TemplatizerScreen } from '../screens/TemplatizerScreen';
+import { useAuth } from '../core';
+import { LoginScreen } from '../screens/LoginScreen';
 import { useAppTheme } from '../context';
 import type { RootStackParamList, TabParamList } from './types';
 
@@ -279,6 +281,7 @@ const menuStyles = StyleSheet.create({
 
 export function AppNavigator() {
   const { colors } = useAppTheme();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   const navigationTheme = useMemo(() => ({
     ...DefaultTheme,
@@ -292,6 +295,10 @@ export function AppNavigator() {
       notification: colors.accentBlue,
     },
   }), [colors]);
+
+  if (authLoading) {
+    return null;
+  }
 
   return (
     <NavigationContainer theme={navigationTheme}>
@@ -309,37 +316,47 @@ export function AppNavigator() {
           },
         }}
       >
-        <Stack.Screen
-          name="Main"
-          component={MainTabs}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="DeviceForm"
-          component={DeviceFormScreen}
-          options={{ title: 'Device' }}
-        />
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{ title: 'Settings' }}
-        />
-        <Stack.Screen
-          name="Scanner"
-          component={ScannerScreen}
-          options={{
-            title: 'Scan Barcode',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="Templatizer"
-          component={TemplatizerScreen}
-          options={{
-            title: 'Create Template from Config',
-            presentation: 'modal',
-          }}
-        />
+        {!isAuthenticated ? (
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+        ) : (
+          <>
+            <Stack.Screen
+              name="Main"
+              component={MainTabs}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="DeviceForm"
+              component={DeviceFormScreen}
+              options={{ title: 'Device' }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ title: 'Settings' }}
+            />
+            <Stack.Screen
+              name="Scanner"
+              component={ScannerScreen}
+              options={{
+                title: 'Scan Barcode',
+                presentation: 'modal',
+              }}
+            />
+            <Stack.Screen
+              name="Templatizer"
+              component={TemplatizerScreen}
+              options={{
+                title: 'Create Template from Config',
+                presentation: 'modal',
+              }}
+            />
+          </>
+        )}
       </Stack.Navigator>
     </NavigationContainer>
   );

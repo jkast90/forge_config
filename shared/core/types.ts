@@ -12,6 +12,8 @@ export interface Device {
   config_template: string;
   ssh_user?: string;
   ssh_pass?: string;
+  topology_id?: string;
+  topology_role?: TopologyRole;
   status: DeviceStatus;
   last_seen?: string;
   last_backup?: string;
@@ -21,6 +23,7 @@ export interface Device {
 }
 
 export type DeviceStatus = 'online' | 'offline' | 'provisioning' | 'unknown';
+export type TopologyRole = 'super-spine' | 'spine' | 'leaf';
 
 export interface DeviceFormData {
   mac: string;
@@ -32,6 +35,27 @@ export interface DeviceFormData {
   config_template: string;
   ssh_user: string;
   ssh_pass: string;
+  topology_id: string;
+  topology_role: string;
+}
+
+// Topology types (CLOS fabric)
+export interface Topology {
+  id: string;
+  name: string;
+  description?: string;
+  device_count?: number;
+  super_spine_count?: number;
+  spine_count?: number;
+  leaf_count?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TopologyFormData {
+  id: string;
+  name: string;
+  description: string;
 }
 
 export interface Settings {
@@ -211,6 +235,24 @@ export interface SpawnContainerRequest {
   vendor_class?: string; // DHCP Option 60 vendor class identifier
   config_method?: 'tftp' | 'http' | 'both'; // Config fetch method
   image?: string; // Docker image to use (e.g., 'ceosimage:latest' for cEOS)
+  topology_id?: string; // Assign to topology on creation
+  topology_role?: string; // Role in topology (spine, leaf, super-spine)
+}
+
+// CLOS lab types
+export interface ClosLabDevice {
+  hostname: string;
+  role: string;
+  mac: string;
+  ip: string;
+  container_name: string;
+}
+
+export interface ClosLabResponse {
+  topology_id: string;
+  topology_name: string;
+  devices: ClosLabDevice[];
+  fabric_links: string[];
 }
 
 // Config fetch method options
@@ -239,6 +281,46 @@ export interface NetworkInterface {
   addresses: string[];
   is_up: boolean;
   is_loopback: boolean;
+}
+
+// Vendor Action types
+export interface VendorAction {
+  id: string;
+  vendor_id: string;
+  label: string;
+  command: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface VendorActionFormData {
+  id: string;
+  vendor_id: string;
+  label: string;
+  command: string;
+  sort_order: number;
+}
+
+export interface ExecCommandResult {
+  output: string | null;
+  error: string | null;
+}
+
+// Job types
+export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
+export type JobType = 'command' | 'deploy';
+
+export interface Job {
+  id: string;
+  job_type: JobType;
+  device_mac: string;
+  command: string;
+  status: JobStatus;
+  output: string | null;
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
 }
 
 // API Response types

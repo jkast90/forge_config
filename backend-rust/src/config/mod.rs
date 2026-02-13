@@ -14,6 +14,7 @@ pub struct Config {
     pub listen_addr: String,
     pub dhcp_interface: String,
     pub frontend_dir: String,
+    pub jwt_secret: String,
 }
 
 impl Config {
@@ -33,6 +34,7 @@ impl Config {
             listen_addr: get_env("LISTEN_ADDR", "0.0.0.0:8080"),
             dhcp_interface: get_env("DHCP_INTERFACE", "eth0"),
             frontend_dir: get_env("FRONTEND_DIR", "/app/frontend"),
+            jwt_secret: get_env("JWT_SECRET", ""),
         }
     }
 }

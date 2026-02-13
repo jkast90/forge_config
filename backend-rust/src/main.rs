@@ -1,8 +1,10 @@
+mod auth;
 mod backup;
 mod config;
 mod db;
 mod dhcp;
 mod handlers;
+mod jobs;
 mod models;
 mod netbox;
 mod router;
@@ -19,6 +21,7 @@ use backup::BackupService;
 use config::Config;
 use db::Store;
 use dhcp::{ConfigManager, LeaseWatcher};
+use jobs::JobService;
 use status::StatusChecker;
 use ws::Hub;
 
@@ -29,6 +32,7 @@ pub struct AppState {
     pub config_manager: ConfigManager,
     pub ws_hub: Option<Arc<Hub>>,
     pub backup_service: Option<Arc<BackupService>>,
+    pub job_service: Option<Arc<JobService>>,
     pub lease_watcher: Option<Arc<tokio::sync::RwLock<LeaseWatcher>>>,
 }
 
@@ -51,7 +55,11 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     // Load configuration
-    let cfg = Config::load();
+    let mut cfg = Config::load();
+    if cfg.jwt_secret.is_empty() {
+        tracing::warn!("JWT_SECRET not set - generating random secret (tokens will be invalidated on restart)");
+        cfg.jwt_secret = uuid::Uuid::new_v4().to_string();
+    }
     tracing::info!("Starting ZTP Server (Rust)");
     tracing::info!("Database: {}", cfg.db_path);
     tracing::info!("TFTP Dir: {}", cfg.tftp_dir);
@@ -77,6 +85,9 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize backup service
     let backup_service = BackupService::new(store.clone(), cfg.backup_dir.clone());
+
+    // Initialize job service
+    let job_service = JobService::new(store.clone(), Some(ws_hub.clone()));
 
     // Initialize lease watcher
     let mut lease_watcher = LeaseWatcher::new(cfg.lease_path.clone());
@@ -137,6 +148,7 @@ async fn main() -> anyhow::Result<()> {
         config_manager,
         ws_hub: Some(ws_hub.clone()),
         backup_service: Some(backup_service),
+        job_service: Some(job_service),
         lease_watcher: Some(lease_watcher),
     });
 
@@ -157,6 +169,7 @@ async fn main() -> anyhow::Result<()> {
 
 /// WebSocket upgrade handler
 pub async fn ws_upgrade_handler(
+    _auth: auth::AuthUser,
     ws: axum::extract::ws::WebSocketUpgrade,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
 ) -> axum::response::Response {

@@ -8,7 +8,8 @@ use super::row_helpers::map_device_row;
 
 const SELECT_DEVICE: &str = r#"
     SELECT mac, ip, hostname, vendor, model, serial_number, config_template,
-           ssh_user, ssh_pass, status, last_seen, last_backup, last_error,
+           ssh_user, ssh_pass, topology_id, topology_role,
+           status, last_seen, last_backup, last_error,
            created_at, updated_at
     FROM devices
 "#;
@@ -49,8 +50,8 @@ impl DeviceRepo {
         sqlx::query(
             r#"
             INSERT INTO devices (mac, ip, hostname, vendor, model, serial_number, config_template,
-                                ssh_user, ssh_pass, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'offline', ?, ?)
+                                ssh_user, ssh_pass, topology_id, topology_role, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'offline', ?, ?)
             "#,
         )
         .bind(&req.mac)
@@ -62,6 +63,8 @@ impl DeviceRepo {
         .bind(&req.config_template)
         .bind(&req.ssh_user.clone().unwrap_or_default())
         .bind(&req.ssh_pass.clone().unwrap_or_default())
+        .bind(&req.topology_id.clone().unwrap_or_default())
+        .bind(&req.topology_role.clone().unwrap_or_default())
         .bind(now)
         .bind(now)
         .execute(pool)
@@ -77,7 +80,8 @@ impl DeviceRepo {
         let result = sqlx::query(
             r#"
             UPDATE devices SET ip = ?, hostname = ?, vendor = ?, model = ?, serial_number = ?,
-                              config_template = ?, ssh_user = ?, ssh_pass = ?, updated_at = ?
+                              config_template = ?, ssh_user = ?, ssh_pass = ?,
+                              topology_id = ?, topology_role = ?, updated_at = ?
             WHERE mac = ?
             "#,
         )
@@ -89,6 +93,8 @@ impl DeviceRepo {
         .bind(&req.config_template)
         .bind(&req.ssh_user.clone().unwrap_or_default())
         .bind(&req.ssh_pass.clone().unwrap_or_default())
+        .bind(&req.topology_id.clone().unwrap_or_default())
+        .bind(&req.topology_role.clone().unwrap_or_default())
         .bind(now)
         .bind(mac)
         .execute(pool)

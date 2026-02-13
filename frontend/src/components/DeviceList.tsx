@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { useBackups, useDevices, useAsyncModal, useModalRoute, formatDate, getServices } from '@core';
-import type { Device, ConfigResult, BackupContentResult, ConfigPreviewResult, DeployConfigResult, Backup, NetBoxStatus } from '@core';
+import { useState, useEffect, useCallback } from 'react';
+import { useBackups, useDevices, useTopologies, useAsyncModal, useModalRoute, useWebSocket, formatDate, getServices, addNotification } from '@core';
+import type { Device, ConfigResult, BackupContentResult, ConfigPreviewResult, Backup, NetBoxStatus, Job, TopologyRole } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
 import { ConnectModal, useConnectModal } from './ConnectModal';
@@ -12,6 +12,7 @@ import { ResultItem } from './ResultItem';
 import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { ConfigViewer } from './ConfigViewer';
+import { CommandDrawer } from './CommandDrawer';
 import { Icon, EditIcon, DownloadIcon, ClockIcon, TrashIcon, SpinnerIcon, loadingIcon } from './Icon';
 
 interface Props {
@@ -28,6 +29,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
   const modalRoute = useModalRoute();
 
   const [showInfo, setShowInfo] = useState(false);
+  const [commandDevice, setCommandDevice] = useState<Device | null>(null);
 
   // Connection test modal state (shared with Discovery and TestContainers)
   const connectModal = useConnectModal();
@@ -45,10 +47,29 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
   // Config preview + deploy modal state
   const previewModal = useAsyncModal<Device, ConfigPreviewResult>();
-  const [deployResult, setDeployResult] = useState<DeployConfigResult | null>(null);
+  const [deployJob, setDeployJob] = useState<Job | null>(null);
   const [deploying, setDeploying] = useState(false);
 
+  const { topologies } = useTopologies();
+  const [topoAssign, setTopoAssign] = useState<{ device: Device; topologyId: string; role: TopologyRole } | null>(null);
+
   const { backups, loading: backupsLoading, loadBackups, clear: clearBackups } = useBackups();
+
+  // Handle deploy job updates via WebSocket
+  const onJobUpdate = useCallback((job: Job) => {
+    setDeployJob((prev) => {
+      if (!prev || prev.id !== job.id) return prev;
+      return job;
+    });
+    if (job.status === 'completed' || job.status === 'failed') {
+      setDeploying(false);
+      if (job.status === 'completed' && onRefresh) {
+        onRefresh();
+      }
+    }
+  }, [onRefresh]);
+
+  useWebSocket({ onJobUpdate });
 
   // Restore modal state from URL hash
   useEffect(() => {
@@ -168,7 +189,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
   const handlePreviewConfig = async (device: Device) => {
     previewModal.open(device);
     modalRoute.openModal('preview', { mac: device.mac });
-    setDeployResult(null);
+    setDeployJob(null);
     await previewModal.execute(async () => {
       const services = getServices();
       return services.devices.previewConfig(device.mac);
@@ -179,22 +200,25 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
     if (!previewModal.item) return;
     if (!confirm(`Deploy configuration to ${previewModal.item.hostname} (${previewModal.item.ip})? This will push the config via SSH.`)) return;
     setDeploying(true);
+    setDeployJob(null);
     try {
       const services = getServices();
-      const result = await services.devices.deployConfig(previewModal.item.mac);
-      setDeployResult(result);
-      if (result.success && onRefresh) {
-        onRefresh();
-      }
+      const job = await services.devices.deployConfig(previewModal.item.mac);
+      setDeployJob(job);
+      // Job result will arrive via WebSocket
     } catch (err) {
-      setDeployResult({
-        mac: previewModal.item.mac,
-        hostname: previewModal.item.hostname,
-        success: false,
-        output: '',
+      setDeployJob({
+        id: `error-${Date.now()}`,
+        job_type: 'deploy',
+        device_mac: previewModal.item.mac,
+        command: '',
+        status: 'failed',
+        output: null,
         error: err instanceof Error ? err.message : 'Deploy failed',
+        created_at: new Date().toISOString(),
+        started_at: null,
+        completed_at: null,
       });
-    } finally {
       setDeploying(false);
     }
   };
@@ -202,8 +226,25 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
   const handleClosePreview = () => {
     previewModal.close();
     modalRoute.closeModal();
-    setDeployResult(null);
+    setDeployJob(null);
     setDeploying(false);
+  };
+
+  const handleAssignTopology = async () => {
+    if (!topoAssign) return;
+    try {
+      await getServices().devices.update(topoAssign.device.mac, {
+        ...topoAssign.device,
+        topology_id: topoAssign.topologyId,
+        topology_role: topoAssign.role,
+      });
+      addNotification('success', `Assigned ${topoAssign.device.hostname} as ${topoAssign.role} in topology`);
+      setTopoAssign(null);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to assign: ${msg}`);
+    }
   };
 
   const columns: TableColumn<Device>[] = [
@@ -254,7 +295,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
       variant: 'secondary',
       tooltip: 'Preview & deploy config',
       loading: (d) => previewModal.item?.mac === d.mac && previewModal.loading,
-      disabled: (d) => !d.config_template,
+      disabled: (d) => !d.config_template && !d.vendor,
     },
     {
       icon: (d) => loadingIcon(netboxModal.item?.mac === d.mac && netboxModal.loading, 'cloud'),
@@ -263,6 +304,20 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
       variant: 'secondary',
       tooltip: 'NetBox info',
       loading: (d) => netboxModal.item?.mac === d.mac && netboxModal.loading,
+    },
+    {
+      icon: <Icon name="terminal" size={14} />,
+      label: 'Commands',
+      onClick: setCommandDevice,
+      variant: 'secondary',
+      tooltip: 'Run commands',
+    },
+    {
+      icon: <Icon name="account_tree" size={14} />,
+      label: 'Add to topology',
+      onClick: (d) => setTopoAssign({ device: d, topologyId: d.topology_id || topologies[0]?.id || '', role: (d.topology_role as TopologyRole) || 'leaf' }),
+      variant: 'secondary',
+      tooltip: (d) => d.topology_id ? `Topology: ${d.topology_id} (${d.topology_role})` : 'Assign to topology',
     },
     {
       icon: <TrashIcon size={14} />,
@@ -299,6 +354,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
           columns={columns}
           getRowKey={(d) => d.mac}
           actions={actions}
+          tableId="devices"
           searchable
           searchPlaceholder="Search devices..."
           emptyMessage="No devices configured yet."
@@ -438,17 +494,17 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
                 copyable
               />
 
-              {deployResult && (
+              {deployJob && (deployJob.status === 'completed' || deployJob.status === 'failed') && (
                 <div className="connect-results" style={{ marginTop: '1rem' }}>
-                  <ResultItem icon={deployResult.success ? 'check_circle' : 'cancel'} title="Deploy Result">
-                    {deployResult.success ? (
+                  <ResultItem icon={deployJob.status === 'completed' ? 'check_circle' : 'cancel'} title="Deploy Result">
+                    {deployJob.status === 'completed' ? (
                       <span className="status online">Config deployed successfully</span>
                     ) : (
-                      <span className="status offline">{deployResult.error || 'Deploy failed'}</span>
+                      <span className="status offline">{deployJob.error || 'Deploy failed'}</span>
                     )}
-                    {deployResult.output && (
+                    {deployJob.output && (
                       <pre className="pre-scrollable" style={{ marginTop: '0.5rem' }}>
-                        {deployResult.output}
+                        {deployJob.output}
                       </pre>
                     )}
                   </ResultItem>
@@ -458,10 +514,10 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
           ) : null}
 
           <DialogActions>
-            {previewModal.result && !deployResult && (
+            {previewModal.result && (!deployJob || deployJob.status === 'queued' || deployJob.status === 'running') && (
               <Button onClick={handleDeployConfig} disabled={deploying}>
                 {deploying ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
-                Deploy to Device
+                {deploying ? 'Deploying...' : 'Deploy to Device'}
               </Button>
             )}
             <Button variant="secondary" onClick={handleClosePreview}>
@@ -527,6 +583,47 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
             )}
             <Button variant="secondary" onClick={handleCloseNetbox}>
               Close
+            </Button>
+          </DialogActions>
+        </Modal>
+      )}
+
+      <CommandDrawer device={commandDevice} onClose={() => setCommandDevice(null)} />
+
+      {topoAssign && (
+        <Modal title={`Assign ${topoAssign.device.hostname} to Topology`} onClose={() => setTopoAssign(null)}>
+          <div className="form-group">
+            <label htmlFor="topo-select">Topology</label>
+            <select
+              id="topo-select"
+              value={topoAssign.topologyId}
+              onChange={(e) => setTopoAssign({ ...topoAssign, topologyId: e.target.value })}
+            >
+              <option value="">— Select topology —</option>
+              {topologies.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="role-select">Role</label>
+            <select
+              id="role-select"
+              value={topoAssign.role}
+              onChange={(e) => setTopoAssign({ ...topoAssign, role: e.target.value as TopologyRole })}
+            >
+              <option value="super-spine">Super-Spine</option>
+              <option value="spine">Spine</option>
+              <option value="leaf">Leaf</option>
+            </select>
+          </div>
+          <DialogActions>
+            <Button onClick={handleAssignTopology} disabled={!topoAssign.topologyId}>
+              <Icon name="account_tree" size={14} />
+              Assign
+            </Button>
+            <Button variant="secondary" onClick={() => setTopoAssign(null)}>
+              Cancel
             </Button>
           </DialogActions>
         </Modal>

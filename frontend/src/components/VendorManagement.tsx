@@ -158,6 +158,7 @@ export function VendorManagement() {
             { header: 'Devices', accessor: (v) => Cell.count(v.device_count), searchable: false },
           ] as TableColumn<(typeof vendorsWithStats)[0]>[]}
           getRowKey={(v) => v.id}
+          tableId="vendors"
           onEdit={form.openEdit}
           onDelete={handleDelete}
           deleteConfirmMessage={(v) => `Delete vendor "${v.name}"?`}

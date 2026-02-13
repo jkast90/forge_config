@@ -22,6 +22,11 @@ export const spawnContainer = createAsyncThunk('containers/spawn', async (reques
   return getServices().testContainers.spawn(request);
 });
 
+export const startContainer = createAsyncThunk('containers/start', async (id: string) => {
+  await getServices().testContainers.start(id);
+  return id;
+});
+
 export const restartContainer = createAsyncThunk('containers/restart', async (id: string) => {
   await getServices().testContainers.restart(id);
   return id;

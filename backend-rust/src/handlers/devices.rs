@@ -1,5 +1,6 @@
 use axum::{
     extract::{Path, Query, State},
+    http::StatusCode,
     Json,
 };
 use std::sync::Arc;
@@ -14,6 +15,7 @@ use super::{created, trigger_reload, ApiError, PaginationQuery};
 
 /// List all devices (with optional pagination)
 pub async fn list_devices(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Query(page): Query<PaginationQuery>,
 ) -> Result<Json<Vec<Device>>, ApiError> {
@@ -24,6 +26,7 @@ pub async fn list_devices(
 
 /// Get a single device by MAC
 pub async fn get_device(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
 ) -> Result<Json<Device>, ApiError> {
@@ -38,6 +41,7 @@ pub async fn get_device(
 
 /// Create a new device
 pub async fn create_device(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Json(mut req): Json<CreateDeviceRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Device>), ApiError> {
@@ -51,6 +55,13 @@ pub async fn create_device(
     }
     if !is_valid_hostname(&req.hostname) {
         return Err(ApiError::bad_request("invalid hostname: only alphanumeric, hyphens, dots, and underscores allowed"));
+    }
+
+    // Validate topology_role if provided
+    if let Some(ref role) = req.topology_role {
+        if !crate::models::topology_role::is_valid(role) {
+            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf"));
+        }
     }
 
     // Check for duplicate
@@ -69,10 +80,18 @@ pub async fn create_device(
 
 /// Update an existing device
 pub async fn update_device(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
     Json(req): Json<UpdateDeviceRequest>,
 ) -> Result<Json<Device>, ApiError> {
+    // Validate topology_role if provided
+    if let Some(ref role) = req.topology_role {
+        if !crate::models::topology_role::is_valid(role) {
+            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf"));
+        }
+    }
+
     let mac = normalize_mac(&mac);
     let device = state.store.update_device(&mac, &req).await?;
     trigger_reload(&state).await;
@@ -81,6 +100,7 @@ pub async fn update_device(
 
 /// Delete a device
 pub async fn delete_device(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
@@ -92,6 +112,7 @@ pub async fn delete_device(
 
 /// Test connectivity to a device via ping and SSH
 pub async fn connect_device(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
 ) -> Result<Json<ConnectResult>, ApiError> {
@@ -148,6 +169,7 @@ pub async fn connect_device(
 
 /// Get the generated configuration for a device
 pub async fn get_device_config(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
 ) -> Result<Json<DeviceConfigResponse>, ApiError> {
@@ -236,6 +258,7 @@ async fn ssh_probe(ip: &str, user: &str, pass: &str, vendor_hint: Option<&str>) 
 
 /// Test connectivity to an arbitrary IP (for discovery/containers that aren't registered devices)
 pub async fn connect_ip(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Json(body): Json<ConnectIpRequest>,
 ) -> Result<Json<ConnectResult>, ApiError> {
@@ -282,17 +305,69 @@ pub async fn connect_ip(
     }))
 }
 
+/// Execute a command on a device via SSH — creates a job and returns 202 Accepted
+pub async fn exec_command(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(mac): Path<String>,
+    Json(body): Json<ExecRequest>,
+) -> Result<(StatusCode, Json<Job>), ApiError> {
+    let mac = normalize_mac(&mac);
+    let _device = state
+        .store
+        .get_device(&mac)
+        .await?
+        .ok_or_else(|| ApiError::not_found("device"))?;
+
+    if body.command.is_empty() {
+        return Err(ApiError::bad_request("command is required"));
+    }
+
+    let job_id = uuid::Uuid::new_v4().to_string();
+    let req = CreateJobRequest {
+        device_mac: mac,
+        job_type: job_type::COMMAND.to_string(),
+        command: body.command,
+    };
+
+    let job = state.store.create_job(&job_id, &req).await?;
+
+    // Broadcast queued event
+    if let Some(ref hub) = state.ws_hub {
+        hub.broadcast_job_update(crate::ws::EventType::JobQueued, &job).await;
+    }
+
+    // Submit to worker
+    if let Some(ref job_service) = state.job_service {
+        job_service.submit(job_id).await;
+    }
+
+    Ok((StatusCode::ACCEPTED, Json(job)))
+}
+
 /// Render a device's template with its real data and return the preview
 fn render_device_config(
     device: &Device,
     template: &Template,
     settings: &Settings,
+    role_template: Option<&Template>,
 ) -> Result<String, ApiError> {
     let tera_content = crate::utils::convert_go_template_to_tera(&template.content);
 
     let mut tera = Tera::default();
     tera.add_raw_template("device", &tera_content)
         .map_err(|e| ApiError::bad_request(format!("Invalid template: {}", e)))?;
+
+    // Register role template as "role" so the device template can {% include "role" %}
+    if let Some(role_tmpl) = role_template {
+        let role_content = crate::utils::convert_go_template_to_tera(&role_tmpl.content);
+        tera.add_raw_template("role", &role_content)
+            .map_err(|e| ApiError::bad_request(format!("Invalid role template: {}", e)))?;
+    } else {
+        // Register an empty role template so {% include "role" %} doesn't fail
+        tera.add_raw_template("role", "")
+            .map_err(|e| ApiError::bad_request(format!("Failed to add empty role template: {}", e)))?;
+    }
 
     let mut context = Context::new();
     context.insert("Hostname", &device.hostname);
@@ -301,6 +376,8 @@ fn render_device_config(
     context.insert("Vendor", &device.vendor.clone().unwrap_or_default());
     context.insert("Model", &device.model.clone().unwrap_or_default());
     context.insert("SerialNumber", &device.serial_number.clone().unwrap_or_default());
+    context.insert("TopologyId", &device.topology_id.clone().unwrap_or_default());
+    context.insert("TopologyRole", &device.topology_role.clone().unwrap_or_default());
     context.insert("Subnet", &settings.dhcp_subnet);
     context.insert("Gateway", &settings.dhcp_gateway);
 
@@ -310,6 +387,7 @@ fn render_device_config(
 
 /// Preview the rendered configuration for a device
 pub async fn preview_device_config(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
 ) -> Result<Json<DeviceConfigPreviewResponse>, ApiError> {
@@ -320,18 +398,37 @@ pub async fn preview_device_config(
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
-    if device.config_template.is_empty() {
-        return Err(ApiError::bad_request("Device has no template assigned"));
-    }
+    // Resolve template: use device's config_template, or fall back to vendor's default_template
+    let template_id = if !device.config_template.is_empty() {
+        device.config_template.clone()
+    } else if let Some(vendor_id) = &device.vendor {
+        let vendor = state.store.get_vendor(vendor_id).await?
+            .ok_or_else(|| ApiError::bad_request("Device has no template and vendor not found"))?;
+        if vendor.default_template.is_empty() {
+            return Err(ApiError::bad_request("Device has no template and vendor has no default template"));
+        }
+        vendor.default_template
+    } else {
+        return Err(ApiError::bad_request("Device has no template assigned and no vendor to infer from"));
+    };
 
     let template = state
         .store
-        .get_template(&device.config_template)
+        .get_template(&template_id)
         .await?
         .ok_or_else(|| ApiError::not_found("template"))?;
 
     let settings = state.store.get_settings().await?;
-    let content = render_device_config(&device, &template, &settings)?;
+
+    // Look up role-specific template (e.g., "arista-eos-spine" or "arista-eos-leaf")
+    let role_template = if let Some(role) = &device.topology_role {
+        let role_id = format!("{}-{}", template.id, role);
+        state.store.get_template(&role_id).await.ok().flatten()
+    } else {
+        None
+    };
+
+    let content = render_device_config(&device, &template, &settings, role_template.as_ref())?;
 
     Ok(Json(DeviceConfigPreviewResponse {
         mac,
@@ -342,77 +439,37 @@ pub async fn preview_device_config(
     }))
 }
 
-/// Deploy rendered configuration to a device via SSH
+/// Deploy rendered configuration to a device via SSH — creates a job and returns 202 Accepted
 pub async fn deploy_device_config(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
-) -> Result<Json<DeployConfigResponse>, ApiError> {
+) -> Result<(StatusCode, Json<Job>), ApiError> {
     let mac = normalize_mac(&mac);
-    let device = state
+    let _device = state
         .store
         .get_device(&mac)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
-    if device.config_template.is_empty() {
-        return Err(ApiError::bad_request("Device has no template assigned"));
-    }
-
-    let template = state
-        .store
-        .get_template(&device.config_template)
-        .await?
-        .ok_or_else(|| ApiError::not_found("template"))?;
-
-    let settings = state.store.get_settings().await?;
-    let rendered_config = render_device_config(&device, &template, &settings)?;
-
-    // Resolve SSH credentials: device -> vendor -> global
-    let vendor = match device.vendor.as_deref() {
-        Some(v) if !v.is_empty() => state.store.get_vendor(v).await.ok().flatten(),
-        _ => None,
-    };
-    let ssh_user = device.ssh_user.clone().filter(|s| !s.is_empty())
-        .or_else(|| vendor.as_ref().and_then(|v| v.ssh_user.clone()))
-        .unwrap_or(settings.default_ssh_user.clone());
-    let ssh_pass = device.ssh_pass.clone().filter(|s| !s.is_empty())
-        .or_else(|| vendor.as_ref().and_then(|v| v.ssh_pass.clone()))
-        .unwrap_or(settings.default_ssh_pass.clone());
-
-    if ssh_user.is_empty() || ssh_pass.is_empty() {
-        return Err(ApiError::bad_request("No SSH credentials available for this device"));
-    }
-
-    // Wrap config with vendor deploy_command if set
-    let deploy_payload = if let Some(ref v) = vendor {
-        if !v.deploy_command.is_empty() {
-            v.deploy_command.replace("{CONFIG}", &rendered_config)
-        } else {
-            rendered_config.clone()
-        }
-    } else {
-        rendered_config.clone()
+    let job_id = uuid::Uuid::new_v4().to_string();
+    let req = CreateJobRequest {
+        device_mac: mac,
+        job_type: job_type::DEPLOY.to_string(),
+        command: String::new(),
     };
 
-    match crate::utils::ssh_run_command_async(&device.ip, &ssh_user, &ssh_pass, &deploy_payload).await {
-        Ok(output) => {
-            let _ = state.store.update_device_status(&mac, crate::models::device_status::ONLINE).await;
-            Ok(Json(DeployConfigResponse {
-                mac,
-                hostname: device.hostname,
-                success: true,
-                output,
-                error: None,
-            }))
-        }
-        Err(e) => {
-            Ok(Json(DeployConfigResponse {
-                mac,
-                hostname: device.hostname,
-                success: false,
-                output: String::new(),
-                error: Some(e.to_string()),
-            }))
-        }
+    let job = state.store.create_job(&job_id, &req).await?;
+
+    // Broadcast queued event
+    if let Some(ref hub) = state.ws_hub {
+        hub.broadcast_job_update(crate::ws::EventType::JobQueued, &job).await;
     }
+
+    // Submit to worker
+    if let Some(ref job_service) = state.job_service {
+        job_service.submit(job_id).await;
+    }
+
+    Ok((StatusCode::ACCEPTED, Json(job)))
 }

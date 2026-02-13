@@ -17,7 +17,7 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "chrono"] }
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "chrono", "migrate"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -64,6 +64,12 @@ rand = "0.8"
 
 # Tar archive creation (for injecting configs into containers)
 tar = "0.4"
+
+# JWT authentication
+jsonwebtoken = "9"
+
+# Password hashing
+bcrypt = "0.15"
 
 [dev-dependencies]
 tokio-test = "0.4"

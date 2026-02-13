@@ -1,5 +1,6 @@
 // Hooks barrel export
 
+export { useAuth, useAuthState, AuthProvider, type UseAuthReturn } from './useAuth';
 export { useDevices, type UseDevicesOptions, type UseDevicesReturn } from './useDevices';
 export { useSettings, type UseSettingsReturn } from './useSettings';
 export { useBackups, type UseBackupsReturn } from './useBackups';
@@ -81,3 +82,6 @@ export {
   type UseTableFeaturesReturn,
 } from './useTableFeatures';
 export { useNotificationHistory, type UseNotificationsReturn } from './useNotifications';
+export { useVendorActions, type UseVendorActionsOptions, type UseVendorActionsReturn } from './useVendorActions';
+export { useJobs, type UseJobsOptions, type UseJobsReturn } from './useJobs';
+export { useTopologies, type UseTopologiesOptions, type UseTopologiesReturn } from './useTopologies';

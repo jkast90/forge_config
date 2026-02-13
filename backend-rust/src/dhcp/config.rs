@@ -242,14 +242,31 @@ log-queries
         device: &Device,
         settings: &Settings,
     ) -> Result<()> {
+        // Resolve template ID: explicit config_template, or vendor's default_template
+        let resolved_template_id = if !device.config_template.is_empty() {
+            Some(device.config_template.clone())
+        } else if let Some(ref vendor_id) = device.vendor {
+            if let Ok(Some(vendor)) = self.store.get_vendor(vendor_id).await {
+                if !vendor.default_template.is_empty() {
+                    Some(vendor.default_template)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Determine which template to use
-        let template_content = if !device.config_template.is_empty() {
+        let template_content = if let Some(ref tid) = resolved_template_id {
             // Try to load from database
-            if let Ok(Some(template)) = self.store.get_template(&device.config_template).await {
+            if let Ok(Some(template)) = self.store.get_template(tid).await {
                 template.content
             } else {
                 // Fallback to file-based template
-                let custom_path = Path::new(&self.templates_dir).join(&device.config_template);
+                let custom_path = Path::new(&self.templates_dir).join(tid);
                 if let Ok(content) = fs::read_to_string(&custom_path).await {
                     content
                 } else {
@@ -275,6 +292,8 @@ log-queries
         context.insert("Vendor", &device.vendor.clone().unwrap_or_default());
         context.insert("Model", &device.model.clone().unwrap_or_default());
         context.insert("SerialNumber", &device.serial_number.clone().unwrap_or_default());
+        context.insert("TopologyId", &device.topology_id.clone().unwrap_or_default());
+        context.insert("TopologyRole", &device.topology_role.clone().unwrap_or_default());
         context.insert("Subnet", &settings.dhcp_subnet);
         context.insert("Gateway", &settings.dhcp_gateway);
 

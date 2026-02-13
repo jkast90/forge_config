@@ -21,6 +21,10 @@ pub enum EventType {
     BackupCompleted,
     BackupFailed,
     ConfigPulled,
+    JobQueued,
+    JobStarted,
+    JobCompleted,
+    JobFailed,
 }
 
 /// WebSocket event message
@@ -128,6 +132,15 @@ impl Hub {
                 protocol: protocol.to_string(),
             })
             .unwrap_or_default(),
+        })
+        .await;
+    }
+
+    /// Broadcast a job update event
+    pub async fn broadcast_job_update(&self, event_type: EventType, job: &crate::models::Job) {
+        self.broadcast_event(Event {
+            event_type,
+            payload: serde_json::to_value(job).unwrap_or_default(),
         })
         .await;
     }

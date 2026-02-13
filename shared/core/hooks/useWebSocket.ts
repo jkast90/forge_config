@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { getWebSocketService, WebSocketEventType, WebSocketEvent, DeviceDiscoveredPayload } from '../services';
+import type { Job } from '../types';
 
 export interface UseWebSocketOptions {
   autoConnect?: boolean;
   onDeviceDiscovered?: (payload: DeviceDiscoveredPayload) => void;
+  onJobUpdate?: (job: Job) => void;
   onAnyEvent?: (event: WebSocketEvent) => void;
 }
 
@@ -16,7 +18,7 @@ export interface UseWebSocketReturn {
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
-  const { autoConnect = true, onDeviceDiscovered, onAnyEvent } = options;
+  const { autoConnect = true, onDeviceDiscovered, onJobUpdate, onAnyEvent } = options;
   const wsService = getWebSocketService();
   const unsubscribeRefs = useRef<(() => void)[]>([]);
 
@@ -33,6 +35,16 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       unsubscribeRefs.current.push(unsub);
     }
 
+    if (onJobUpdate) {
+      const jobEvents: WebSocketEventType[] = ['job_queued', 'job_started', 'job_completed', 'job_failed'];
+      for (const eventType of jobEvents) {
+        const unsub = wsService.on<Job>(eventType, (event) => {
+          onJobUpdate(event.payload as Job);
+        });
+        unsubscribeRefs.current.push(unsub);
+      }
+    }
+
     if (onAnyEvent) {
       const unsub = wsService.onAny(onAnyEvent);
       unsubscribeRefs.current.push(unsub);
@@ -42,7 +54,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
       unsubscribeRefs.current.forEach(unsub => unsub());
       unsubscribeRefs.current = [];
     };
-  }, [onDeviceDiscovered, onAnyEvent, wsService]);
+  }, [onDeviceDiscovered, onJobUpdate, onAnyEvent, wsService]);
 
   // Auto-connect on mount
   useEffect(() => {

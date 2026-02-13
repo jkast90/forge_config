@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import type { Device } from '@core';
-import { useForm, useTemplates, useVendors, validateDeviceForm, lookupVendorByMac, getDefaultTemplateForVendor } from '@core';
+import { useForm, useTemplates, useVendors, useTopologies, validateDeviceForm, lookupVendorByMac, getDefaultTemplateForVendor, TOPOLOGY_ROLE_OPTIONS } from '@core';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { SelectField } from './SelectField';
@@ -23,6 +23,8 @@ type DeviceFormData = {
   config_template: string;
   ssh_user: string;
   ssh_pass: string;
+  topology_id: string;
+  topology_role: string;
 };
 
 const emptyFormData: DeviceFormData = {
@@ -35,12 +37,15 @@ const emptyFormData: DeviceFormData = {
   config_template: '',
   ssh_user: '',
   ssh_pass: '',
+  topology_id: '',
+  topology_role: '',
 };
 
 export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: Props) {
   const isEditing = !!device;
   const { templates } = useTemplates({ vendorFilter: 'all' });
   const { vendors } = useVendors();
+  const { topologies } = useTopologies();
 
   // Build vendor options for select dropdown
   const vendorOptions = useMemo(() => {
@@ -61,6 +66,15 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
     return options;
   }, [templates]);
 
+  // Build topology options for select dropdown
+  const topologyOptions = useMemo(() => {
+    const options = [{ value: '', label: 'No Topology' }];
+    topologies.forEach((t) => {
+      options.push({ value: t.id, label: t.name });
+    });
+    return options;
+  }, [topologies]);
+
   const {
     formData,
     errors,
@@ -71,7 +85,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
   } = useForm<DeviceFormData>({
     initialData: emptyFormData,
     onSubmit: async (data) => {
-      await onSubmit(data);
+      await onSubmit({ ...data, topology_role: data.topology_role || undefined } as Partial<Device>);
       onClose();
     },
     validate: validateDeviceForm,
@@ -91,6 +105,8 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
           config_template: device.config_template || '',
           ssh_user: device.ssh_user || '',
           ssh_pass: device.ssh_pass || '',
+          topology_id: device.topology_id || '',
+          topology_role: device.topology_role || '',
         });
       } else if (initialData) {
         // Pre-fill with initial data from discovery
@@ -239,6 +255,20 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
             value={formData.ssh_pass}
             onChange={onInputChange}
             placeholder="Leave empty for default"
+          />
+          <SelectField
+            label="Topology"
+            name="topology_id"
+            value={formData.topology_id}
+            onChange={onInputChange}
+            options={topologyOptions}
+          />
+          <SelectField
+            label="Topology Role"
+            name="topology_role"
+            value={formData.topology_role}
+            onChange={onInputChange}
+            options={TOPOLOGY_ROLE_OPTIONS}
           />
         </div>
       </div>

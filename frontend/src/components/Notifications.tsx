@@ -64,16 +64,12 @@ interface NotificationsProps {
 export function Notifications({ isOpen, onClose, onViewApiError }: NotificationsProps) {
   const { notifications, unreadCount } = useNotificationHistory();
 
-  const handleOpen = () => {
-    if (unreadCount > 0) {
+  // Mark as read when opened
+  useEffect(() => {
+    if (isOpen && unreadCount > 0) {
       markAllRead();
     }
-  };
-
-  // Mark as read when opened
-  if (isOpen) {
-    handleOpen();
-  }
+  }, [isOpen, unreadCount]);
 
   return (
     <Drawer isOpen={isOpen} onClose={onClose} title="Notifications" side="left" wide>

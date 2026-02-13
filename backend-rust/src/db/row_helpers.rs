@@ -19,6 +19,8 @@ pub fn map_device_row(row: &SqliteRow) -> Device {
         config_template: row.get("config_template"),
         ssh_user: none_if_empty(row.get("ssh_user")),
         ssh_pass: none_if_empty(row.get("ssh_pass")),
+        topology_id: none_if_empty(row.get("topology_id")),
+        topology_role: none_if_empty(row.get("topology_role")),
         status: row.get("status"),
         last_seen: row.get("last_seen"),
         last_backup: row.get("last_backup"),
@@ -102,6 +104,21 @@ pub fn map_backup_row(row: &SqliteRow) -> Backup {
         filename: row.get("filename"),
         size: row.get("size"),
         created_at: row.get("created_at"),
+    }
+}
+
+/// Map a SQLite row to a Topology struct (with aggregated device counts)
+pub fn map_topology_row(row: &SqliteRow) -> Topology {
+    Topology {
+        id: row.get("id"),
+        name: row.get("name"),
+        description: none_if_empty(row.get("description")),
+        device_count: Some(row.get("device_count")),
+        super_spine_count: Some(row.get("super_spine_count")),
+        spine_count: Some(row.get("spine_count")),
+        leaf_count: Some(row.get("leaf_count")),
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
     }
 }
 

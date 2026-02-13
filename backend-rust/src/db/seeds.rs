@@ -6,6 +6,7 @@ pub(super) struct DefaultVendor {
     id: String,
     name: String,
     backup_command: String,
+    deploy_command: String,
     ssh_port: i32,
     mac_prefixes: Vec<String>,
     vendor_class: String,
@@ -18,6 +19,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             id: "opengear".to_string(),
             name: "OpenGear".to_string(),
             backup_command: "config export".to_string(),
+            deploy_command: String::new(),
             ssh_port: 22,
             mac_prefixes: vec!["00:13:C6".to_string()],
             vendor_class: "OpenGear".to_string(),
@@ -27,6 +29,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             id: "cisco".to_string(),
             name: "Cisco".to_string(),
             backup_command: "show running-config".to_string(),
+            deploy_command: "configure terminal\n{CONFIG}\nend\nwrite memory".to_string(),
             ssh_port: 22,
             mac_prefixes: vec![
                 "00:00:0C".to_string(), "00:1A:2F".to_string(), "00:1B:0D".to_string(),
@@ -41,6 +44,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             id: "arista".to_string(),
             name: "Arista".to_string(),
             backup_command: "show running-config".to_string(),
+            deploy_command: "configure session ztp-deploy\n{CONFIG}\ncommit".to_string(),
             ssh_port: 22,
             mac_prefixes: vec![
                 "00:1C:73".to_string(), "28:99:3A".to_string(), "44:4C:A8".to_string(),
@@ -53,6 +57,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             id: "juniper".to_string(),
             name: "Juniper".to_string(),
             backup_command: "show configuration | display set".to_string(),
+            deploy_command: "configure\n{CONFIG}\ncommit and-quit".to_string(),
             ssh_port: 22,
             mac_prefixes: vec![
                 "00:05:85".to_string(), "00:10:DB".to_string(), "00:12:1E".to_string(),
@@ -69,6 +74,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             id: "raspberry-pi".to_string(),
             name: "Raspberry Pi".to_string(),
             backup_command: "cat /etc/network/interfaces".to_string(),
+            deploy_command: String::new(),
             ssh_port: 22,
             mac_prefixes: vec![
                 "B8:27:EB".to_string(), "DC:A6:32".to_string(), "E4:5F:01".to_string(),
@@ -81,6 +87,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             id: "frr".to_string(),
             name: "FRRouting".to_string(),
             backup_command: "vtysh -c 'show running-config'".to_string(),
+            deploy_command: "vtysh -c 'configure terminal' -c '{CONFIG}' -c 'end' -c 'write memory'".to_string(),
             ssh_port: 22,
             mac_prefixes: vec![],
             vendor_class: "FRRouting".to_string(),
@@ -90,6 +97,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             id: "gobgp".to_string(),
             name: "GoBGP".to_string(),
             backup_command: "gobgp global; echo '---'; gobgp neighbor".to_string(),
+            deploy_command: String::new(),
             ssh_port: 22,
             mac_prefixes: vec![],
             vendor_class: "GoBGP".to_string(),
@@ -166,7 +174,102 @@ management ssh
    idle-timeout 30
    no shutdown
 !
+{% include "role" %}
 end"#.to_string(),
+        },
+        DefaultTemplate {
+            id: "arista-eos-spine".to_string(),
+            name: "Arista EOS Spine (48x100G)".to_string(),
+            description: "CLOS spine role config — 48-port 100G with BGP underlay".to_string(),
+            vendor_id: "arista".to_string(),
+            content: r#"! ---- Spine Role Configuration ----
+!
+spanning-tree mode none
+!
+{% for i in range(end=48) %}
+interface Ethernet{{i + 1}}
+   description fabric-link
+   no switchport
+   mtu 9214
+   no shutdown
+!
+{% endfor %}
+router bgp 65000
+   router-id {{IP}}
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   neighbor LEAFS peer group
+   neighbor LEAFS send-community extended
+   !
+   address-family ipv4 unicast
+      neighbor LEAFS activate
+      redistribute connected
+!"#.to_string(),
+        },
+        DefaultTemplate {
+            id: "arista-eos-leaf".to_string(),
+            name: "Arista EOS Leaf (24x100G)".to_string(),
+            description: "CLOS leaf role config — 24-port 100G with BGP underlay and VXLAN".to_string(),
+            vendor_id: "arista".to_string(),
+            content: r#"! ---- Leaf Role Configuration ----
+!
+spanning-tree mode mstp
+!
+vlan 10
+   name Servers
+!
+vlan 20
+   name Storage
+!
+{% for i in range(end=24) %}
+{% if i < 4 %}
+interface Ethernet{{i + 1}}
+   description uplink-to-spine
+   no switchport
+   mtu 9214
+   no shutdown
+{% else %}
+interface Ethernet{{i + 1}}
+   description server-port
+   switchport mode access
+   switchport access vlan 10
+   no shutdown
+{% endif %}
+!
+{% endfor %}
+interface Vxlan1
+   vxlan source-interface Loopback1
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 10010
+   vxlan vlan 20 vni 10020
+!
+interface Loopback1
+   description VTEP-source
+!
+router bgp 65001
+   router-id {{IP}}
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   neighbor SPINES peer group
+   neighbor SPINES send-community extended
+   !
+   address-family ipv4 unicast
+      neighbor SPINES activate
+      redistribute connected
+   !
+   address-family evpn
+      neighbor SPINES activate
+   !
+   vlan 10
+      rd auto
+      route-target both 10:10010
+      redistribute learned
+   !
+   vlan 20
+      rd auto
+      route-target both 20:10020
+      redistribute learned
+!"#.to_string(),
         },
         DefaultTemplate {
             id: "juniper-junos".to_string(),
@@ -421,12 +524,12 @@ fn get_default_dhcp_options_internal() -> Vec<DefaultDhcpOption> {
 
 /// Seed data helpers used by the Store during migration
 
-pub(super) fn seed_vendor_params() -> Vec<(String, String, String, i32, String, String, String)> {
+pub(super) fn seed_vendor_params() -> Vec<(String, String, String, String, i32, String, String, String)> {
     get_default_vendors_internal()
         .into_iter()
         .map(|v| {
             let mac_json = serde_json::to_string(&v.mac_prefixes).unwrap_or_else(|_| "[]".to_string());
-            (v.id, v.name, v.backup_command, v.ssh_port, mac_json, v.vendor_class, v.default_template)
+            (v.id, v.name, v.backup_command, v.deploy_command, v.ssh_port, mac_json, v.vendor_class, v.default_template)
         })
         .collect()
 }
@@ -454,7 +557,7 @@ pub fn get_default_vendors_models() -> Vec<Vendor> {
             id: v.id,
             name: v.name,
             backup_command: v.backup_command,
-            deploy_command: String::new(),
+            deploy_command: v.deploy_command,
             ssh_port: v.ssh_port,
             ssh_user: None,
             ssh_pass: None,
@@ -465,6 +568,47 @@ pub fn get_default_vendors_models() -> Vec<Vendor> {
             created_at: now,
             updated_at: now,
         })
+        .collect()
+}
+
+struct DefaultVendorAction {
+    id: String,
+    vendor_id: String,
+    label: String,
+    command: String,
+    sort_order: i32,
+}
+
+fn get_default_vendor_actions_internal() -> Vec<DefaultVendorAction> {
+    vec![
+        // Arista actions
+        DefaultVendorAction { id: "arista-show-version".into(), vendor_id: "arista".into(), label: "Show Version".into(), command: "show version".into(), sort_order: 0 },
+        DefaultVendorAction { id: "arista-show-version-json".into(), vendor_id: "arista".into(), label: "Show Version (JSON)".into(), command: "show version | json".into(), sort_order: 1 },
+        DefaultVendorAction { id: "arista-interfaces".into(), vendor_id: "arista".into(), label: "Interfaces".into(), command: "show ip interface brief".into(), sort_order: 2 },
+        DefaultVendorAction { id: "arista-interfaces-json".into(), vendor_id: "arista".into(), label: "Interfaces (JSON)".into(), command: "show ip interface brief | json".into(), sort_order: 3 },
+        DefaultVendorAction { id: "arista-running-config".into(), vendor_id: "arista".into(), label: "Running Config".into(), command: "show running-config".into(), sort_order: 4 },
+        DefaultVendorAction { id: "arista-bgp-summary".into(), vendor_id: "arista".into(), label: "BGP Summary".into(), command: "show ip bgp summary".into(), sort_order: 5 },
+        DefaultVendorAction { id: "arista-bgp-summary-json".into(), vendor_id: "arista".into(), label: "BGP Summary (JSON)".into(), command: "show ip bgp summary | json".into(), sort_order: 6 },
+        DefaultVendorAction { id: "arista-lldp-neighbors".into(), vendor_id: "arista".into(), label: "LLDP Neighbors".into(), command: "show lldp neighbors".into(), sort_order: 7 },
+        DefaultVendorAction { id: "arista-lldp-neighbors-json".into(), vendor_id: "arista".into(), label: "LLDP Neighbors (JSON)".into(), command: "show lldp neighbors | json".into(), sort_order: 8 },
+        DefaultVendorAction { id: "arista-inventory".into(), vendor_id: "arista".into(), label: "Inventory".into(), command: "show inventory".into(), sort_order: 9 },
+        DefaultVendorAction { id: "arista-inventory-json".into(), vendor_id: "arista".into(), label: "Inventory (JSON)".into(), command: "show inventory | json".into(), sort_order: 10 },
+        // Cisco actions
+        DefaultVendorAction { id: "cisco-show-version".into(), vendor_id: "cisco".into(), label: "Show Version".into(), command: "show version".into(), sort_order: 0 },
+        DefaultVendorAction { id: "cisco-interfaces".into(), vendor_id: "cisco".into(), label: "Interfaces".into(), command: "show ip int brief".into(), sort_order: 1 },
+        DefaultVendorAction { id: "cisco-running-config".into(), vendor_id: "cisco".into(), label: "Running Config".into(), command: "show running-config".into(), sort_order: 2 },
+        DefaultVendorAction { id: "cisco-cdp-neighbors".into(), vendor_id: "cisco".into(), label: "CDP Neighbors".into(), command: "show cdp neighbors".into(), sort_order: 3 },
+        // Juniper actions
+        DefaultVendorAction { id: "juniper-show-version".into(), vendor_id: "juniper".into(), label: "Show Version".into(), command: "show version".into(), sort_order: 0 },
+        DefaultVendorAction { id: "juniper-interfaces".into(), vendor_id: "juniper".into(), label: "Interfaces".into(), command: "show interfaces terse".into(), sort_order: 1 },
+        DefaultVendorAction { id: "juniper-configuration".into(), vendor_id: "juniper".into(), label: "Configuration".into(), command: "show configuration | display set".into(), sort_order: 2 },
+    ]
+}
+
+pub(super) fn seed_vendor_action_params() -> Vec<(String, String, String, String, i32)> {
+    get_default_vendor_actions_internal()
+        .into_iter()
+        .map(|a| (a.id, a.vendor_id, a.label, a.command, a.sort_order))
         .collect()
 }
 

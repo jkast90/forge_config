@@ -11,6 +11,7 @@ use super::{trigger_reload, ApiError, MessageResponse};
 
 /// Get the global settings
 pub async fn get_settings(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Settings>, ApiError> {
     let settings = state.store.get_settings().await?;
@@ -19,6 +20,7 @@ pub async fn get_settings(
 
 /// Update the global settings
 pub async fn update_settings(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Json(settings): Json<Settings>,
 ) -> Result<Json<Settings>, ApiError> {
@@ -29,6 +31,7 @@ pub async fn update_settings(
 
 /// Trigger a manual config regeneration
 pub async fn reload_config(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<MessageResponse>, ApiError> {
     state
@@ -40,7 +43,9 @@ pub async fn reload_config(
 }
 
 /// Get local network interfaces and their IP addresses
-pub async fn get_local_addresses() -> Result<Json<Vec<NetworkInterface>>, ApiError> {
+pub async fn get_local_addresses(
+    _auth: crate::auth::AuthUser,
+) -> Result<Json<Vec<NetworkInterface>>, ApiError> {
     let interfaces = get_network_interfaces().await?;
     Ok(Json(interfaces))
 }

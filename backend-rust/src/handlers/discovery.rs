@@ -32,6 +32,7 @@ async fn enrich_leases_with_dhcp_info(leases: &mut [Lease], store: &crate::db::S
 /// List undiscovered devices — merges active DHCP leases with persisted discoveries from DB.
 /// Devices already added to the devices table are excluded.
 pub async fn list_undiscovered(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<Lease>>, ApiError> {
     // Get all known devices (already configured)
@@ -78,6 +79,7 @@ pub async fn list_undiscovered(
 
 /// Get current DHCP leases
 pub async fn list_leases(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<Lease>>, ApiError> {
     let mut leases = parse_lease_file(&state.config.lease_path).await?;
@@ -87,6 +89,7 @@ pub async fn list_leases(
 
 /// List discovery event logs
 pub async fn list_discovery_logs(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Query(page): Query<PaginationQuery>,
 ) -> Result<Json<Vec<DiscoveryLog>>, ApiError> {
@@ -97,6 +100,7 @@ pub async fn list_discovery_logs(
 
 /// Clear discovery tracking (resets known MACs and persisted discoveries)
 pub async fn clear_discovery(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<MessageResponse>, ApiError> {
     // Clear known MACs in lease watcher
@@ -111,6 +115,7 @@ pub async fn clear_discovery(
 
 /// Clear discovery logs
 pub async fn clear_discovery_logs(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<MessageResponse>, ApiError> {
     state.store.clear_discovery_logs().await?;
@@ -119,6 +124,7 @@ pub async fn clear_discovery_logs(
 
 /// Dismiss a single discovered device
 pub async fn dismiss_discovered_device(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
 ) -> Result<Json<MessageResponse>, ApiError> {

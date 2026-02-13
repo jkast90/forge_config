@@ -1,3 +1,4 @@
+import './tokenStorage'; // Must be imported before services are used
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { configureServices } from './core';
 

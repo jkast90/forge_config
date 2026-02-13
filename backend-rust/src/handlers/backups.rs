@@ -12,6 +12,7 @@ use super::ApiError;
 
 /// List backups for a device
 pub async fn list_backups(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
 ) -> Result<Json<Vec<crate::models::Backup>>, ApiError> {
@@ -30,6 +31,7 @@ pub async fn list_backups(
 
 /// Get a single backup by ID
 pub async fn get_backup(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Result<Json<BackupWithContent>, ApiError> {
@@ -59,6 +61,7 @@ pub async fn get_backup(
 /// Trigger a manual backup for a device
 /// Returns 202 Accepted since backup runs asynchronously
 pub async fn trigger_backup(
+    _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(mac): Path<String>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {

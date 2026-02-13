@@ -1,7 +1,7 @@
 use axum::Json;
 
 /// Static benchmark handler - no DB operations
-pub async fn benchmark_handler() -> Json<serde_json::Value> {
+pub async fn benchmark_handler(_auth: crate::auth::AuthUser) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok",
         "message": "benchmark response",
@@ -39,7 +39,7 @@ fn calculate_mandelbrot(width: u32, height: u32, max_iter: u32) -> i64 {
 }
 
 /// Mandelbrot benchmark handler - CPU intensive
-pub async fn mandelbrot_handler() -> Json<serde_json::Value> {
+pub async fn mandelbrot_handler(_auth: crate::auth::AuthUser) -> Json<serde_json::Value> {
     let start = std::time::Instant::now();
     let iterations = calculate_mandelbrot(800, 800, 1000);
     let elapsed = start.elapsed();
@@ -108,7 +108,7 @@ fn generate_large_json() -> Vec<BenchmarkItem> {
 }
 
 /// JSON serialization benchmark handler
-pub async fn json_bench_handler() -> Json<JsonBenchResponse> {
+pub async fn json_bench_handler(_auth: crate::auth::AuthUser) -> Json<JsonBenchResponse> {
     let start = std::time::Instant::now();
     let data = generate_large_json();
     let elapsed = start.elapsed();
@@ -399,7 +399,7 @@ fn render_simple_template() -> String {
 }
 
 /// Simple template handler
-pub async fn template_simple_handler() -> Json<TemplateBenchResponse> {
+pub async fn template_simple_handler(_auth: crate::auth::AuthUser) -> Json<TemplateBenchResponse> {
     let start = std::time::Instant::now();
     let output = render_simple_template();
     let elapsed = start.elapsed();
@@ -412,7 +412,7 @@ pub async fn template_simple_handler() -> Json<TemplateBenchResponse> {
 }
 
 /// Large template handler
-pub async fn template_large_handler() -> Json<TemplateBenchResponse> {
+pub async fn template_large_handler(_auth: crate::auth::AuthUser) -> Json<TemplateBenchResponse> {
     let start = std::time::Instant::now();
     let output = render_large_template();
     let elapsed = start.elapsed();
@@ -496,7 +496,7 @@ fn render_acl_template(num_terms: usize) -> String {
 }
 
 /// ACL template handler (1000 terms)
-pub async fn template_acl_handler() -> Json<TemplateBenchResponse> {
+pub async fn template_acl_handler(_auth: crate::auth::AuthUser) -> Json<TemplateBenchResponse> {
     let start = std::time::Instant::now();
     let output = render_acl_template(1000);
     let elapsed = start.elapsed();
@@ -509,7 +509,7 @@ pub async fn template_acl_handler() -> Json<TemplateBenchResponse> {
 }
 
 /// ACL template handler (10000 terms)
-pub async fn template_acl10k_handler() -> Json<TemplateBenchResponse> {
+pub async fn template_acl10k_handler(_auth: crate::auth::AuthUser) -> Json<TemplateBenchResponse> {
     let start = std::time::Instant::now();
     let output = render_acl_template(10000);
     let elapsed = start.elapsed();

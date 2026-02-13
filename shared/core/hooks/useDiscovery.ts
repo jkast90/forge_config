@@ -11,6 +11,7 @@ import {
   clearLogs as clearLogsThunk,
 } from '../store/slices/discoverySlice';
 import { addNotification } from '../services/notifications';
+import { getServices } from '../services';
 
 export interface UseDiscoveryOptions {
   autoRefresh?: boolean;
@@ -43,8 +44,16 @@ export function useDiscovery(options: UseDiscoveryOptions = {}): UseDiscoveryRet
   const initialLoadRef = useRef(true);
   const failureCountRef = useRef(0);
 
-  const clearKnownDevices = useCallback(() => {
-    knownMacsRef.current = new Set();
+  const clearKnownDevices = useCallback(async () => {
+    try {
+      const services = getServices();
+      await services.discovery.clearTracking();
+      knownMacsRef.current = new Set();
+      addNotification('success', 'Discovery tracking cleared');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to clear discovery: ${msg}`);
+    }
   }, []);
 
   // Detect new devices when discovered list changes

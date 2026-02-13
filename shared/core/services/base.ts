@@ -1,3 +1,5 @@
+import { getTokenStorage } from './tokenStorage';
+
 // Base service infrastructure
 
 export interface ServiceConfig {
@@ -119,10 +121,18 @@ export class BaseService {
   }
 
   private async executeRequest<T>(url: string, options?: RequestInit, historyEntry?: ApiHistoryEntry): Promise<T> {
+    // Attach auth token if available
+    const tokenStorage = getTokenStorage();
+    const token = await tokenStorage.getToken();
+    const authHeaders: Record<string, string> = token
+      ? { 'Authorization': `Bearer ${token}` }
+      : {};
+
     const response = await this.fetchFn(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        ...authHeaders,
         ...options?.headers,
       },
     });
@@ -132,6 +142,14 @@ export class BaseService {
     }
 
     if (!response.ok) {
+      // Handle 401: clear token and notify UI
+      if (response.status === 401) {
+        tokenStorage.clearToken();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+        }
+      }
+
       const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
       const message = error.error || `HTTP ${response.status}`;
       if (historyEntry) {

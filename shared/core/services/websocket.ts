@@ -1,6 +1,7 @@
 // WebSocket service for real-time notifications
 
 import { getServiceConfig } from './base';
+import { getTokenStorage } from './tokenStorage';
 
 export type WebSocketEventType =
   | 'device_discovered'
@@ -9,7 +10,11 @@ export type WebSocketEventType =
   | 'backup_started'
   | 'backup_completed'
   | 'backup_failed'
-  | 'config_pulled';
+  | 'config_pulled'
+  | 'job_queued'
+  | 'job_started'
+  | 'job_completed'
+  | 'job_failed';
 
 export interface DeviceDiscoveredPayload {
   mac: string;
@@ -65,6 +70,13 @@ export class WebSocketService {
     } else {
       // Relative URL - use current host
       wsUrl = `${protocol}//${window.location.host}${baseUrl}/ws`;
+    }
+
+    // Append auth token as query param (WebSocket can't send custom headers)
+    const tokenStorage = getTokenStorage();
+    const token = tokenStorage.getToken();
+    if (token && typeof token === 'string') {
+      wsUrl += `?token=${encodeURIComponent(token)}`;
     }
 
     try {
