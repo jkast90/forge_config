@@ -693,6 +693,131 @@ pub fn convert_go_template_to_tera(content: &str) -> String {
     result
 }
 
+// ========== CIDR Utilities for IPAM ==========
+
+/// Parse a CIDR string like "10.0.0.0/8" into (network_u32, broadcast_u32, prefix_length)
+pub fn parse_cidr(cidr: &str) -> Result<(u32, u32, u8), String> {
+    let parts: Vec<&str> = cidr.split('/').collect();
+    if parts.len() != 2 {
+        return Err(format!("Invalid CIDR notation: {}", cidr));
+    }
+    let ip = parse_ipv4_to_u32(parts[0])?;
+    let prefix_len: u8 = parts[1].parse()
+        .map_err(|_| format!("Invalid prefix length: {}", parts[1]))?;
+    if prefix_len > 32 {
+        return Err(format!("Prefix length {} out of range (0-32)", prefix_len));
+    }
+    let mask = if prefix_len == 0 { 0u32 } else { !0u32 << (32 - prefix_len) };
+    let network = ip & mask;
+    let broadcast = network | !mask;
+    Ok((network, broadcast, prefix_len))
+}
+
+/// Parse an IPv4 address string to u32
+pub fn parse_ipv4_to_u32(ip: &str) -> Result<u32, String> {
+    let octets: Vec<u8> = ip.split('.')
+        .map(|o| o.parse::<u8>())
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|_| format!("Invalid IPv4 address: {}", ip))?;
+    if octets.len() != 4 {
+        return Err(format!("Invalid IPv4 address: {}", ip));
+    }
+    Ok(((octets[0] as u32) << 24) | ((octets[1] as u32) << 16)
+        | ((octets[2] as u32) << 8) | (octets[3] as u32))
+}
+
+/// Convert u32 to IPv4 dotted-decimal string
+pub fn u32_to_ipv4(ip: u32) -> String {
+    format!("{}.{}.{}.{}",
+        (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF)
+}
+
+/// Format as CIDR string (e.g., "10.0.0.0/8")
+pub fn format_cidr(network: u32, prefix_len: u8) -> String {
+    format!("{}/{}", u32_to_ipv4(network), prefix_len)
+}
+
+/// Find the next available sub-prefix of a given length within a parent prefix.
+/// `allocated` is a sorted list of (network_int, broadcast_int) for existing child prefixes.
+pub fn next_available_prefix(
+    parent_network: u32,
+    parent_broadcast: u32,
+    desired_prefix_len: u8,
+    allocated: &[(u32, u32)],
+) -> Option<(u32, u32)> {
+    if desired_prefix_len > 32 {
+        return None;
+    }
+    let block_size: u32 = 1u32.checked_shl(32 - desired_prefix_len as u32)?;
+    let mask = if desired_prefix_len == 0 { 0 } else { !0u32 << (32 - desired_prefix_len) };
+
+    let mut candidate = parent_network;
+
+    loop {
+        // Align candidate to block boundary
+        let remainder = candidate & !mask;
+        if remainder != 0 {
+            candidate = (candidate & mask).checked_add(block_size)?;
+        }
+
+        let candidate_broadcast = candidate.checked_add(block_size - 1)?;
+        if candidate_broadcast > parent_broadcast {
+            return None; // No room left
+        }
+
+        // Check overlap with allocated blocks
+        let mut overlaps = false;
+        let mut jump_past: u32 = 0;
+        for &(alloc_net, alloc_bcast) in allocated {
+            // Two ranges overlap if they are not fully disjoint
+            if !(candidate_broadcast < alloc_net || candidate > alloc_bcast) {
+                overlaps = true;
+                if alloc_bcast + 1 > jump_past {
+                    jump_past = alloc_bcast + 1;
+                }
+            }
+        }
+
+        if !overlaps {
+            return Some((candidate, candidate_broadcast));
+        }
+
+        // Jump past the overlapping allocation and re-align
+        if jump_past == 0 || jump_past <= candidate {
+            // Safety: move forward by one block to avoid infinite loop
+            candidate = candidate.checked_add(block_size)?;
+        } else {
+            candidate = jump_past;
+        }
+    }
+}
+
+/// Find next available IP address in a prefix.
+/// `allocated` is a sorted list of address_int for existing IPs.
+/// Skips network address (first) and broadcast address (last) for prefixes < /31.
+pub fn next_available_ip(
+    prefix_network: u32,
+    prefix_broadcast: u32,
+    prefix_len: u8,
+    allocated: &[u32],
+) -> Option<u32> {
+    let (start, end) = if prefix_len >= 31 {
+        // /31 and /32: use all addresses (RFC 3021)
+        (prefix_network, prefix_broadcast)
+    } else {
+        // Skip network and broadcast addresses
+        (prefix_network + 1, prefix_broadcast - 1)
+    };
+
+    let alloc_set: std::collections::HashSet<u32> = allocated.iter().copied().collect();
+    for candidate in start..=end {
+        if !alloc_set.contains(&candidate) {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -761,5 +886,66 @@ mod tests {
         assert!(!is_valid_hostname("host;rm")); // semicolon
         assert!(!is_valid_hostname("../etc/passwd")); // path traversal
         assert!(!is_valid_hostname("host\nname")); // newline
+    }
+
+    #[test]
+    fn test_parse_cidr() {
+        let (net, bcast, len) = parse_cidr("10.0.0.0/8").unwrap();
+        assert_eq!(net, 0x0A000000);
+        assert_eq!(bcast, 0x0AFFFFFF);
+        assert_eq!(len, 8);
+
+        let (net, bcast, len) = parse_cidr("192.168.1.0/24").unwrap();
+        assert_eq!(u32_to_ipv4(net), "192.168.1.0");
+        assert_eq!(u32_to_ipv4(bcast), "192.168.1.255");
+        assert_eq!(len, 24);
+    }
+
+    #[test]
+    fn test_parse_ipv4_to_u32() {
+        assert_eq!(parse_ipv4_to_u32("10.0.0.1").unwrap(), 0x0A000001);
+        assert_eq!(parse_ipv4_to_u32("255.255.255.255").unwrap(), 0xFFFFFFFF);
+        assert_eq!(parse_ipv4_to_u32("0.0.0.0").unwrap(), 0);
+        assert!(parse_ipv4_to_u32("invalid").is_err());
+    }
+
+    #[test]
+    fn test_u32_to_ipv4_roundtrip() {
+        assert_eq!(u32_to_ipv4(0x0A000001), "10.0.0.1");
+        assert_eq!(u32_to_ipv4(0xC0A80164), "192.168.1.100");
+    }
+
+    #[test]
+    fn test_next_available_prefix() {
+        // 10.0.0.0/8, allocate /24s
+        let (pnet, pbcast, _) = parse_cidr("10.0.0.0/8").unwrap();
+
+        // No allocations yet — first /24 should be 10.0.0.0/24
+        let result = next_available_prefix(pnet, pbcast, 24, &[]);
+        assert!(result.is_some());
+        let (net, bcast) = result.unwrap();
+        assert_eq!(format_cidr(net, 24), "10.0.0.0/24");
+        assert_eq!(u32_to_ipv4(bcast), "10.0.0.255");
+
+        // With 10.0.0.0/24 allocated, next should be 10.0.1.0/24
+        let allocated = vec![(net, bcast)];
+        let result = next_available_prefix(pnet, pbcast, 24, &allocated);
+        assert!(result.is_some());
+        let (net2, _) = result.unwrap();
+        assert_eq!(format_cidr(net2, 24), "10.0.1.0/24");
+    }
+
+    #[test]
+    fn test_next_available_ip() {
+        let (pnet, pbcast, plen) = parse_cidr("10.0.0.0/24").unwrap();
+
+        // No allocations — first usable IP (skip network addr)
+        let result = next_available_ip(pnet, pbcast, plen, &[]);
+        assert_eq!(result, Some(parse_ipv4_to_u32("10.0.0.1").unwrap()));
+
+        // With .1 allocated, next should be .2
+        let allocated = vec![parse_ipv4_to_u32("10.0.0.1").unwrap()];
+        let result = next_available_ip(pnet, pbcast, plen, &allocated);
+        assert_eq!(result, Some(parse_ipv4_to_u32("10.0.0.2").unwrap()));
     }
 }

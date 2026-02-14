@@ -28,8 +28,9 @@ yarn-debug.*
 yarn-error.*
 
 # Database
-*.db
 *.db-journal
+*.db-wal
+*.db-shm
 
 # Backup files
 *.bak
@@ -63,7 +64,6 @@ coverage/
 test-results*
 
 # Docker volumes (local dev)
-data/
 backups/
 tftp/
 

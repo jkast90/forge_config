@@ -27,8 +27,13 @@ import {
   SpinnerIcon,
   Jobs,
   TopologyManagement,
+  VariableManager,
   VendorActions,
   VendorManagement,
+  GroupManagement,
+  ResolvedVariablesInspector,
+  IpamManagement,
+  DeviceModelManagement,
 } from './components';
 import type { DropdownOption } from './components';
 import type { Device, DeviceFormData } from '@core';
@@ -43,6 +48,11 @@ const PAGES: DropdownOption[] = [
   { id: 'vendors', label: 'Vendors', icon: 'business', description: 'Configure vendor settings' },
   { id: 'dhcp', label: 'DHCP Options', icon: 'lan', description: 'Manage DHCP options' },
   { id: 'topologies', label: 'Topologies', icon: 'hub', description: 'CLOS fabric topologies' },
+  { id: 'groups', label: 'Groups', icon: 'account_tree', description: 'Device group management' },
+  { id: 'variables', label: 'Variables', icon: 'tune', description: 'Device variable management' },
+  { id: 'inspector', label: 'Variable Inspector', icon: 'search', description: 'Inspect resolved variables' },
+  { id: 'ipam', label: 'IPAM', icon: 'lan', description: 'IP Address Management' },
+  { id: 'device-models', label: 'Device Models', icon: 'memory', description: 'Chassis port layouts' },
   { id: 'actions', label: 'Actions', icon: 'terminal', description: 'Vendor quick commands' },
   { id: 'jobs', label: 'Jobs', icon: 'schedule', description: 'View job history' },
   { id: 'explorer', label: 'Data Explorer', icon: 'storage', description: 'Inspect Redux store data' },
@@ -161,14 +171,14 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
     } else if (modalRoute.isModal('help')) {
       setShowHelp(true);
     } else if (modalRoute.isModal('device-form')) {
-      const mac = modalRoute.getParam('mac');
-      if (mac && devices.length > 0) {
-        const device = devices.find(d => d.mac === mac);
+      const id = modalRoute.getParam('id');
+      if (id && devices.length > 0) {
+        const device = devices.find(d => d.id === id);
         if (device) {
           setEditingDevice(device);
           setShowDeviceForm(true);
         }
-      } else if (!mac) {
+      } else if (!id) {
         setShowDeviceForm(true);
       }
     }
@@ -223,7 +233,7 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
 
   const handleSubmitDevice = async (device: Partial<Device>) => {
     if (editingDevice) {
-      await updateDevice(editingDevice.mac, device);
+      await updateDevice(editingDevice.id, device);
     } else {
       await createDevice(device);
     }
@@ -232,7 +242,7 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
   const handleEdit = (device: Device) => {
     setEditingDevice(device);
     setShowDeviceForm(true);
-    modalRoute.openModal('device-form', { mac: device.mac });
+    modalRoute.openModal('device-form', { id: device.id });
   };
 
   const handleCloseForm = () => {
@@ -287,6 +297,8 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
               icon="menu"
               className="header-nav"
               triggerClassName="header-control header-control-dropdown"
+              columnRows={5}
+              searchable
             />
           </div>
         </div>
@@ -350,6 +362,26 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
 
         {activePage === 'topologies' && (
           <TopologyManagement />
+        )}
+
+        {activePage === 'groups' && (
+          <GroupManagement />
+        )}
+
+        {activePage === 'variables' && (
+          <VariableManager />
+        )}
+
+        {activePage === 'inspector' && (
+          <ResolvedVariablesInspector />
+        )}
+
+        {activePage === 'ipam' && (
+          <IpamManagement />
+        )}
+
+        {activePage === 'device-models' && (
+          <DeviceModelManagement />
         )}
 
         {activePage === 'actions' && (

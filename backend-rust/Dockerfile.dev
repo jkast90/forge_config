@@ -19,7 +19,8 @@ COPY migrations ./migrations
 COPY scripts /scripts
 RUN chmod +x /scripts/*.sh && \
     touch src/main.rs && \
-    cargo build --release
+    cargo build --release && \
+    cp target/release/ztp-server /usr/local/bin/ztp-server
 
 # Create required directories
 RUN mkdir -p /data /tftp /backups /dnsmasq /configs/templates /var/lib/misc
@@ -38,4 +39,4 @@ ENV RUST_LOG=debug
 
 EXPOSE 8080 67/udp 69/udp
 
-CMD ["./target/release/ztp-server"]
+CMD ["/usr/local/bin/ztp-server"]

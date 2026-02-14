@@ -10,6 +10,7 @@ pub fn none_if_empty(opt: Option<String>) -> Option<String> {
 /// Map a SQLite row to a Device struct
 pub fn map_device_row(row: &SqliteRow) -> Device {
     Device {
+        id: row.get("id"),
         mac: row.get("mac"),
         ip: row.get("ip"),
         hostname: row.get("hostname"),
@@ -100,7 +101,7 @@ pub fn map_discovery_log_row(row: &SqliteRow) -> DiscoveryLog {
 pub fn map_backup_row(row: &SqliteRow) -> Backup {
     Backup {
         id: row.get("id"),
-        device_mac: row.get("device_mac"),
+        device_id: row.get("device_id"),
         filename: row.get("filename"),
         size: row.get("size"),
         created_at: row.get("created_at"),

@@ -111,8 +111,8 @@ impl JobService {
     }
 
     async fn execute_command_job(&self, job: &Job) -> Result<String> {
-        let device = self.store.get_device(&job.device_mac).await?
-            .ok_or_else(|| anyhow::anyhow!("Device not found: {}", job.device_mac))?;
+        let device = self.store.get_device(&job.device_id).await?
+            .ok_or_else(|| anyhow::anyhow!("Device not found: {}", job.device_id))?;
 
         let (ssh_user, ssh_pass) = crate::utils::resolve_ssh_credentials(&self.store, &device).await;
 
@@ -126,8 +126,8 @@ impl JobService {
     }
 
     async fn execute_deploy_job(&self, job: &Job) -> Result<String> {
-        let device = self.store.get_device(&job.device_mac).await?
-            .ok_or_else(|| anyhow::anyhow!("Device not found: {}", job.device_mac))?;
+        let device = self.store.get_device(&job.device_id).await?
+            .ok_or_else(|| anyhow::anyhow!("Device not found: {}", job.device_id))?;
 
         // Resolve template: use device's config_template, or fall back to vendor's default_template
         let template_id = if !device.config_template.is_empty() {
@@ -156,8 +156,15 @@ impl JobService {
             None
         };
 
+        // Load resolved variables (group + host inheritance) for template rendering
+        let vars = self
+            .store
+            .resolve_device_variables_flat(&device.id)
+            .await
+            .unwrap_or_default();
+
         // Render the template
-        let rendered_config = render_config(&device, &template, &settings, role_template.as_ref())?;
+        let rendered_config = render_config(&device, &template, &settings, role_template.as_ref(), &vars)?;
 
         // Resolve SSH credentials
         let (ssh_user, ssh_pass) = crate::utils::resolve_ssh_credentials(&self.store, &device).await;
@@ -196,7 +203,7 @@ impl JobService {
         };
 
         // Update device status on successful deploy
-        let _ = self.store.update_device_status(&device.mac, device_status::ONLINE).await;
+        let _ = self.store.update_device_status(&device.id, device_status::ONLINE).await;
 
         Ok(output)
     }
@@ -216,6 +223,7 @@ pub fn render_config(
     template: &Template,
     settings: &Settings,
     role_template: Option<&Template>,
+    vars: &std::collections::HashMap<String, String>,
 ) -> Result<String> {
     let tera_content = crate::utils::convert_go_template_to_tera(&template.content);
 
@@ -244,6 +252,7 @@ pub fn render_config(
     context.insert("TopologyRole", &device.topology_role.clone().unwrap_or_default());
     context.insert("Subnet", &settings.dhcp_subnet);
     context.insert("Gateway", &settings.dhcp_gateway);
+    context.insert("vars", vars);
 
     tera.render("device", &context)
         .map_err(|e| anyhow::anyhow!("Template rendering failed: {}", e))

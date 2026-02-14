@@ -85,3 +85,8 @@ export { useNotificationHistory, type UseNotificationsReturn } from './useNotifi
 export { useVendorActions, type UseVendorActionsOptions, type UseVendorActionsReturn } from './useVendorActions';
 export { useJobs, type UseJobsOptions, type UseJobsReturn } from './useJobs';
 export { useTopologies, type UseTopologiesOptions, type UseTopologiesReturn } from './useTopologies';
+export { useDeviceVariables, type UseDeviceVariablesOptions, type UseDeviceVariablesReturn } from './useDeviceVariables';
+export { useGroups, type UseGroupsOptions, type UseGroupsReturn } from './useGroups';
+export { useResolvedVariables, type UseResolvedVariablesReturn } from './useResolvedVariables';
+export { useIpam, type UseIpamOptions, type UseIpamReturn } from './useIpam';
+export { useDeviceModels, type UseDeviceModelsOptions, type UseDeviceModelsReturn } from './useDeviceModels';

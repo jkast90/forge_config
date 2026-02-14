@@ -10,6 +10,7 @@ import {
   deleteTopology as deleteTopologyThunk,
 } from '../store/slices/topologiesSlice';
 import { addNotification } from '../services/notifications';
+import { getErrorMessage } from '../utils/errors';
 
 export interface UseTopologiesOptions {
   autoRefresh?: boolean;
@@ -54,7 +55,7 @@ export function useTopologies(options: UseTopologiesOptions = {}): UseTopologies
       dispatch(fetchTopologies());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to create topology: ${err}`);
+      addNotification('error', `Failed to create topology: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -66,7 +67,7 @@ export function useTopologies(options: UseTopologiesOptions = {}): UseTopologies
       dispatch(fetchTopologies());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to update topology: ${err}`);
+      addNotification('error', `Failed to update topology: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -78,7 +79,7 @@ export function useTopologies(options: UseTopologiesOptions = {}): UseTopologies
       dispatch(fetchTopologies());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to delete topology: ${err}`);
+      addNotification('error', `Failed to delete topology: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);

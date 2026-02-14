@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// User represents an authenticated user
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,9 +92,95 @@ pub struct CreateTopologyRequest {
     pub description: Option<String>,
 }
 
+/// DeviceVariable represents a key-value pair associated with a device
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceVariable {
+    pub id: i64,
+    pub device_id: String,
+    pub key: String,
+    pub value: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Group represents a device group for Ansible-style variable inheritance
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Group {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
+    pub precedence: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub child_count: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// CreateGroupRequest for creating/updating device groups
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateGroupRequest {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default = "default_precedence")]
+    pub precedence: i32,
+}
+
+fn default_precedence() -> i32 {
+    1000
+}
+
+/// GroupVariable is a key-value pair on a group
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupVariable {
+    pub id: i64,
+    pub group_id: String,
+    pub key: String,
+    pub value: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A resolved variable with provenance (which layer set it)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedVariable {
+    pub key: String,
+    pub value: String,
+    pub source: String,
+    pub source_name: String,
+    pub source_type: String,
+}
+
+/// One layer in the resolution stack
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolutionLayer {
+    pub source: String,
+    pub source_name: String,
+    pub source_type: String,
+    pub precedence: i32,
+    pub variables: HashMap<String, String>,
+}
+
+/// Full resolution result — used by the inspector API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedVariablesResponse {
+    pub variables: HashMap<String, String>,
+    pub resolved: Vec<ResolvedVariable>,
+    pub resolution_order: Vec<ResolutionLayer>,
+}
+
 /// Device represents a network device managed by the ZTP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Device {
+    pub id: String,
     pub mac: String,
     pub ip: String,
     pub hostname: String,
@@ -126,6 +213,8 @@ pub struct Device {
 /// CreateDeviceRequest for creating new devices
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateDeviceRequest {
+    #[serde(default)]
+    pub id: Option<String>,
     pub mac: String,
     pub ip: String,
     pub hostname: String,
@@ -214,7 +303,7 @@ impl Default for Settings {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Backup {
     pub id: i64,
-    pub device_mac: String,
+    pub device_id: String,
     pub filename: String,
     pub size: i64,
     pub created_at: DateTime<Utc>,
@@ -520,6 +609,8 @@ pub struct DeployConfigResponse {
 #[derive(Debug, Clone, Deserialize)]
 pub struct TemplatePreviewDevice {
     #[serde(default)]
+    pub id: String,
+    #[serde(default)]
     pub mac: String,
     #[serde(default)]
     pub ip: String,
@@ -617,7 +708,7 @@ pub mod job_type {
 pub struct Job {
     pub id: String,
     pub job_type: String,
-    pub device_mac: String,
+    pub device_id: String,
     pub command: String,
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -634,8 +725,335 @@ pub struct Job {
 /// CreateJobRequest for creating a new job
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateJobRequest {
-    pub device_mac: String,
+    pub device_id: String,
     pub job_type: String,
     #[serde(default)]
     pub command: String,
+}
+
+// ========== IPAM Models ==========
+
+/// IPAM status values
+pub mod ipam_status {
+    pub const ACTIVE: &str = "active";
+    pub const RESERVED: &str = "reserved";
+    pub const DEPRECATED: &str = "deprecated";
+    pub const DHCP: &str = "dhcp";
+}
+
+/// IPAM resource types (for polymorphic tags)
+pub mod ipam_resource_type {
+    pub const REGION: &str = "region";
+    pub const LOCATION: &str = "location";
+    pub const DATACENTER: &str = "datacenter";
+    pub const PREFIX: &str = "prefix";
+    pub const IP_ADDRESS: &str = "ip_address";
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpamRegion {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location_count: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateIpamRegionRequest {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpamLocation {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub region_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datacenter_count: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateIpamLocationRequest {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub region_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpamDatacenter {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub location_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix_count: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateIpamDatacenterRequest {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub location_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpamRole {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateIpamRoleRequest {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpamPrefix {
+    pub id: i64,
+    pub prefix: String,
+    pub network_int: i64,
+    pub broadcast_int: i64,
+    pub prefix_length: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub status: String,
+    pub is_supernet: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub role_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub role_names: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_prefix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datacenter_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datacenter_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vlan_id: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vrf_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vrf_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub child_prefix_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip_address_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub utilization: Option<f64>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+fn default_ipam_status() -> String {
+    "active".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateIpamPrefixRequest {
+    pub prefix: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default = "default_ipam_status")]
+    pub status: String,
+    #[serde(default)]
+    pub is_supernet: bool,
+    #[serde(default)]
+    pub role_ids: Vec<String>,
+    #[serde(default)]
+    pub parent_id: Option<i64>,
+    #[serde(default)]
+    pub datacenter_id: Option<String>,
+    #[serde(default)]
+    pub vlan_id: Option<i32>,
+    #[serde(default)]
+    pub vrf_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpamIpAddress {
+    pub id: String,
+    pub address: String,
+    pub address_int: i64,
+    pub prefix_id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub role_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub role_names: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dns_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_hostname: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vrf_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vrf_name: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateIpamIpAddressRequest {
+    pub id: String,
+    pub address: String,
+    pub prefix_id: i64,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default = "default_ipam_status")]
+    pub status: String,
+    #[serde(default)]
+    pub role_ids: Vec<String>,
+    #[serde(default)]
+    pub dns_name: Option<String>,
+    #[serde(default)]
+    pub device_id: Option<String>,
+    #[serde(default)]
+    pub interface_name: Option<String>,
+    #[serde(default)]
+    pub vrf_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpamTag {
+    pub id: i64,
+    pub resource_type: String,
+    pub resource_id: String,
+    pub key: String,
+    pub value: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SetIpamTagRequest {
+    pub key: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NextAvailablePrefixRequest {
+    pub prefix_length: i32,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default = "default_ipam_status")]
+    pub status: String,
+    #[serde(default)]
+    pub datacenter_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NextAvailableIpRequest {
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default = "default_ipam_status")]
+    pub status: String,
+    #[serde(default)]
+    pub role_ids: Vec<String>,
+    #[serde(default)]
+    pub dns_name: Option<String>,
+    #[serde(default)]
+    pub device_id: Option<String>,
+    #[serde(default)]
+    pub interface_name: Option<String>,
+}
+
+// ========== Device Models ==========
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceModel {
+    pub id: String,
+    pub vendor_id: String,
+    pub model: String,
+    pub display_name: String,
+    pub rack_units: i32,
+    pub layout: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_count: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateDeviceModelRequest {
+    pub id: String,
+    pub vendor_id: String,
+    pub model: String,
+    pub display_name: String,
+    #[serde(default = "default_rack_units")]
+    pub rack_units: i32,
+    #[serde(default = "default_layout")]
+    pub layout: String,
+}
+
+fn default_rack_units() -> i32 {
+    1
+}
+
+fn default_layout() -> String {
+    "[]".to_string()
+}
+
+// ========== VRF ==========
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IpamVrf {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prefix_count: Option<i32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateIpamVrfRequest {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub rd: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
 }

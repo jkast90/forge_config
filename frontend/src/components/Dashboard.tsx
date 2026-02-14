@@ -158,7 +158,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             <div className="recent-devices">
               <h4>Recent Devices</h4>
               {devices.slice(0, 5).map((device) => (
-                <div key={device.mac} className="recent-device-item">
+                <div key={device.id} className="recent-device-item">
                   <span className={`status-dot status-${device.status}`} />
                   <span className="device-name">{device.hostname}</span>
                   <span className="device-ip">{device.ip}</span>

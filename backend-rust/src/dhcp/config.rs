@@ -230,7 +230,7 @@ log-queries
 
         for device in devices {
             if let Err(e) = self.generate_single_device_config(device, settings).await {
-                tracing::error!("Failed to generate config for {}: {}", device.mac, e);
+                tracing::warn!("Failed to generate config for {}: {}", device.mac, e);
             }
         }
 
@@ -296,6 +296,14 @@ log-queries
         context.insert("TopologyRole", &device.topology_role.clone().unwrap_or_default());
         context.insert("Subnet", &settings.dhcp_subnet);
         context.insert("Gateway", &settings.dhcp_gateway);
+
+        // Load resolved variables (group + host inheritance) for template rendering
+        let vars = self
+            .store
+            .resolve_device_variables_flat(&device.id)
+            .await
+            .unwrap_or_default();
+        context.insert("vars", &vars);
 
         // Render template
         let config = tera.render("device", &context)?;

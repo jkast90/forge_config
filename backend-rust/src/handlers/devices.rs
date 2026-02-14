@@ -24,16 +24,15 @@ pub async fn list_devices(
     Ok(Json(devices))
 }
 
-/// Get a single device by MAC
+/// Get a single device by ID
 pub async fn get_device(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<Json<Device>, ApiError> {
-    let mac = normalize_mac(&mac);
     let device = state
         .store
-        .get_device(&mac)
+        .get_device(&id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
     Ok(Json(device))
@@ -64,11 +63,6 @@ pub async fn create_device(
         }
     }
 
-    // Check for duplicate
-    if state.store.get_device(&req.mac).await?.is_some() {
-        return Err(ApiError::conflict("device with this MAC already exists"));
-    }
-
     let device = state.store.create_device(&req).await?;
 
     // Remove from discovered_devices since it's now a configured device
@@ -82,7 +76,7 @@ pub async fn create_device(
 pub async fn update_device(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
     Json(req): Json<UpdateDeviceRequest>,
 ) -> Result<Json<Device>, ApiError> {
     // Validate topology_role if provided
@@ -92,8 +86,7 @@ pub async fn update_device(
         }
     }
 
-    let mac = normalize_mac(&mac);
-    let device = state.store.update_device(&mac, &req).await?;
+    let device = state.store.update_device(&id, &req).await?;
     trigger_reload(&state).await;
     Ok(Json(device))
 }
@@ -102,10 +95,9 @@ pub async fn update_device(
 pub async fn delete_device(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    let mac = normalize_mac(&mac);
-    state.store.delete_device(&mac).await?;
+    state.store.delete_device(&id).await?;
     trigger_reload(&state).await;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -114,12 +106,11 @@ pub async fn delete_device(
 pub async fn connect_device(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<Json<ConnectResult>, ApiError> {
-    let mac = normalize_mac(&mac);
     let device = state
         .store
-        .get_device(&mac)
+        .get_device(&id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
@@ -157,7 +148,7 @@ pub async fn connect_device(
 
     // Update device status based on connectivity
     if ping_result.reachable {
-        let _ = state.store.update_device_status(&device.mac, crate::models::device_status::ONLINE).await;
+        let _ = state.store.update_device_status(&device.id, crate::models::device_status::ONLINE).await;
     }
 
     Ok(Json(ConnectResult {
@@ -171,17 +162,16 @@ pub async fn connect_device(
 pub async fn get_device_config(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<Json<DeviceConfigResponse>, ApiError> {
-    let mac = normalize_mac(&mac);
     let device = state
         .store
-        .get_device(&mac)
+        .get_device(&id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
     // Build config file path
-    let filename = format!("{}.cfg", mac.replace(':', "_"));
+    let filename = format!("{}.cfg", device.mac.replace(':', "_"));
     let config_path = std::path::Path::new(&state.config.tftp_dir).join(&filename);
 
     let (content, exists) = match tokio::fs::read_to_string(&config_path).await {
@@ -190,7 +180,7 @@ pub async fn get_device_config(
     };
 
     Ok(Json(DeviceConfigResponse {
-        mac,
+        mac: device.mac,
         hostname: device.hostname,
         filename,
         content,
@@ -309,13 +299,12 @@ pub async fn connect_ip(
 pub async fn exec_command(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
     Json(body): Json<ExecRequest>,
 ) -> Result<(StatusCode, Json<Job>), ApiError> {
-    let mac = normalize_mac(&mac);
     let _device = state
         .store
-        .get_device(&mac)
+        .get_device(&id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
@@ -325,7 +314,7 @@ pub async fn exec_command(
 
     let job_id = uuid::Uuid::new_v4().to_string();
     let req = CreateJobRequest {
-        device_mac: mac,
+        device_id: id,
         job_type: job_type::COMMAND.to_string(),
         command: body.command,
     };
@@ -351,6 +340,7 @@ fn render_device_config(
     template: &Template,
     settings: &Settings,
     role_template: Option<&Template>,
+    vars: &std::collections::HashMap<String, String>,
 ) -> Result<String, ApiError> {
     let tera_content = crate::utils::convert_go_template_to_tera(&template.content);
 
@@ -380,6 +370,7 @@ fn render_device_config(
     context.insert("TopologyRole", &device.topology_role.clone().unwrap_or_default());
     context.insert("Subnet", &settings.dhcp_subnet);
     context.insert("Gateway", &settings.dhcp_gateway);
+    context.insert("vars", vars);
 
     tera.render("device", &context)
         .map_err(|e| ApiError::bad_request(format!("Template rendering failed: {}", e)))
@@ -389,12 +380,11 @@ fn render_device_config(
 pub async fn preview_device_config(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<Json<DeviceConfigPreviewResponse>, ApiError> {
-    let mac = normalize_mac(&mac);
     let device = state
         .store
-        .get_device(&mac)
+        .get_device(&id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
@@ -428,10 +418,17 @@ pub async fn preview_device_config(
         None
     };
 
-    let content = render_device_config(&device, &template, &settings, role_template.as_ref())?;
+    // Load resolved variables (group + host inheritance) for template rendering
+    let vars = state
+        .store
+        .resolve_device_variables_flat(&device.id)
+        .await
+        .unwrap_or_default();
+
+    let content = render_device_config(&device, &template, &settings, role_template.as_ref(), &vars)?;
 
     Ok(Json(DeviceConfigPreviewResponse {
-        mac,
+        mac: device.mac,
         hostname: device.hostname,
         template_id: template.id,
         template_name: template.name,
@@ -443,18 +440,17 @@ pub async fn preview_device_config(
 pub async fn deploy_device_config(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<(StatusCode, Json<Job>), ApiError> {
-    let mac = normalize_mac(&mac);
     let _device = state
         .store
-        .get_device(&mac)
+        .get_device(&id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
     let job_id = uuid::Uuid::new_v4().to_string();
     let req = CreateJobRequest {
-        device_mac: mac,
+        device_id: id,
         job_type: job_type::DEPLOY.to_string(),
         command: String::new(),
     };

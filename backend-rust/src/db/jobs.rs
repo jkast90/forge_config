@@ -8,7 +8,7 @@ fn map_job_row(row: &SqliteRow) -> Job {
     Job {
         id: row.get("id"),
         job_type: row.get("job_type"),
-        device_mac: row.get("device_mac"),
+        device_id: row.get("device_id"),
         command: row.get("command"),
         status: row.get("status"),
         output: row.get("output"),
@@ -20,7 +20,7 @@ fn map_job_row(row: &SqliteRow) -> Job {
 }
 
 const SELECT_JOB: &str = r#"
-    SELECT id, job_type, device_mac, command, status, output, error,
+    SELECT id, job_type, device_id, command, status, output, error,
            created_at, started_at, completed_at
     FROM jobs
 "#;
@@ -32,13 +32,13 @@ impl JobRepo {
         let now = Utc::now();
         sqlx::query(
             r#"
-            INSERT INTO jobs (id, job_type, device_mac, command, status, created_at)
+            INSERT INTO jobs (id, job_type, device_id, command, status, created_at)
             VALUES (?, ?, ?, ?, 'queued', ?)
             "#,
         )
         .bind(id)
         .bind(&req.job_type)
-        .bind(&req.device_mac)
+        .bind(&req.device_id)
         .bind(&req.command)
         .bind(now)
         .execute(pool)
@@ -86,9 +86,9 @@ impl JobRepo {
         Ok(())
     }
 
-    pub async fn list_by_device(pool: &Pool<Sqlite>, mac: &str, limit: i32) -> Result<Vec<Job>> {
-        let rows = sqlx::query(&format!("{} WHERE device_mac = ? ORDER BY created_at DESC LIMIT ?", SELECT_JOB))
-            .bind(mac)
+    pub async fn list_by_device(pool: &Pool<Sqlite>, device_id: &str, limit: i32) -> Result<Vec<Job>> {
+        let rows = sqlx::query(&format!("{} WHERE device_id = ? ORDER BY created_at DESC LIMIT ?", SELECT_JOB))
+            .bind(device_id)
             .bind(limit)
             .fetch_all(pool)
             .await?;

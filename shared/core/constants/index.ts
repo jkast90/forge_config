@@ -13,3 +13,10 @@ export {
   VENDOR_CLASS_OPTIONS,
   CONFIG_METHOD_OPTIONS,
 } from './defaults';
+
+export {
+  SWITCH_MODELS,
+  getChassisLayout,
+  getVendorModels,
+  getAllChassisLayouts,
+} from './switch-models';

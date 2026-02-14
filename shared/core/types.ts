@@ -3,6 +3,7 @@
 import { getVendorCache } from './utils/vendor';
 
 export interface Device {
+  id: string;
   mac: string;
   ip: string;
   hostname: string;
@@ -37,6 +38,21 @@ export interface DeviceFormData {
   ssh_pass: string;
   topology_id: string;
   topology_role: string;
+}
+
+// Device variable types (KV pairs per device)
+export interface DeviceVariable {
+  id: number;
+  device_id: string;
+  key: string;
+  value: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VariableKeyInfo {
+  key: string;
+  device_count: number;
 }
 
 // Topology types (CLOS fabric)
@@ -76,7 +92,7 @@ export interface Settings {
 
 export interface Backup {
   id: number;
-  device_mac: string;
+  device_id: string;
   filename: string;
   size: number;
   created_at: string;
@@ -313,7 +329,7 @@ export type JobType = 'command' | 'deploy';
 export interface Job {
   id: string;
   job_type: JobType;
-  device_mac: string;
+  device_id: string;
   command: string;
   status: JobStatus;
   output: string | null;
@@ -323,8 +339,324 @@ export interface Job {
   completed_at: string | null;
 }
 
+// Group types (Ansible-style variable inheritance)
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  parent_id?: string;
+  precedence: number;
+  device_count?: number;
+  child_count?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface GroupFormData {
+  id: string;
+  name: string;
+  description: string;
+  parent_id: string;
+  precedence: number;
+}
+
+export interface GroupVariable {
+  id: number;
+  group_id: string;
+  key: string;
+  value: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResolvedVariable {
+  key: string;
+  value: string;
+  source: string;
+  source_name: string;
+  source_type: 'all' | 'group' | 'host';
+}
+
+export interface ResolutionLayer {
+  source: string;
+  source_name: string;
+  source_type: 'all' | 'group' | 'host';
+  precedence: number;
+  variables: Record<string, string>;
+}
+
+export interface ResolvedVariablesResponse {
+  variables: Record<string, string>;
+  resolved: ResolvedVariable[];
+  resolution_order: ResolutionLayer[];
+}
+
 // API Response types
 export interface ApiError {
   error: string;
   code?: string;
 }
+
+// ========== IPAM Types ==========
+
+export type IpamStatus = 'active' | 'reserved' | 'deprecated' | 'dhcp';
+
+export interface IpamRegion {
+  id: string;
+  name: string;
+  description?: string;
+  location_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpamRegionFormData {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface IpamLocation {
+  id: string;
+  name: string;
+  description?: string;
+  region_id: string;
+  region_name?: string;
+  datacenter_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpamLocationFormData {
+  id: string;
+  name: string;
+  description: string;
+  region_id: string;
+}
+
+export interface IpamDatacenter {
+  id: string;
+  name: string;
+  description?: string;
+  location_id: string;
+  location_name?: string;
+  region_name?: string;
+  prefix_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpamDatacenterFormData {
+  id: string;
+  name: string;
+  description: string;
+  location_id: string;
+}
+
+export interface IpamRole {
+  id: string;
+  name: string;
+  description?: string;
+  created_at: string;
+}
+
+export interface IpamVrf {
+  id: string;
+  name: string;
+  rd?: string;
+  description?: string;
+  prefix_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpamPrefix {
+  id: number;
+  prefix: string;
+  network_int: number;
+  broadcast_int: number;
+  prefix_length: number;
+  description?: string;
+  status: IpamStatus;
+  is_supernet: boolean;
+  role_ids?: string[];
+  role_names?: string[];
+  parent_id?: number;
+  parent_prefix?: string;
+  datacenter_id?: string;
+  datacenter_name?: string;
+  vlan_id?: number;
+  vrf_id?: string;
+  vrf_name?: string;
+  child_prefix_count?: number;
+  ip_address_count?: number;
+  utilization?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpamPrefixFormData {
+  prefix: string;
+  description: string;
+  status: IpamStatus;
+  is_supernet: boolean;
+  role_ids: string[];
+  parent_id: string;
+  datacenter_id: string;
+  vlan_id: string;
+  vrf_id: string;
+}
+
+export interface IpamIpAddress {
+  id: string;
+  address: string;
+  address_int: number;
+  prefix_id: number;
+  prefix?: string;
+  description?: string;
+  status: IpamStatus;
+  role_ids?: string[];
+  role_names?: string[];
+  dns_name?: string;
+  device_id?: string;
+  device_hostname?: string;
+  interface_name?: string;
+  vrf_id?: string;
+  vrf_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpamIpAddressFormData {
+  id: string;
+  address: string;
+  prefix_id: string;
+  description: string;
+  status: IpamStatus;
+  role_ids: string[];
+  dns_name: string;
+  device_id: string;
+  interface_name: string;
+  vrf_id: string;
+}
+
+export interface IpamTag {
+  id: number;
+  resource_type: string;
+  resource_id: string;
+  key: string;
+  value: string;
+  created_at: string;
+}
+
+export const IPAM_STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'reserved', label: 'Reserved' },
+  { value: 'deprecated', label: 'Deprecated' },
+] as const;
+
+export const IPAM_IP_STATUS_OPTIONS = [
+  ...IPAM_STATUS_OPTIONS,
+  { value: 'dhcp', label: 'DHCP' },
+] as const;
+
+export const EMPTY_IPAM_PREFIX_FORM: IpamPrefixFormData = {
+  prefix: '', description: '', status: 'active',
+  is_supernet: false, role_ids: [], parent_id: '', datacenter_id: '', vlan_id: '', vrf_id: '',
+};
+
+export const EMPTY_IPAM_IP_FORM: IpamIpAddressFormData = {
+  id: '', address: '', prefix_id: '', description: '', status: 'active',
+  role_ids: [], dns_name: '', device_id: '', interface_name: '', vrf_id: '',
+};
+
+// ========== Chassis / Port Layout Types ==========
+
+export type PortConnector = 'rj45' | 'sfp' | 'sfp+' | 'sfp28' | 'qsfp+' | 'qsfp28' | 'qsfp-dd';
+
+export type PortSpeedMbps = 1000 | 2500 | 10000 | 25000 | 40000 | 50000 | 100000 | 400000;
+
+export type PortRole = 'console' | 'mgmt' | 'northbound' | 'southbound' | 'lateral' | 'access' | 'uplink';
+
+export interface ChassisPort {
+  col: number;
+  vendor_port_name: string;
+  connector: PortConnector;
+  speed: PortSpeedMbps;
+  role?: PortRole;
+}
+
+export interface ChassisSection {
+  label?: string;
+  ports: ChassisPort[];
+}
+
+export interface ChassisRow {
+  row: number;
+  sections: ChassisSection[];
+}
+
+export interface ChassisLayout {
+  vendor_id: string;
+  model: string;
+  display_name: string;
+  rack_units: number;
+  rows: ChassisRow[];
+}
+
+export interface DeviceModel {
+  id: string;
+  vendor_id: string;
+  model: string;
+  display_name: string;
+  rack_units: number;
+  layout: ChassisRow[];
+  device_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeviceModelFormData {
+  id: string;
+  vendor_id: string;
+  model: string;
+  display_name: string;
+  rack_units: number;
+  layout: ChassisRow[];
+}
+
+export const EMPTY_DEVICE_MODEL_FORM: DeviceModelFormData = {
+  id: '', vendor_id: '', model: '', display_name: '', rack_units: 1, layout: [],
+};
+
+export const PORT_CONNECTOR_OPTIONS = [
+  { value: 'rj45', label: 'RJ45' },
+  { value: 'sfp', label: 'SFP' },
+  { value: 'sfp+', label: 'SFP+' },
+  { value: 'sfp28', label: 'SFP28' },
+  { value: 'qsfp+', label: 'QSFP+' },
+  { value: 'qsfp28', label: 'QSFP28' },
+  { value: 'qsfp-dd', label: 'QSFP-DD' },
+] as const;
+
+export const PORT_SPEED_OPTIONS = [
+  { value: 1000, label: '1G' },
+  { value: 2500, label: '2.5G' },
+  { value: 10000, label: '10G' },
+  { value: 25000, label: '25G' },
+  { value: 40000, label: '40G' },
+  { value: 50000, label: '50G' },
+  { value: 100000, label: '100G' },
+  { value: 400000, label: '400G' },
+] as const;
+
+export const PORT_ROLE_OPTIONS = [
+  { value: '', label: 'None' },
+  { value: 'console', label: 'Console' },
+  { value: 'mgmt', label: 'Management' },
+  { value: 'northbound', label: 'Northbound' },
+  { value: 'southbound', label: 'Southbound' },
+  { value: 'lateral', label: 'Lateral' },
+  { value: 'access', label: 'Access' },
+  { value: 'uplink', label: 'Uplink' },
+] as const;

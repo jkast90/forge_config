@@ -11,6 +11,7 @@ import {
   clearLogs as clearLogsThunk,
 } from '../store/slices/discoverySlice';
 import { addNotification } from '../services/notifications';
+import { getErrorMessage } from '../utils/errors';
 import { getServices } from '../services';
 
 export interface UseDiscoveryOptions {
@@ -92,7 +93,7 @@ export function useDiscovery(options: UseDiscoveryOptions = {}): UseDiscoveryRet
       await dispatch(dismissDevice(mac)).unwrap();
       addNotification('success', 'Device dismissed from discovery');
     } catch (err) {
-      addNotification('error', `Failed to dismiss device: ${err}`);
+      addNotification('error', `Failed to dismiss device: ${getErrorMessage(err)}`);
     }
   }, [dispatch]);
 
@@ -105,7 +106,7 @@ export function useDiscovery(options: UseDiscoveryOptions = {}): UseDiscoveryRet
       await dispatch(clearLogsThunk()).unwrap();
       addNotification('success', 'Discovery logs cleared');
     } catch (err) {
-      addNotification('error', `Failed to clear logs: ${err}`);
+      addNotification('error', `Failed to clear logs: ${getErrorMessage(err)}`);
     }
   }, [dispatch]);
 

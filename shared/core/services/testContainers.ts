@@ -22,11 +22,19 @@ export class TestContainersService extends BaseService {
     await this.delete(`/docker/containers/${id}`);
   }
 
-  async buildClosLab(): Promise<ClosLabResponse> {
-    return this.post<ClosLabResponse>('/docker/clos-lab');
+  async buildClosLab(image?: string): Promise<ClosLabResponse> {
+    return this.post<ClosLabResponse>('/docker/clos-lab', { image: image || '' });
   }
 
   async teardownClosLab(): Promise<void> {
     await this.delete('/docker/clos-lab');
+  }
+
+  async buildVirtualClos(): Promise<ClosLabResponse> {
+    return this.post<ClosLabResponse>('/virtual-clos', {});
+  }
+
+  async teardownVirtualClos(): Promise<void> {
+    await this.delete('/virtual-clos');
   }
 }

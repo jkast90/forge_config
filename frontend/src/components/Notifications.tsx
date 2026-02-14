@@ -72,7 +72,7 @@ export function Notifications({ isOpen, onClose, onViewApiError }: Notifications
   }, [isOpen, unreadCount]);
 
   return (
-    <Drawer isOpen={isOpen} onClose={onClose} title="Notifications" side="left" wide>
+    <Drawer isOpen={isOpen} onClose={onClose} title="Notifications" side="right" wide>
       <div className="flex-between mb-8">
         <span className="text-xs text-muted">{notifications.length} notifications</span>
         <IconButton variant="ghost" onClick={() => clearNotifications()} title="Clear all">

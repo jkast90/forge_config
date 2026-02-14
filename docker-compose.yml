@@ -47,7 +47,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - rust-data:/data
+      - ./data:/data
       - rust-tftp:/tftp
       - rust-backups:/backups
       - ./configs/templates:/configs/templates:ro
@@ -97,6 +97,5 @@ networks:
           gateway: 172.30.0.1
 
 volumes:
-  rust-data:
   rust-tftp:
   rust-backups:

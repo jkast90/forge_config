@@ -1,6 +1,6 @@
 // Backup management hook - Redux-backed
-// No auto-fetch on mount: backups are device-specific and require a MAC address.
-// Consumers call loadBackups(mac) when they have the target device context.
+// No auto-fetch on mount: backups are device-specific and require a device ID.
+// Consumers call loadBackups(deviceId) when they have the target device context.
 
 import { useCallback } from 'react';
 import type { Backup } from '../types';
@@ -14,7 +14,7 @@ export interface UseBackupsReturn {
   backups: Backup[];
   loading: boolean;
   error: string | null;
-  loadBackups: (mac: string) => Promise<void>;
+  loadBackups: (deviceId: string) => Promise<void>;
   clear: () => void;
 }
 
@@ -25,8 +25,8 @@ export function useBackups(): UseBackupsReturn {
   // Flatten all backups from the map
   const backups: Backup[] = Object.values(byDevice).flat();
 
-  const loadBackups = useCallback(async (mac: string) => {
-    await dispatch(fetchBackups(mac));
+  const loadBackups = useCallback(async (deviceId: string) => {
+    await dispatch(fetchBackups(deviceId));
   }, [dispatch]);
 
   const clear = useCallback(() => {

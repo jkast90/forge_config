@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import type { SpawnContainerRequest } from '@core';
 import {
   useTestContainers,
+  useDevices,
   useVendors,
   useModalRoute,
   CONFIG_METHOD_OPTIONS,
@@ -37,7 +38,13 @@ export function TestContainers() {
     restart,
     remove,
   } = useTestContainers({ autoRefresh: true, refreshInterval: 5000 });
+  const { devices, refresh: refreshDevices } = useDevices();
   const { vendors } = useVendors();
+
+  const hasVirtualClos = useMemo(
+    () => devices.some(d => d.topology_id === 'dc1-virtual'),
+    [devices],
+  );
 
   const connectModal = useConnectModal();
   const modalRoute = useModalRoute();
@@ -61,6 +68,7 @@ export function TestContainers() {
   const [spawning, setSpawning] = useState(false);
   const [spawningCeos, setSpawningCeos] = useState(false);
   const [buildingClos, setBuildingClos] = useState(false);
+  const [buildingVirtualClos, setBuildingVirtualClos] = useState(false);
   const [formData, setFormData] = useState<SpawnContainerRequest>({
     hostname: '',
     mac: '',
@@ -121,11 +129,21 @@ export function TestContainers() {
     }
   };
 
-  const handleBuildClosLab = async () => {
+  const handleSpawnFrr = async () => {
+    setSpawningCeos(true);
+    try {
+      await spawn({ image: 'frr-client:latest' });
+    } finally {
+      setSpawningCeos(false);
+    }
+  };
+
+  const handleBuildClosLab = async (image?: string) => {
     setBuildingClos(true);
     try {
-      const result = await getServices().testContainers.buildClosLab();
-      addNotification('success', `CLOS lab ready: ${result.devices.length} cEOS switches in ${result.topology_name}`);
+      const result = await getServices().testContainers.buildClosLab(image);
+      const type_ = image?.includes('frr') ? 'FRR' : 'cEOS';
+      addNotification('success', `CLOS lab ready: ${result.devices.length} ${type_} switches in ${result.topology_name}`);
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -143,6 +161,31 @@ export function TestContainers() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       addNotification('error', `Failed to teardown CLOS lab: ${msg}`);
+    }
+  };
+
+  const handleBuildVirtualClos = async () => {
+    setBuildingVirtualClos(true);
+    try {
+      const result = await getServices().testContainers.buildVirtualClos();
+      addNotification('success', `Virtual CLOS ready: ${result.devices.length} Arista switches in ${result.topology_name}`);
+      refreshDevices();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to build virtual CLOS: ${msg}`);
+    } finally {
+      setBuildingVirtualClos(false);
+    }
+  };
+
+  const handleTeardownVirtualClos = async () => {
+    try {
+      await getServices().testContainers.teardownVirtualClos();
+      addNotification('success', 'Virtual CLOS topology torn down');
+      refreshDevices();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to teardown virtual CLOS: ${msg}`);
     }
   };
 
@@ -180,16 +223,34 @@ export function TestContainers() {
           </Button>
           <Button onClick={handleSpawnCeos} disabled={spawningCeos}>
             <PlusIcon size={16} />
-            {spawningCeos ? 'Spawning cEOS...' : 'Spawn cEOS'}
+            Spawn cEOS
           </Button>
-          <Button onClick={handleBuildClosLab} disabled={buildingClos}>
+          <Button onClick={handleSpawnFrr} disabled={spawningCeos}>
+            <PlusIcon size={16} />
+            Spawn FRR
+          </Button>
+          <Button onClick={() => handleBuildClosLab()} disabled={buildingClos}>
             <Icon name="hub" size={16} />
-            {buildingClos ? 'Building CLOS Lab...' : 'Build CLOS Lab'}
+            {buildingClos ? 'Building...' : 'CLOS cEOS'}
+          </Button>
+          <Button onClick={() => handleBuildClosLab('frr-client:latest')} disabled={buildingClos}>
+            <Icon name="hub" size={16} />
+            {buildingClos ? 'Building...' : 'CLOS FRR'}
+          </Button>
+          <Button onClick={handleBuildVirtualClos} disabled={buildingVirtualClos}>
+            <Icon name="lan" size={16} />
+            {buildingVirtualClos ? 'Building...' : 'Virtual CLOS'}
           </Button>
           {containers.some(c => c.name.startsWith('clos-')) && (
             <Button variant="danger" onClick={handleTeardownClosLab}>
               <TrashIcon size={16} />
               Teardown CLOS
+            </Button>
+          )}
+          {hasVirtualClos && (
+            <Button variant="danger" onClick={handleTeardownVirtualClos}>
+              <TrashIcon size={16} />
+              Teardown Virtual
             </Button>
           )}
           <Button variant="secondary" onClick={refresh}>

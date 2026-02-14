@@ -12,7 +12,7 @@ export interface FormDialogProps {
   title: string;
   /** Form submit handler */
   onSubmit: (e: FormEvent) => void | Promise<void>;
-  /** Form content */
+  /** Form content (rendered in scrollable body) */
   children: ReactNode;
   /** Submit button text (default: "Save") */
   submitText?: string;
@@ -26,18 +26,14 @@ export interface FormDialogProps {
 
 /**
  * FormDialog - a dialog wrapper specifically for forms.
- * Handles the common pattern of a form inside a dialog with Cancel/Submit buttons.
  *
- * @example
- * <FormDialog
- *   isOpen={showForm}
- *   onClose={handleClose}
- *   title={editing ? 'Edit Item' : 'Add Item'}
- *   onSubmit={handleSubmit}
- *   submitText={editing ? 'Update' : 'Add'}
- * >
- *   <FormField ... />
- * </FormDialog>
+ * Layout:
+ *   - Title bar with close (X) button
+ *   - Scrollable body (children)
+ *   - Fixed footer with Cancel / Submit buttons (always visible)
+ *
+ * The entire body+footer is wrapped in a <form> so submit buttons work.
+ * Escape key and clicking outside the dialog will close it.
  */
 export function FormDialog({
   isOpen,
@@ -50,19 +46,27 @@ export function FormDialog({
   saving = false,
   variant,
 }: FormDialogProps) {
+  const footer = (
+    <DialogActions>
+      <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
+        {cancelText}
+      </Button>
+      <Button type="submit" disabled={saving}>
+        {saving ? 'Saving...' : submitText}
+      </Button>
+    </DialogActions>
+  );
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} variant={variant}>
-      <form onSubmit={onSubmit}>
-        {children}
-        <DialogActions>
-          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
-            {cancelText}
-          </Button>
-          <Button type="submit" disabled={saving}>
-            {saving ? 'Saving...' : submitText}
-          </Button>
-        </DialogActions>
-      </form>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      variant={variant}
+      onSubmit={onSubmit}
+      footer={footer}
+    >
+      {children}
     </Modal>
   );
 }

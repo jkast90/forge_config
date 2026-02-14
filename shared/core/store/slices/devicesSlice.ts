@@ -24,19 +24,19 @@ export const createDevice = createAsyncThunk('devices/create', async (data: Part
 
 export const updateDevice = createAsyncThunk(
   'devices/update',
-  async ({ mac, data }: { mac: string; data: Partial<Device> }) => {
-    return getServices().devices.update(mac, data);
+  async ({ id, data }: { id: string; data: Partial<Device> }) => {
+    return getServices().devices.update(id, data);
   }
 );
 
-export const deleteDevice = createAsyncThunk('devices/delete', async (mac: string) => {
-  await getServices().devices.remove(mac);
-  return mac;
+export const deleteDevice = createAsyncThunk('devices/delete', async (id: string) => {
+  await getServices().devices.remove(id);
+  return id;
 });
 
-export const triggerBackup = createAsyncThunk('devices/triggerBackup', async (mac: string) => {
-  await getServices().devices.triggerBackup(mac);
-  return mac;
+export const triggerBackup = createAsyncThunk('devices/triggerBackup', async (id: string) => {
+  await getServices().devices.triggerBackup(id);
+  return id;
 });
 
 const devicesSlice = createSlice({

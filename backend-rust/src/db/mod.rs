@@ -1,6 +1,10 @@
+mod device_models;
+mod device_variables;
 mod devices;
 mod dhcp_options;
 mod discovery;
+mod groups;
+mod ipam;
 mod jobs;
 mod row_helpers;
 pub mod seeds;
@@ -8,11 +12,13 @@ mod settings;
 mod templates;
 mod topologies;
 mod users;
+mod variable_resolution;
 mod vendor_actions;
 mod vendors;
 
 use anyhow::{Context, Result};
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
+use std::collections::HashMap;
 
 use crate::models::*;
 
@@ -95,6 +101,11 @@ impl Store {
         self.seed_default_dhcp_options().await?;
         self.seed_default_user().await?;
         self.seed_default_vendor_actions().await?;
+        self.seed_default_device_models().await?;
+        self.seed_default_ipam_supernets().await?;
+
+        // Ensure "all" group invariants
+        self.ensure_all_group().await?;
 
         Ok(())
     }
@@ -123,12 +134,21 @@ impl Store {
 
     async fn seed_default_templates(&self) -> Result<()> {
         for (id, name, description, vendor_id, content) in seeds::seed_template_params() {
-            sqlx::query(
+            // Role templates (spine/leaf) use INSERT OR REPLACE so they stay
+            // in sync with updated variable-based templates across upgrades.
+            // Base templates use INSERT OR IGNORE so user edits are preserved.
+            let sql = if seeds::is_role_template(&id) {
+                r#"
+                INSERT OR REPLACE INTO templates (id, name, description, vendor_id, content, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                "#
+            } else {
                 r#"
                 INSERT OR IGNORE INTO templates (id, name, description, vendor_id, content, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                "#,
-            )
+                "#
+            };
+            sqlx::query(sql)
             .bind(&id)
             .bind(&name)
             .bind(&description)
@@ -180,14 +200,8 @@ impl Store {
     }
 
     async fn seed_default_vendor_actions(&self) -> Result<()> {
-        // Only seed if table is empty
-        let count: (i32,) = sqlx::query_as("SELECT COUNT(*) FROM vendor_actions")
-            .fetch_one(&self.pool)
-            .await?;
-        if count.0 > 0 {
-            return Ok(());
-        }
-
+        // INSERT OR IGNORE ensures new seed actions are added to existing databases
+        // without overwriting user-modified actions (matched by primary key)
         for (id, vendor_id, label, command, sort_order) in seeds::seed_vendor_action_params() {
             sqlx::query(
                 r#"
@@ -200,6 +214,51 @@ impl Store {
             .bind(&label)
             .bind(&command)
             .bind(sort_order)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn seed_default_device_models(&self) -> Result<()> {
+        for (id, vendor_id, model, display_name, rack_units, layout) in seeds::seed_device_model_params() {
+            sqlx::query(
+                r#"
+                INSERT OR IGNORE INTO device_models (id, vendor_id, model, display_name, rack_units, layout, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                "#,
+            )
+            .bind(&id)
+            .bind(&vendor_id)
+            .bind(&model)
+            .bind(&display_name)
+            .bind(rack_units)
+            .bind(&layout)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn seed_default_ipam_supernets(&self) -> Result<()> {
+        for (prefix, description, is_supernet) in seeds::get_default_ipam_supernets() {
+            let (network, broadcast, prefix_length) = crate::utils::parse_cidr(prefix)
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            sqlx::query(
+                r#"
+                INSERT OR IGNORE INTO ipam_prefixes (prefix, network_int, broadcast_int, prefix_length, description, status, is_supernet, created_at, updated_at)
+                SELECT ?, ?, ?, ?, ?, 'active', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                WHERE NOT EXISTS (SELECT 1 FROM ipam_prefixes WHERE network_int = ? AND broadcast_int = ?)
+                "#,
+            )
+            .bind(prefix)
+            .bind(network as i64)
+            .bind(broadcast as i64)
+            .bind(prefix_length as i32)
+            .bind(description)
+            .bind(if is_supernet { 1i32 } else { 0i32 })
+            .bind(network as i64)
+            .bind(broadcast as i64)
             .execute(&self.pool)
             .await?;
         }
@@ -226,36 +285,44 @@ impl Store {
         devices::DeviceRepo::list_paged(&self.pool, limit, offset).await
     }
 
-    pub async fn get_device(&self, mac: &str) -> Result<Option<Device>> {
-        devices::DeviceRepo::get(&self.pool, mac).await
+    pub async fn get_device(&self, id: &str) -> Result<Option<Device>> {
+        devices::DeviceRepo::get(&self.pool, id).await
+    }
+
+    pub async fn get_device_by_mac(&self, mac: &str) -> Result<Option<Device>> {
+        devices::DeviceRepo::get_by_mac(&self.pool, mac).await
     }
 
     pub async fn create_device(&self, req: &CreateDeviceRequest) -> Result<Device> {
         devices::DeviceRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_device(&self, mac: &str, req: &UpdateDeviceRequest) -> Result<Device> {
-        devices::DeviceRepo::update(&self.pool, mac, req).await
+    pub async fn update_device(&self, id: &str, req: &UpdateDeviceRequest) -> Result<Device> {
+        devices::DeviceRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_device(&self, mac: &str) -> Result<()> {
-        devices::DeviceRepo::delete(&self.pool, mac).await
+    pub async fn delete_device(&self, id: &str) -> Result<()> {
+        devices::DeviceRepo::delete(&self.pool, id).await
     }
 
-    pub async fn update_device_status(&self, mac: &str, status: &str) -> Result<()> {
-        devices::DeviceRepo::update_status(&self.pool, mac, status).await
+    pub async fn delete_devices_by_topology(&self, topology_id: &str) -> Result<u64> {
+        devices::DeviceRepo::delete_by_topology(&self.pool, topology_id).await
     }
 
-    pub async fn update_device_backup_time(&self, mac: &str) -> Result<()> {
-        devices::DeviceRepo::update_backup_time(&self.pool, mac).await
+    pub async fn update_device_status(&self, id: &str, status: &str) -> Result<()> {
+        devices::DeviceRepo::update_status(&self.pool, id, status).await
     }
 
-    pub async fn update_device_error(&self, mac: &str, error_msg: &str) -> Result<()> {
-        devices::DeviceRepo::update_error(&self.pool, mac, error_msg).await
+    pub async fn update_device_backup_time(&self, id: &str) -> Result<()> {
+        devices::DeviceRepo::update_backup_time(&self.pool, id).await
     }
 
-    pub async fn clear_device_error(&self, mac: &str) -> Result<()> {
-        devices::DeviceRepo::update_error(&self.pool, mac, "").await
+    pub async fn update_device_error(&self, id: &str, error_msg: &str) -> Result<()> {
+        devices::DeviceRepo::update_error(&self.pool, id, error_msg).await
+    }
+
+    pub async fn clear_device_error(&self, id: &str) -> Result<()> {
+        devices::DeviceRepo::update_error(&self.pool, id, "").await
     }
 
     // ========== Settings Operations ==========
@@ -268,14 +335,52 @@ impl Store {
         settings::SettingsRepo::update(&self.pool, s).await
     }
 
-    // ========== Backup Operations ==========
+    // ========== Device Variable Operations ==========
 
-    pub async fn create_backup(&self, device_mac: &str, filename: &str, size: i64) -> Result<Backup> {
-        settings::BackupRepo::create(&self.pool, device_mac, filename, size).await
+    pub async fn list_device_variables(&self, device_id: &str) -> Result<Vec<DeviceVariable>> {
+        device_variables::DeviceVariableRepo::list_by_device(&self.pool, device_id).await
     }
 
-    pub async fn list_backups(&self, mac: &str) -> Result<Vec<Backup>> {
-        settings::BackupRepo::list(&self.pool, mac).await
+    pub async fn list_variables_by_key(&self, key: &str) -> Result<Vec<DeviceVariable>> {
+        device_variables::DeviceVariableRepo::list_by_key(&self.pool, key).await
+    }
+
+    pub async fn get_device_variable(&self, device_id: &str, key: &str) -> Result<Option<DeviceVariable>> {
+        device_variables::DeviceVariableRepo::get(&self.pool, device_id, key).await
+    }
+
+    pub async fn set_device_variable(&self, device_id: &str, key: &str, value: &str) -> Result<()> {
+        device_variables::DeviceVariableRepo::set(&self.pool, device_id, key, value).await
+    }
+
+    pub async fn delete_device_variable(&self, device_id: &str, key: &str) -> Result<()> {
+        device_variables::DeviceVariableRepo::delete(&self.pool, device_id, key).await
+    }
+
+    pub async fn delete_all_device_variables(&self, device_id: &str) -> Result<()> {
+        device_variables::DeviceVariableRepo::delete_all_for_device(&self.pool, device_id).await
+    }
+
+    pub async fn list_variable_keys(&self) -> Result<Vec<(String, i64)>> {
+        device_variables::DeviceVariableRepo::list_keys(&self.pool).await
+    }
+
+    pub async fn bulk_set_device_variables(&self, entries: &[(String, String, String)]) -> Result<()> {
+        device_variables::DeviceVariableRepo::bulk_set(&self.pool, entries).await
+    }
+
+    pub async fn delete_variable_key(&self, key: &str) -> Result<()> {
+        device_variables::DeviceVariableRepo::delete_key(&self.pool, key).await
+    }
+
+    // ========== Backup Operations ==========
+
+    pub async fn create_backup(&self, device_id: &str, filename: &str, size: i64) -> Result<Backup> {
+        settings::BackupRepo::create(&self.pool, device_id, filename, size).await
+    }
+
+    pub async fn list_backups(&self, device_id: &str) -> Result<Vec<Backup>> {
+        settings::BackupRepo::list(&self.pool, device_id).await
     }
 
     pub async fn get_backup(&self, id: i64) -> Result<Option<Backup>> {
@@ -302,6 +407,28 @@ impl Store {
 
     pub async fn delete_vendor(&self, id: &str) -> Result<()> {
         vendors::VendorRepo::delete(&self.pool, id).await
+    }
+
+    // ========== Device Model Operations ==========
+
+    pub async fn list_device_models(&self) -> Result<Vec<DeviceModel>> {
+        device_models::DeviceModelRepo::list(&self.pool).await
+    }
+
+    pub async fn get_device_model(&self, id: &str) -> Result<Option<DeviceModel>> {
+        device_models::DeviceModelRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_device_model(&self, req: &CreateDeviceModelRequest) -> Result<DeviceModel> {
+        device_models::DeviceModelRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_device_model(&self, id: &str, req: &CreateDeviceModelRequest) -> Result<DeviceModel> {
+        device_models::DeviceModelRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_device_model(&self, id: &str) -> Result<()> {
+        device_models::DeviceModelRepo::delete(&self.pool, id).await
     }
 
     // ========== DHCP Option Operations ==========
@@ -436,8 +563,8 @@ impl Store {
         jobs::JobRepo::update_failed(&self.pool, id, error).await
     }
 
-    pub async fn list_jobs_by_device(&self, mac: &str, limit: i32) -> Result<Vec<Job>> {
-        jobs::JobRepo::list_by_device(&self.pool, mac, limit).await
+    pub async fn list_jobs_by_device(&self, device_id: &str, limit: i32) -> Result<Vec<Job>> {
+        jobs::JobRepo::list_by_device(&self.pool, device_id, limit).await
     }
 
     pub async fn list_jobs_recent(&self, limit: i32) -> Result<Vec<Job>> {
@@ -468,6 +595,282 @@ impl Store {
 
     pub async fn delete_topology(&self, id: &str) -> Result<()> {
         topologies::TopologyRepo::delete(&self.pool, id).await
+    }
+
+    // ========== Group Operations ==========
+
+    pub async fn list_groups(&self) -> Result<Vec<Group>> {
+        groups::GroupRepo::list(&self.pool).await
+    }
+
+    pub async fn get_group(&self, id: &str) -> Result<Option<Group>> {
+        groups::GroupRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_group(&self, req: &CreateGroupRequest) -> Result<Group> {
+        groups::GroupRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_group(&self, id: &str, req: &CreateGroupRequest) -> Result<Group> {
+        groups::GroupRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_group(&self, id: &str) -> Result<()> {
+        groups::GroupRepo::delete(&self.pool, id).await
+    }
+
+    // ========== Group Variable Operations ==========
+
+    pub async fn list_group_variables(&self, group_id: &str) -> Result<Vec<GroupVariable>> {
+        groups::GroupRepo::list_variables(&self.pool, group_id).await
+    }
+
+    pub async fn set_group_variable(&self, group_id: &str, key: &str, value: &str) -> Result<()> {
+        groups::GroupRepo::set_variable(&self.pool, group_id, key, value).await
+    }
+
+    pub async fn delete_group_variable(&self, group_id: &str, key: &str) -> Result<()> {
+        groups::GroupRepo::delete_variable(&self.pool, group_id, key).await
+    }
+
+    // ========== Group Membership Operations ==========
+
+    pub async fn list_group_members(&self, group_id: &str) -> Result<Vec<String>> {
+        groups::GroupRepo::list_group_members(&self.pool, group_id).await
+    }
+
+    pub async fn list_device_groups(&self, device_id: &str) -> Result<Vec<Group>> {
+        groups::GroupRepo::list_device_groups(&self.pool, device_id).await
+    }
+
+    pub async fn add_device_to_group(&self, device_id: &str, group_id: &str) -> Result<()> {
+        groups::GroupRepo::add_device_to_group(&self.pool, device_id, group_id).await
+    }
+
+    pub async fn remove_device_from_group(&self, device_id: &str, group_id: &str) -> Result<()> {
+        groups::GroupRepo::remove_device_from_group(&self.pool, device_id, group_id).await
+    }
+
+    pub async fn set_group_members(&self, group_id: &str, device_ids: &[String]) -> Result<()> {
+        groups::GroupRepo::set_group_members(&self.pool, group_id, device_ids).await
+    }
+
+    pub async fn set_device_groups(&self, device_id: &str, group_ids: &[String]) -> Result<()> {
+        groups::GroupRepo::set_device_groups(&self.pool, device_id, group_ids).await
+    }
+
+    // ========== Group Hierarchy ==========
+
+    pub async fn get_group_children(&self, group_id: &str) -> Result<Vec<Group>> {
+        groups::GroupRepo::get_children(&self.pool, group_id).await
+    }
+
+    pub async fn would_create_cycle(&self, group_id: &str, proposed_parent_id: &str) -> Result<bool> {
+        groups::GroupRepo::would_create_cycle(&self.pool, group_id, proposed_parent_id).await
+    }
+
+    // ========== Variable Resolution ==========
+
+    pub async fn resolve_device_variables(&self, device_id: &str) -> Result<ResolvedVariablesResponse> {
+        variable_resolution::VariableResolver::resolve(&self.pool, device_id).await
+    }
+
+    pub async fn resolve_device_variables_flat(&self, device_id: &str) -> Result<HashMap<String, String>> {
+        variable_resolution::VariableResolver::resolve_flat(&self.pool, device_id).await
+    }
+
+    // ========== IPAM Region Operations ==========
+
+    pub async fn list_ipam_regions(&self) -> Result<Vec<IpamRegion>> {
+        ipam::IpamRegionRepo::list(&self.pool).await
+    }
+
+    pub async fn get_ipam_region(&self, id: &str) -> Result<Option<IpamRegion>> {
+        ipam::IpamRegionRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_ipam_region(&self, req: &CreateIpamRegionRequest) -> Result<IpamRegion> {
+        ipam::IpamRegionRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_ipam_region(&self, id: &str, req: &CreateIpamRegionRequest) -> Result<IpamRegion> {
+        ipam::IpamRegionRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_ipam_region(&self, id: &str) -> Result<()> {
+        ipam::IpamRegionRepo::delete(&self.pool, id).await
+    }
+
+    // ========== IPAM Location Operations ==========
+
+    pub async fn list_ipam_locations(&self) -> Result<Vec<IpamLocation>> {
+        ipam::IpamLocationRepo::list(&self.pool).await
+    }
+
+    pub async fn get_ipam_location(&self, id: &str) -> Result<Option<IpamLocation>> {
+        ipam::IpamLocationRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_ipam_location(&self, req: &CreateIpamLocationRequest) -> Result<IpamLocation> {
+        ipam::IpamLocationRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_ipam_location(&self, id: &str, req: &CreateIpamLocationRequest) -> Result<IpamLocation> {
+        ipam::IpamLocationRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_ipam_location(&self, id: &str) -> Result<()> {
+        ipam::IpamLocationRepo::delete(&self.pool, id).await
+    }
+
+    // ========== IPAM Datacenter Operations ==========
+
+    pub async fn list_ipam_datacenters(&self) -> Result<Vec<IpamDatacenter>> {
+        ipam::IpamDatacenterRepo::list(&self.pool).await
+    }
+
+    pub async fn get_ipam_datacenter(&self, id: &str) -> Result<Option<IpamDatacenter>> {
+        ipam::IpamDatacenterRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_ipam_datacenter(&self, req: &CreateIpamDatacenterRequest) -> Result<IpamDatacenter> {
+        ipam::IpamDatacenterRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_ipam_datacenter(&self, id: &str, req: &CreateIpamDatacenterRequest) -> Result<IpamDatacenter> {
+        ipam::IpamDatacenterRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_ipam_datacenter(&self, id: &str) -> Result<()> {
+        ipam::IpamDatacenterRepo::delete(&self.pool, id).await
+    }
+
+    // ========== IPAM Role Operations ==========
+
+    pub async fn list_ipam_roles(&self) -> Result<Vec<IpamRole>> {
+        ipam::IpamRoleRepo::list(&self.pool).await
+    }
+
+    pub async fn create_ipam_role(&self, req: &CreateIpamRoleRequest) -> Result<IpamRole> {
+        ipam::IpamRoleRepo::create(&self.pool, req).await
+    }
+
+    pub async fn delete_ipam_role(&self, id: &str) -> Result<()> {
+        ipam::IpamRoleRepo::delete(&self.pool, id).await
+    }
+
+    // ========== IPAM Prefix Operations ==========
+
+    pub async fn list_ipam_prefixes(&self) -> Result<Vec<IpamPrefix>> {
+        ipam::IpamPrefixRepo::list(&self.pool).await
+    }
+
+    pub async fn list_ipam_supernets(&self) -> Result<Vec<IpamPrefix>> {
+        ipam::IpamPrefixRepo::list_supernets(&self.pool).await
+    }
+
+    pub async fn get_ipam_prefix(&self, id: i64) -> Result<Option<IpamPrefix>> {
+        ipam::IpamPrefixRepo::get(&self.pool, id).await
+    }
+
+    pub async fn find_ipam_prefix_by_cidr(&self, cidr: &str, vrf_id: Option<&str>) -> Result<Option<IpamPrefix>> {
+        ipam::IpamPrefixRepo::find_by_cidr(&self.pool, cidr, vrf_id).await
+    }
+
+    pub async fn create_ipam_prefix(&self, req: &CreateIpamPrefixRequest) -> Result<IpamPrefix> {
+        ipam::IpamPrefixRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_ipam_prefix(&self, id: i64, req: &CreateIpamPrefixRequest) -> Result<IpamPrefix> {
+        ipam::IpamPrefixRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_ipam_prefix(&self, id: i64) -> Result<()> {
+        ipam::IpamPrefixRepo::delete(&self.pool, id).await
+    }
+
+    pub async fn next_available_ipam_prefix(&self, parent_id: i64, req: &NextAvailablePrefixRequest) -> Result<IpamPrefix> {
+        ipam::IpamPrefixRepo::next_available_prefix(&self.pool, parent_id, req).await
+    }
+
+    // ========== IPAM IP Address Operations ==========
+
+    pub async fn list_ipam_ip_addresses(&self) -> Result<Vec<IpamIpAddress>> {
+        ipam::IpamIpAddressRepo::list(&self.pool).await
+    }
+
+    pub async fn list_ipam_ip_addresses_by_prefix(&self, prefix_id: i64) -> Result<Vec<IpamIpAddress>> {
+        ipam::IpamIpAddressRepo::list_by_prefix(&self.pool, prefix_id).await
+    }
+
+    pub async fn get_ipam_ip_address(&self, id: &str) -> Result<Option<IpamIpAddress>> {
+        ipam::IpamIpAddressRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_ipam_ip_address(&self, req: &CreateIpamIpAddressRequest) -> Result<IpamIpAddress> {
+        ipam::IpamIpAddressRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_ipam_ip_address(&self, id: &str, req: &CreateIpamIpAddressRequest) -> Result<IpamIpAddress> {
+        ipam::IpamIpAddressRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_ipam_ip_address(&self, id: &str) -> Result<()> {
+        ipam::IpamIpAddressRepo::delete(&self.pool, id).await
+    }
+
+    pub async fn next_available_ipam_ip(&self, prefix_id: i64, req: &NextAvailableIpRequest) -> Result<IpamIpAddress> {
+        ipam::IpamIpAddressRepo::next_available_ip(&self.pool, prefix_id, req).await
+    }
+
+    // ========== IPAM Tag Operations ==========
+
+    pub async fn list_ipam_tags(&self, resource_type: &str, resource_id: &str) -> Result<Vec<IpamTag>> {
+        ipam::IpamTagRepo::list_for_resource(&self.pool, resource_type, resource_id).await
+    }
+
+    pub async fn set_ipam_tag(&self, resource_type: &str, resource_id: &str, key: &str, value: &str) -> Result<()> {
+        ipam::IpamTagRepo::set(&self.pool, resource_type, resource_id, key, value).await
+    }
+
+    pub async fn delete_ipam_tag(&self, resource_type: &str, resource_id: &str, key: &str) -> Result<()> {
+        ipam::IpamTagRepo::delete(&self.pool, resource_type, resource_id, key).await
+    }
+
+    pub async fn list_ipam_tag_keys(&self) -> Result<Vec<String>> {
+        ipam::IpamTagRepo::list_distinct_keys(&self.pool).await
+    }
+
+    // ========== IPAM VRF Operations ==========
+
+    pub async fn list_ipam_vrfs(&self) -> Result<Vec<IpamVrf>> {
+        ipam::IpamVrfRepo::list(&self.pool).await
+    }
+
+    pub async fn create_ipam_vrf(&self, req: &CreateIpamVrfRequest) -> Result<IpamVrf> {
+        ipam::IpamVrfRepo::create(&self.pool, req).await
+    }
+
+    pub async fn delete_ipam_vrf(&self, id: &str) -> Result<()> {
+        ipam::IpamVrfRepo::delete(&self.pool, id).await
+    }
+
+    // ========== Ensure "all" group ==========
+
+    async fn ensure_all_group(&self) -> Result<()> {
+        let exists = groups::GroupRepo::get(&self.pool, "all").await?;
+        if exists.is_none() {
+            tracing::info!("Creating 'all' group");
+            let req = CreateGroupRequest {
+                id: "all".to_string(),
+                name: "all".to_string(),
+                description: Some("Default group — all devices inherit from this".to_string()),
+                parent_id: None,
+                precedence: 0,
+            };
+            groups::GroupRepo::create(&self.pool, &req).await?;
+        }
+        Ok(())
     }
 }
 

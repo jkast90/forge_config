@@ -9,6 +9,7 @@ import {
   reloadConfig as reloadConfigThunk,
 } from '../store/slices/settingsSlice';
 import { addNotification } from '../services/notifications';
+import { getErrorMessage } from '../utils/errors';
 
 export interface UseSettingsReturn {
   settings: Settings | null;
@@ -33,7 +34,7 @@ export function useSettings(): UseSettingsReturn {
     try {
       await dispatch(fetchSettings()).unwrap();
     } catch (err) {
-      addNotification('error', `Failed to load settings: ${err}`);
+      addNotification('error', `Failed to load settings: ${getErrorMessage(err)}`);
     }
   }, [dispatch]);
 
@@ -43,7 +44,7 @@ export function useSettings(): UseSettingsReturn {
       addNotification('success', 'Settings saved successfully');
       return true;
     } catch (err) {
-      addNotification('error', `Failed to save settings: ${err}`);
+      addNotification('error', `Failed to save settings: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -54,7 +55,7 @@ export function useSettings(): UseSettingsReturn {
       addNotification('success', 'Configuration reloaded');
       return true;
     } catch (err) {
-      addNotification('error', `Failed to reload: ${err}`);
+      addNotification('error', `Failed to reload: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);

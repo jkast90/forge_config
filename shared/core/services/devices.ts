@@ -60,64 +60,64 @@ export class DeviceService extends BaseService {
     return this.get<Device[]>('/devices');
   }
 
-  async getByMac(mac: string): Promise<Device> {
-    return this.get<Device>(`/devices/${encodeURIComponent(mac)}`);
+  async getById(id: string): Promise<Device> {
+    return this.get<Device>(`/devices/${encodeURIComponent(id)}`);
   }
 
   async create(device: Partial<Device>): Promise<Device> {
     return this.post<Device>('/devices', device);
   }
 
-  async update(mac: string, device: Partial<Device>): Promise<Device> {
-    return this.put<Device>(`/devices/${encodeURIComponent(mac)}`, device);
+  async update(id: string, device: Partial<Device>): Promise<Device> {
+    return this.put<Device>(`/devices/${encodeURIComponent(id)}`, device);
   }
 
-  async remove(mac: string): Promise<void> {
-    return this.delete<void>(`/devices/${encodeURIComponent(mac)}`);
+  async remove(id: string): Promise<void> {
+    return this.delete<void>(`/devices/${encodeURIComponent(id)}`);
   }
 
-  async triggerBackup(mac: string): Promise<void> {
-    return this.post<void>(`/devices/${encodeURIComponent(mac)}/backup`);
+  async triggerBackup(id: string): Promise<void> {
+    return this.post<void>(`/devices/${encodeURIComponent(id)}/backup`);
   }
 
-  async listBackups(mac: string): Promise<Backup[]> {
-    return this.get<Backup[]>(`/devices/${encodeURIComponent(mac)}/backups`);
+  async listBackups(id: string): Promise<Backup[]> {
+    return this.get<Backup[]>(`/devices/${encodeURIComponent(id)}/backups`);
   }
 
-  async connect(mac: string): Promise<ConnectResult> {
-    return this.post<ConnectResult>(`/devices/${encodeURIComponent(mac)}/connect`);
+  async connect(id: string): Promise<ConnectResult> {
+    return this.post<ConnectResult>(`/devices/${encodeURIComponent(id)}/connect`);
   }
 
   async connectByIp(ip: string, options?: { vendor?: string; ssh_user?: string; ssh_pass?: string }): Promise<ConnectResult> {
     return this.post<ConnectResult>('/connect', { ip, ...options });
   }
 
-  async getConfig(mac: string): Promise<ConfigResult> {
-    return this.get<ConfigResult>(`/devices/${encodeURIComponent(mac)}/config`);
+  async getConfig(id: string): Promise<ConfigResult> {
+    return this.get<ConfigResult>(`/devices/${encodeURIComponent(id)}/config`);
   }
 
   async getBackupContent(id: number): Promise<BackupContentResult> {
     return this.get<BackupContentResult>(`/backups/${id}`);
   }
 
-  async previewConfig(mac: string): Promise<ConfigPreviewResult> {
-    return this.post<ConfigPreviewResult>(`/devices/${encodeURIComponent(mac)}/preview-config`);
+  async previewConfig(id: string): Promise<ConfigPreviewResult> {
+    return this.post<ConfigPreviewResult>(`/devices/${encodeURIComponent(id)}/preview-config`);
   }
 
-  async deployConfig(mac: string): Promise<Job> {
-    return this.post<Job>(`/devices/${encodeURIComponent(mac)}/deploy-config`);
+  async deployConfig(id: string): Promise<Job> {
+    return this.post<Job>(`/devices/${encodeURIComponent(id)}/deploy-config`);
   }
 
-  async exec(mac: string, command: string): Promise<Job> {
-    return this.post<Job>(`/devices/${encodeURIComponent(mac)}/exec`, { command });
+  async exec(id: string, command: string): Promise<Job> {
+    return this.post<Job>(`/devices/${encodeURIComponent(id)}/exec`, { command });
   }
 
   async getJob(id: string): Promise<Job> {
     return this.get<Job>(`/jobs/${encodeURIComponent(id)}`);
   }
 
-  async listJobs(mac?: string): Promise<Job[]> {
-    const params = mac ? `?device_mac=${encodeURIComponent(mac)}` : '';
+  async listJobs(deviceId?: string): Promise<Job[]> {
+    const params = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
     return this.get<Job[]>(`/jobs${params}`);
   }
 }

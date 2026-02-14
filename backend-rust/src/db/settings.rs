@@ -30,12 +30,12 @@ impl SettingsRepo {
 pub struct BackupRepo;
 
 impl BackupRepo {
-    pub async fn create(pool: &Pool<Sqlite>, device_mac: &str, filename: &str, size: i64) -> Result<Backup> {
+    pub async fn create(pool: &Pool<Sqlite>, device_id: &str, filename: &str, size: i64) -> Result<Backup> {
         let now = chrono::Utc::now();
         let result = sqlx::query(
-            "INSERT INTO backups (device_mac, filename, size, created_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO backups (device_id, filename, size, created_at) VALUES (?, ?, ?, ?)",
         )
-        .bind(device_mac)
+        .bind(device_id)
         .bind(filename)
         .bind(size)
         .bind(now)
@@ -44,22 +44,22 @@ impl BackupRepo {
 
         Ok(Backup {
             id: result.last_insert_rowid(),
-            device_mac: device_mac.to_string(),
+            device_id: device_id.to_string(),
             filename: filename.to_string(),
             size,
             created_at: now,
         })
     }
 
-    pub async fn list(pool: &Pool<Sqlite>, mac: &str) -> Result<Vec<Backup>> {
+    pub async fn list(pool: &Pool<Sqlite>, device_id: &str) -> Result<Vec<Backup>> {
         let rows = sqlx::query(
             r#"
-            SELECT id, device_mac, filename, size, created_at
-            FROM backups WHERE device_mac = ?
+            SELECT id, device_id, filename, size, created_at
+            FROM backups WHERE device_id = ?
             ORDER BY created_at DESC
             "#,
         )
-        .bind(mac)
+        .bind(device_id)
         .fetch_all(pool)
         .await?;
 
@@ -68,7 +68,7 @@ impl BackupRepo {
 
     pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<Backup>> {
         let row = sqlx::query(
-            "SELECT id, device_mac, filename, size, created_at FROM backups WHERE id = ?",
+            "SELECT id, device_id, filename, size, created_at FROM backups WHERE id = ?",
         )
         .bind(id)
         .fetch_optional(pool)

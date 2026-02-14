@@ -11,6 +11,7 @@ import {
   deleteVendor as deleteVendorThunk,
 } from '../store/slices/vendorsSlice';
 import { addNotification } from '../services/notifications';
+import { getErrorMessage } from '../utils/errors';
 
 export interface UseVendorsOptions {
   autoRefresh?: boolean;
@@ -56,7 +57,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
       dispatch(fetchVendors());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to add vendor: ${err}`);
+      addNotification('error', `Failed to add vendor: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -68,7 +69,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
       dispatch(fetchVendors());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to update vendor: ${err}`);
+      addNotification('error', `Failed to update vendor: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -80,7 +81,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
       dispatch(fetchVendors());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to delete vendor: ${err}`);
+      addNotification('error', `Failed to delete vendor: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);

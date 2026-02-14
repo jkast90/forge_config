@@ -127,6 +127,14 @@ pub async fn preview_template(
     context.insert("Subnet", &req.subnet);
     context.insert("Gateway", &req.gateway);
 
+    // Load resolved variables (group + host inheritance) as {{vars.KeyName}}
+    let vars_map = state
+        .store
+        .resolve_device_variables_flat(&req.device.id)
+        .await
+        .unwrap_or_default();
+    context.insert("vars", &vars_map);
+
     // Render the template
     let rendered = tera
         .render("preview", &context)
@@ -152,6 +160,7 @@ pub async fn get_template_variables(
         TemplateVariable { name: "TopologyId".into(), description: "CLOS topology ID".into(), example: "dc1-fabric".into() },
         TemplateVariable { name: "TopologyRole".into(), description: "CLOS role: super-spine, spine, or leaf".into(), example: "leaf".into() },
         TemplateVariable { name: r#"{% include "role" %}"#.into(), description: "Include role-specific template (e.g., arista-eos-spine)".into(), example: r#"{% include "role" %}"#.into() },
+        TemplateVariable { name: "vars.*".into(), description: "Device-specific key-value variables".into(), example: "{{vars.Loopback}}".into() },
     ]))
 }
 

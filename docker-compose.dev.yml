@@ -44,7 +44,7 @@ services:
       - ./backend-rust/scripts:/scripts:ro
       - cargo-registry:/usr/local/cargo/registry
       - cargo-target:/app/target
-      - dev-data:/data
+      - ./data:/data
       - dev-tftp:/tftp
       - dev-backups:/backups
       - ./configs/templates:/configs/templates:ro
@@ -90,6 +90,5 @@ networks:
 volumes:
   cargo-registry:
   cargo-target:
-  dev-data:
   dev-tftp:
   dev-backups:

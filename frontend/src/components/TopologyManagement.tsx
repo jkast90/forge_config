@@ -16,6 +16,7 @@ import {
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
+import { CommandDrawer } from './CommandDrawer';
 import { IconButton } from './IconButton';
 import { ConnectModal, useConnectModal } from './ConnectModal';
 import { ConfigViewer } from './ConfigViewer';
@@ -45,7 +46,10 @@ export function TopologyManagement() {
   const { templates } = useTemplates();
   const [addingNode, setAddingNode] = useState<string | null>(null); // "topologyId:role" while spawning
   const [addMenuOpen, setAddMenuOpen] = useState<string | null>(null); // "topologyId:role" for popover
+  const [commandDevice, setCommandDevice] = useState<Device | null>(null);
+  const [diagramTopology, setDiagramTopology] = useState<string | null>(null);
   const [assignTarget, setAssignTarget] = useState<{ topologyId: string; role: TopologyRole } | null>(null);
+  const [swapDevice, setSwapDevice] = useState<Device | null>(null); // device being replaced
   const addMenuRef = useRef<HTMLDivElement>(null);
 
   // Close add-menu popover on outside click
@@ -103,7 +107,7 @@ export function TopologyManagement() {
   const handlePreviewConfig = async (device: Device) => {
     previewModal.open(device);
     setDeployJob(null);
-    await previewModal.execute(() => getServices().devices.previewConfig(device.mac));
+    await previewModal.execute(() => getServices().devices.previewConfig(device.id));
   };
 
   const handleDeployConfig = async () => {
@@ -112,13 +116,13 @@ export function TopologyManagement() {
     setDeploying(true);
     setDeployJob(null);
     try {
-      const job = await getServices().devices.deployConfig(previewModal.item.mac);
+      const job = await getServices().devices.deployConfig(previewModal.item.id);
       setDeployJob(job);
     } catch (err) {
       setDeployJob({
         id: `error-${Date.now()}`,
         job_type: 'deploy',
-        device_mac: previewModal.item.mac,
+        device_id: previewModal.item.id,
         command: '',
         status: 'failed',
         output: null,
@@ -135,6 +139,55 @@ export function TopologyManagement() {
     previewModal.close();
     setDeployJob(null);
     setDeploying(false);
+  };
+
+  const handleGenerateCutsheet = (topology: Topology) => {
+    const topoDevices = devicesByTopology[topology.id] || [];
+    const spines = topoDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine');
+    const leaves = topoDevices.filter(d => d.topology_role === 'leaf');
+
+    if (spines.length === 0 || leaves.length === 0) {
+      addNotification('error', 'Need at least one spine and one leaf to generate a cutsheet');
+      return;
+    }
+
+    // Track interface counters per device
+    // FRR uses eth1, eth2, ... (eth0 is management)
+    // cEOS/Arista uses Ethernet1, Ethernet2, ...
+    const ifIndex: Record<string, number> = {};
+    const nextIf = (d: Device) => {
+      ifIndex[d.id] = (ifIndex[d.id] || 0) + 1;
+      const prefix = d.vendor === 'frr' ? 'eth' : 'Ethernet';
+      return `${prefix}${ifIndex[d.id]}`;
+    };
+
+    const rows: string[] = [
+      'Side A Hostname,Side A Interface,Side A Role,Side B Hostname,Side B Interface,Side B Role',
+    ];
+
+    const linksPerPair = 2;
+    for (const spine of spines) {
+      for (const leaf of leaves) {
+        for (let link = 0; link < linksPerPair; link++) {
+          rows.push([
+            spine.hostname || spine.mac,
+            nextIf(spine),
+            spine.topology_role || 'spine',
+            leaf.hostname || leaf.mac,
+            nextIf(leaf),
+            leaf.topology_role || 'leaf',
+          ].join(','));
+        }
+      }
+    }
+
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${topology.id}-cutsheet.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleSpawnNode = async (topologyId: string, role: string) => {
@@ -162,7 +215,7 @@ export function TopologyManagement() {
   const handleAssignDevice = async (device: Device) => {
     if (!assignTarget) return;
     try {
-      await getServices().devices.update(device.mac, {
+      await getServices().devices.update(device.id, {
         ...device,
         topology_id: assignTarget.topologyId,
         topology_role: assignTarget.role,
@@ -173,6 +226,32 @@ export function TopologyManagement() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       addNotification('error', `Failed to assign device: ${msg}`);
+    }
+  };
+
+  const handleSwapDevice = async (replacement: Device) => {
+    if (!swapDevice || !swapDevice.topology_id || !swapDevice.topology_role) return;
+    const topoId = swapDevice.topology_id;
+    const role = swapDevice.topology_role;
+    try {
+      // Unassign old device
+      await getServices().devices.update(swapDevice.id, {
+        ...swapDevice,
+        topology_id: '',
+        topology_role: undefined,
+      });
+      // Assign replacement into same slot
+      await getServices().devices.update(replacement.id, {
+        ...replacement,
+        topology_id: topoId,
+        topology_role: role,
+      });
+      addNotification('success', `Swapped ${swapDevice.hostname || swapDevice.mac} with ${replacement.hostname || replacement.mac}`);
+      setSwapDevice(null);
+      refreshDevices();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to swap device: ${msg}`);
     }
   };
 
@@ -294,6 +373,16 @@ export function TopologyManagement() {
           deleteConfirmMessage={(t) =>
             `Delete topology "${t.name}"? ${(t.device_count || 0) > 0 ? `${t.device_count} device(s) will be unassigned.` : ''}`
           }
+          actions={[
+            {
+              icon: <Icon name="download" size={14} />,
+              label: 'Cutsheet',
+              onClick: handleGenerateCutsheet,
+              variant: 'secondary',
+              tooltip: 'Download connection cutsheet (CSV)',
+              disabled: (t) => !t.spine_count || !t.leaf_count,
+            },
+          ] as TableAction<Topology>[]}
           renderExpandedRow={(t) => {
             const topoDevices = devicesByTopology[t.id] || [];
             if (topoDevices.length === 0) {
@@ -314,18 +403,19 @@ export function TopologyManagement() {
             return (
               <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
                 {/* Device Table */}
-                <div style={{ flex: '1 1 400px', minWidth: 0 }}>
+                <div style={{ flex: '1 1 400px', minWidth: 0, maxWidth: '70%' }}>
                   <Table<Device>
                     data={sorted}
                     columns={[
                       { header: 'Role', accessor: (d) => Cell.status(d.topology_role || 'unassigned', d.topology_role === 'spine' || d.topology_role === 'super-spine' ? 'online' : d.topology_role === 'leaf' ? 'provisioning' : 'offline'), searchValue: (d) => d.topology_role || '' },
                       { header: 'Hostname', accessor: (d) => <strong>{d.hostname || '—'}</strong>, searchValue: (d) => d.hostname || '' },
+                      { header: 'Vendor', accessor: (d) => d.vendor ? <VendorBadge vendor={d.vendor} /> : Cell.dash(''), searchValue: (d) => d.vendor || '' },
                       { header: 'IP Address', accessor: (d) => Cell.dash(d.ip), searchValue: (d) => d.ip || '' },
                       { header: 'MAC Address', accessor: (d) => Cell.code(d.mac), searchValue: (d) => d.mac },
                       { header: 'Status', accessor: (d) => Cell.status(d.status, d.status as 'online' | 'offline' | 'provisioning'), searchValue: (d) => d.status },
                       { header: 'Template', accessor: (d) => Cell.dash(d.config_template ? templateMap[d.config_template] || d.config_template : ''), searchValue: (d) => d.config_template || '' },
                     ] as TableColumn<Device>[]}
-                    getRowKey={(d) => d.mac}
+                    getRowKey={(d) => d.id}
                     tableId={`topo-${t.id}-devices`}
                     actions={[
                       {
@@ -337,24 +427,43 @@ export function TopologyManagement() {
                         loading: (d) => connectModal.loading && connectModal.item?.ip === d.ip,
                       },
                       {
-                        icon: (d) => loadingIcon(previewModal.item?.mac === d.mac && previewModal.loading, 'play_arrow'),
+                        icon: <Icon name="terminal" size={14} />,
+                        label: 'Commands',
+                        onClick: setCommandDevice,
+                        variant: 'secondary',
+                        tooltip: 'Run commands',
+                      },
+                      {
+                        icon: (d) => loadingIcon(previewModal.item?.id === d.id && previewModal.loading, 'play_arrow'),
                         label: 'Deploy config',
                         onClick: handlePreviewConfig,
                         variant: 'secondary',
                         tooltip: 'Preview & deploy config',
-                        loading: (d) => previewModal.item?.mac === d.mac && previewModal.loading,
+                        loading: (d) => previewModal.item?.id === d.id && previewModal.loading,
                         disabled: (d) => !d.config_template && !d.vendor,
+                      },
+                      {
+                        icon: <Icon name="swap_horiz" size={14} />,
+                        label: 'Swap device',
+                        onClick: setSwapDevice,
+                        variant: 'secondary',
+                        tooltip: 'Swap with another device',
                       },
                     ] as TableAction<Device>[]}
                     emptyMessage="No devices."
                   />
                 </div>
 
-                {/* Network Diagram */}
+                {/* Network Diagram (click to expand) */}
                 {spines.length > 0 && leaves.length > 0 && (
-                  <div style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: '8px' }}>
+                  <div
+                    style={{ flex: '0 0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}
+                    onClick={() => setDiagramTopology(t.id)}
+                    title="Click to enlarge"
+                  >
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       Fabric Links
+                      <Icon name="open_in_full" size={12} />
                     </div>
                     <TopologyDiagram spines={spines} leaves={leaves} />
                   </div>
@@ -410,9 +519,24 @@ export function TopologyManagement() {
     </LoadingState>
 
       <ConnectModal modal={connectModal} />
+      <CommandDrawer device={commandDevice} onClose={() => setCommandDevice(null)} />
 
       {previewModal.isOpen && previewModal.item && (
-        <Modal title={`Config Preview: ${previewModal.item.hostname}`} onClose={handleClosePreview} variant="extra-wide">
+        <Modal title={`Config Preview: ${previewModal.item.hostname}`} onClose={handleClosePreview} variant="extra-wide"
+          footer={
+            <DialogActions>
+              {previewModal.result && (!deployJob || deployJob.status === 'queued' || deployJob.status === 'running') && (
+                <Button onClick={handleDeployConfig} disabled={deploying}>
+                  {deploying ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
+                  {deploying ? 'Deploying...' : 'Deploy to Device'}
+                </Button>
+              )}
+              <Button variant="secondary" onClick={handleClosePreview}>
+                Close
+              </Button>
+            </DialogActions>
+          }
+        >
           {previewModal.loading ? (
             <ModalLoading message="Rendering configuration..." />
           ) : previewModal.error ? (
@@ -444,18 +568,6 @@ export function TopologyManagement() {
               )}
             </>
           ) : null}
-
-          <DialogActions>
-            {previewModal.result && (!deployJob || deployJob.status === 'queued' || deployJob.status === 'running') && (
-              <Button onClick={handleDeployConfig} disabled={deploying}>
-                {deploying ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
-                {deploying ? 'Deploying...' : 'Deploy to Device'}
-              </Button>
-            )}
-            <Button variant="secondary" onClick={handleClosePreview}>
-              Close
-            </Button>
-          </DialogActions>
         </Modal>
       )}
 
@@ -474,7 +586,7 @@ export function TopologyManagement() {
                 { header: 'MAC', accessor: (d) => Cell.code(d.mac), searchValue: (d) => d.mac },
                 { header: 'Vendor', accessor: (d) => d.vendor ? <VendorBadge vendor={d.vendor} /> : Cell.dash(''), searchValue: (d) => d.vendor || '' },
               ] as TableColumn<Device>[]}
-              getRowKey={(d) => d.mac}
+              getRowKey={(d) => d.id}
               tableId="assign-device"
               actions={[{
                 icon: () => 'add',
@@ -490,16 +602,76 @@ export function TopologyManagement() {
           )}
         </Modal>
       )}
+
+      {swapDevice && (
+        <Modal title={`Swap ${swapDevice.hostname || swapDevice.mac} (${swapDevice.topology_role})`} onClose={() => setSwapDevice(null)}>
+          <p style={{ margin: '0 0 12px', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+            Select a replacement device. The current device will be unassigned from the topology.
+          </p>
+          {unassignedDevices.length === 0 ? (
+            <div className="empty-state" style={{ padding: '16px' }}>
+              <p>No unassigned devices available.</p>
+            </div>
+          ) : (
+            <Table<Device>
+              data={unassignedDevices}
+              columns={[
+                { header: 'Hostname', accessor: (d) => <strong>{d.hostname || '—'}</strong>, searchValue: (d) => d.hostname || '' },
+                { header: 'IP Address', accessor: (d) => Cell.dash(d.ip), searchValue: (d) => d.ip || '' },
+                { header: 'MAC', accessor: (d) => Cell.code(d.mac), searchValue: (d) => d.mac },
+                { header: 'Vendor', accessor: (d) => d.vendor ? <VendorBadge vendor={d.vendor} /> : Cell.dash(''), searchValue: (d) => d.vendor || '' },
+                { header: 'Model', accessor: (d) => Cell.dash(d.model || ''), searchValue: (d) => d.model || '' },
+              ] as TableColumn<Device>[]}
+              getRowKey={(d) => d.id}
+              tableId="swap-device"
+              actions={[{
+                icon: <Icon name="swap_horiz" size={14} />,
+                label: 'Swap',
+                onClick: handleSwapDevice,
+                variant: 'primary',
+                tooltip: `Replace ${swapDevice.hostname || swapDevice.mac}`,
+              }] as TableAction<Device>[]}
+              searchable
+              searchPlaceholder="Search devices..."
+              emptyMessage="No unassigned devices."
+            />
+          )}
+        </Modal>
+      )}
+
+      {/* Diagram popout modal */}
+      {diagramTopology && (() => {
+        const topoDevices = devicesByTopology[diagramTopology] || [];
+        const popSpines = topoDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine');
+        const popLeaves = topoDevices.filter(d => d.topology_role === 'leaf');
+        const topoName = topologies.find(t => t.id === diagramTopology)?.name || diagramTopology;
+        return popSpines.length > 0 && popLeaves.length > 0 ? (
+          <Modal title={`${topoName} — Fabric Diagram`} onClose={() => setDiagramTopology(null)} variant="wide">
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '16px', overflow: 'auto' }}>
+              <TopologyDiagram spines={popSpines} leaves={popLeaves} scale={1.6} />
+            </div>
+          </Modal>
+        ) : null;
+      })()}
     </>
   );
 }
 
-/** SVG network diagram showing CLOS spine-leaf topology */
-function TopologyDiagram({ spines, leaves }: { spines: Device[]; leaves: Device[] }) {
-  const nodeW = 120;
+/** SVG network diagram showing CLOS spine-leaf topology with dual links */
+function TopologyDiagram({ spines, leaves, scale = 1 }: { spines: Device[]; leaves: Device[]; scale?: number }) {
+  const nodeW = 140;
   const nodeH = 48;
-  const hGap = 32;
-  const vGap = 100;
+  const hGap = 20;
+  const linksPerPair = 2;
+  const linkSpacing = 6;
+  const ifLabelH = 9; // height per interface label line
+  const ifBlockPad = 4; // padding between node and interface labels
+  // Total interfaces per device = leaves.length * linksPerPair (for spines), spines.length * linksPerPair (for leaves)
+  const spineIfCount = leaves.length * linksPerPair;
+  const leafIfCount = spines.length * linksPerPair;
+  const spineIfBlockH = spineIfCount * ifLabelH + ifBlockPad;
+  const leafIfBlockH = leafIfCount * ifLabelH + ifBlockPad;
+  const vGap = 40 + spineIfBlockH + leafIfBlockH; // space between nodes includes both label blocks
   const padX = 20;
   const padY = 20;
 
@@ -518,27 +690,53 @@ function TopologyDiagram({ spines, leaves }: { spines: Device[]; leaves: Device[
   const statusColor = (d: Device) =>
     d.status === 'online' ? 'var(--color-success, #22c55e)' : d.status === 'provisioning' ? 'var(--color-warning, #f59e0b)' : 'var(--color-text-muted, #888)';
 
-  return (
-    <svg width={totalW} height={totalH} style={{ backgroundColor: 'var(--color-bg-secondary)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
-      {/* Links: each spine connects to every leaf */}
-      {spinePositions.map((sp, si) =>
-        leafPositions.map((lp, li) => (
-          <line
-            key={`link-${si}-${li}`}
-            x1={sp.x + nodeW / 2} y1={sp.y + nodeH}
-            x2={lp.x + nodeW / 2} y2={lp.y}
-            stroke="var(--color-border, #444)"
-            strokeWidth={2}
-            opacity={0.6}
-          />
-        ))
-      )}
+  // Build interface names per device
+  const ifPrefix = (d: Device) => d.vendor === 'frr' ? 'eth' : 'Eth';
+  const ifIndex: Record<string, number> = {};
+  const nextIf = (d: Device) => {
+    ifIndex[d.id] = (ifIndex[d.id] || 0) + 1;
+    return `${ifPrefix(d)}${ifIndex[d.id]}`;
+  };
 
-      {/* Spine nodes */}
+  // Pre-compute link data and collect interface names + peer info per device
+  type IfLabel = { name: string; peer: string };
+  const spineIfs: IfLabel[][] = spines.map(() => []);
+  const leafIfs: IfLabel[][] = leaves.map(() => []);
+  const linkData: { si: number; li: number; link: number }[] = [];
+  for (let si = 0; si < spines.length; si++) {
+    for (let li = 0; li < leaves.length; li++) {
+      for (let link = 0; link < linksPerPair; link++) {
+        spineIfs[si].push({ name: nextIf(spines[si]), peer: leaves[li].hostname || leaves[li].mac.slice(-8) });
+        leafIfs[li].push({ name: nextIf(leaves[li]), peer: spines[si].hostname || spines[si].mac.slice(-8) });
+        linkData.push({ si, li, link });
+      }
+    }
+  }
+
+  return (
+    <svg width={totalW * scale} height={totalH * scale} viewBox={`0 0 ${totalW} ${totalH}`} style={{ backgroundColor: 'var(--color-bg-secondary)', borderRadius: '8px', border: '1px solid var(--color-border)' }}>
+      {/* Dual links */}
+      {linkData.map(({ si, li, link }) => {
+        const sp = spinePositions[si];
+        const lp = leafPositions[li];
+        const offset = (link - (linksPerPair - 1) / 2) * linkSpacing;
+        return (
+          <line
+            key={`link-${si}-${li}-${link}`}
+            x1={sp.x + nodeW / 2 + offset} y1={sp.y + nodeH}
+            x2={lp.x + nodeW / 2 + offset} y2={lp.y}
+            stroke="var(--color-border, #444)"
+            strokeWidth={1.5}
+            opacity={0.4}
+          />
+        );
+      })}
+
+      {/* Spine nodes + interface labels below */}
       {spines.map((d, i) => {
         const pos = spinePositions[i];
         return (
-          <g key={d.mac}>
+          <g key={d.id}>
             <rect x={pos.x} y={pos.y} width={nodeW} height={nodeH} rx={6} fill="var(--color-bg-primary, #1a1a2e)" stroke={statusColor(d)} strokeWidth={2} />
             <text x={pos.x + nodeW / 2} y={pos.y + 18} textAnchor="middle" fill="var(--color-text, #e0e0e0)" fontSize={12} fontWeight={600}>
               {d.hostname || d.mac.slice(-8)}
@@ -547,15 +745,29 @@ function TopologyDiagram({ spines, leaves }: { spines: Device[]; leaves: Device[
               {d.ip || '—'}
             </text>
             <circle cx={pos.x + 10} cy={pos.y + 10} r={4} fill={statusColor(d)} />
+            {/* Interface labels below spine */}
+            {spineIfs[i].map((ifl, j) => (
+              <text
+                key={j}
+                x={pos.x + nodeW / 2}
+                y={pos.y + nodeH + ifBlockPad + (j + 1) * ifLabelH}
+                textAnchor="middle"
+                fill="var(--color-text-muted, #888)"
+                fontSize={7}
+                opacity={0.7}
+              >
+                {ifl.name} → {ifl.peer}
+              </text>
+            ))}
           </g>
         );
       })}
 
-      {/* Leaf nodes */}
+      {/* Leaf nodes + interface labels above */}
       {leaves.map((d, i) => {
         const pos = leafPositions[i];
         return (
-          <g key={d.mac}>
+          <g key={d.id}>
             <rect x={pos.x} y={pos.y} width={nodeW} height={nodeH} rx={6} fill="var(--color-bg-primary, #1a1a2e)" stroke={statusColor(d)} strokeWidth={2} />
             <text x={pos.x + nodeW / 2} y={pos.y + 18} textAnchor="middle" fill="var(--color-text, #e0e0e0)" fontSize={12} fontWeight={600}>
               {d.hostname || d.mac.slice(-8)}
@@ -564,6 +776,20 @@ function TopologyDiagram({ spines, leaves }: { spines: Device[]; leaves: Device[
               {d.ip || '—'}
             </text>
             <circle cx={pos.x + 10} cy={pos.y + 10} r={4} fill={statusColor(d)} />
+            {/* Interface labels above leaf */}
+            {leafIfs[i].map((ifl, j) => (
+              <text
+                key={j}
+                x={pos.x + nodeW / 2}
+                y={pos.y - ifBlockPad - (leafIfs[i].length - 1 - j) * ifLabelH}
+                textAnchor="middle"
+                fill="var(--color-text-muted, #888)"
+                fontSize={7}
+                opacity={0.7}
+              >
+                {ifl.name} → {ifl.peer}
+              </text>
+            ))}
           </g>
         );
       })}

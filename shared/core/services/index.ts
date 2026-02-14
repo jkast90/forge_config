@@ -9,6 +9,10 @@ import { DiscoveryService } from './discovery';
 import { TestContainersService } from './testContainers';
 import { NetBoxService } from './netbox';
 import { TopologyService } from './topologies';
+import { DeviceVariableService } from './deviceVariables';
+import { GroupService } from './groups';
+import { IpamService } from './ipam';
+import { DeviceModelService } from './deviceModels';
 import { AuthService } from './auth';
 
 export { BaseService, configureServices, getServiceConfig, getInflightCount, onInflightChange, getApiHistory, clearApiHistory, onApiHistoryChange, type ServiceConfig, type ApiHistoryEntry } from './base';
@@ -27,6 +31,10 @@ export { TestContainersService } from './testContainers';
 export { NetBoxService } from './netbox';
 export type { NetBoxConfig, NetBoxStatus, NetBoxSyncResult, NetBoxManufacturer, NetBoxSite, NetBoxDeviceRole, NetBoxDevice, NetBoxVendorSyncResponse } from './netbox';
 export { TopologyService } from './topologies';
+export { DeviceVariableService } from './deviceVariables';
+export { GroupService } from './groups';
+export { IpamService } from './ipam';
+export { DeviceModelService } from './deviceModels';
 export { WebSocketService, getWebSocketService } from './websocket';
 export type { WebSocketEvent, WebSocketEventType, DeviceDiscoveredPayload, ConfigPulledPayload, WebSocketEventHandler } from './websocket';
 export { trackEvent, getTelemetryEvents, clearTelemetryEvents, onTelemetryChange, initTelemetry, type TelemetryEvent, type TelemetryEventType } from './telemetry';
@@ -43,6 +51,10 @@ export interface Services {
   testContainers: TestContainersService;
   netbox: NetBoxService;
   topologies: TopologyService;
+  deviceVariables: DeviceVariableService;
+  groups: GroupService;
+  ipam: IpamService;
+  deviceModels: DeviceModelService;
 }
 
 // Singleton services that use global config
@@ -61,6 +73,10 @@ export function getServices(): Services {
       testContainers: new TestContainersService(),
       netbox: new NetBoxService(),
       topologies: new TopologyService(),
+      deviceVariables: new DeviceVariableService(),
+      groups: new GroupService(),
+      ipam: new IpamService(),
+      deviceModels: new DeviceModelService(),
     };
   }
   return services;

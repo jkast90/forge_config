@@ -10,6 +10,10 @@ import backupsReducer from './slices/backupsSlice';
 import vendorActionsReducer from './slices/vendorActionsSlice';
 import jobsReducer from './slices/jobsSlice';
 import topologiesReducer from './slices/topologiesSlice';
+import deviceVariablesReducer from './slices/deviceVariablesSlice';
+import groupsReducer from './slices/groupsSlice';
+import ipamReducer from './slices/ipamSlice';
+import deviceModelsReducer from './slices/deviceModelsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -24,6 +28,10 @@ export const store = configureStore({
     vendorActions: vendorActionsReducer,
     jobs: jobsReducer,
     topologies: topologiesReducer,
+    deviceVariables: deviceVariablesReducer,
+    groups: groupsReducer,
+    ipam: ipamReducer,
+    deviceModels: deviceModelsReducer,
   },
 });
 

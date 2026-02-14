@@ -10,6 +10,7 @@ import {
   deleteVendorAction as deleteVendorActionThunk,
 } from '../store/slices/vendorActionsSlice';
 import { addNotification } from '../services/notifications';
+import { getErrorMessage } from '../utils/errors';
 
 export interface UseVendorActionsOptions {
   autoRefresh?: boolean;
@@ -62,7 +63,7 @@ export function useVendorActions(options: UseVendorActionsOptions = {}): UseVend
       dispatch(fetchVendorActions());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to add action: ${err}`);
+      addNotification('error', `Failed to add action: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -74,7 +75,7 @@ export function useVendorActions(options: UseVendorActionsOptions = {}): UseVend
       dispatch(fetchVendorActions());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to update action: ${err}`);
+      addNotification('error', `Failed to update action: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -86,7 +87,7 @@ export function useVendorActions(options: UseVendorActionsOptions = {}): UseVend
       dispatch(fetchVendorActions());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to delete action: ${err}`);
+      addNotification('error', `Failed to delete action: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);

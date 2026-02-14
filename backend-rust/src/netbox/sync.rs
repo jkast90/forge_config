@@ -200,12 +200,13 @@ pub async fn sync_pull(store: &Store, nb: &NetBoxClient) -> Result<SyncResult> {
             .unwrap_or("offline");
 
         // Check if device already exists in local DB
-        match store.get_device(&mac).await {
+        match store.get_device_by_mac(&mac).await {
             Ok(Some(_)) => {
                 updated += 1; // Already exists, skip
             }
             Ok(None) => {
                 let req = CreateDeviceRequest {
+                    id: None,
                     mac: mac.clone(),
                     ip,
                     hostname: name,

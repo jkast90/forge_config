@@ -5,8 +5,10 @@ import { Button } from './Button';
 import { Card } from './Card';
 import { ConnectModal, useConnectModal } from './ConnectModal';
 import { DialogActions } from './DialogActions';
+import { FormDialog } from './FormDialog';
 import { InfoSection } from './InfoSection';
 import { Modal } from './Modal';
+import { SelectField } from './SelectField';
 import { ModalLoading } from './LoadingState';
 import { ResultItem } from './ResultItem';
 import { Table, Cell } from './Table';
@@ -17,8 +19,8 @@ import { Icon, EditIcon, DownloadIcon, ClockIcon, TrashIcon, SpinnerIcon, loadin
 
 interface Props {
   onEdit: (device: Device) => void;
-  onDelete: (mac: string) => Promise<boolean>;
-  onBackup: (mac: string) => Promise<boolean>;
+  onDelete: (id: string) => Promise<boolean>;
+  onBackup: (id: string) => Promise<boolean>;
   onRefresh?: () => void;
 }
 
@@ -74,8 +76,8 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
   // Restore modal state from URL hash
   useEffect(() => {
     if (devices.length === 0) return;
-    const mac = modalRoute.getParam('mac');
-    const device = mac ? devices.find(d => d.mac === mac) : undefined;
+    const id = modalRoute.getParam('id');
+    const device = id ? devices.find(d => d.id === id) : undefined;
     if (!device) return;
 
     if (modalRoute.isModal('config') && !configModal.isOpen) {
@@ -92,7 +94,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
   const handleViewConfig = async (device: Device) => {
     configModal.open(device);
-    modalRoute.openModal('config', { mac: device.mac });
+    modalRoute.openModal('config', { id: device.id });
     setConfigTab('tftp');
     setSelectedBackup(null);
     setBackupContent(null);
@@ -100,8 +102,8 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
     const result = await configModal.execute(async () => {
       const services = getServices();
       const [configRes] = await Promise.all([
-        services.devices.getConfig(device.mac),
-        loadBackups(device.mac),
+        services.devices.getConfig(device.id),
+        loadBackups(device.id),
       ]);
       return configRes;
     });
@@ -147,7 +149,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
   const handleShowNetbox = async (device: Device) => {
     netboxModal.open(device);
-    modalRoute.openModal('netbox', { mac: device.mac });
+    modalRoute.openModal('netbox', { id: device.id });
     setNetboxSyncResult(null);
     const result = await netboxModal.execute(async () => {
       const services = getServices();
@@ -188,11 +190,11 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
   const handlePreviewConfig = async (device: Device) => {
     previewModal.open(device);
-    modalRoute.openModal('preview', { mac: device.mac });
+    modalRoute.openModal('preview', { id: device.id });
     setDeployJob(null);
     await previewModal.execute(async () => {
       const services = getServices();
-      return services.devices.previewConfig(device.mac);
+      return services.devices.previewConfig(device.id);
     });
   };
 
@@ -203,14 +205,14 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
     setDeployJob(null);
     try {
       const services = getServices();
-      const job = await services.devices.deployConfig(previewModal.item.mac);
+      const job = await services.devices.deployConfig(previewModal.item.id);
       setDeployJob(job);
       // Job result will arrive via WebSocket
     } catch (err) {
       setDeployJob({
         id: `error-${Date.now()}`,
         job_type: 'deploy',
-        device_mac: previewModal.item.mac,
+        device_id: previewModal.item.id,
         command: '',
         status: 'failed',
         output: null,
@@ -233,7 +235,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
   const handleAssignTopology = async () => {
     if (!topoAssign) return;
     try {
-      await getServices().devices.update(topoAssign.device.mac, {
+      await getServices().devices.update(topoAssign.device.id, {
         ...topoAssign.device,
         topology_id: topoAssign.topologyId,
         topology_role: topoAssign.role,
@@ -277,33 +279,33 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
     {
       icon: <DownloadIcon size={14} />,
       label: 'Backup',
-      onClick: (d) => onBackup(d.mac),
+      onClick: (d) => onBackup(d.id),
       tooltip: 'Trigger backup',
     },
     {
-      icon: (d) => loadingIcon(configModal.item?.mac === d.mac && configModal.loading, 'description'),
+      icon: (d) => loadingIcon(configModal.item?.id === d.id && configModal.loading, 'description'),
       label: 'View configs',
       onClick: handleViewConfig,
       variant: 'secondary',
       tooltip: 'View configs',
-      loading: (d) => configModal.item?.mac === d.mac && configModal.loading,
+      loading: (d) => configModal.item?.id === d.id && configModal.loading,
     },
     {
-      icon: (d) => loadingIcon(previewModal.item?.mac === d.mac && previewModal.loading, 'play_arrow'),
+      icon: (d) => loadingIcon(previewModal.item?.id === d.id && previewModal.loading, 'play_arrow'),
       label: 'Preview config',
       onClick: handlePreviewConfig,
       variant: 'secondary',
       tooltip: 'Preview & deploy config',
-      loading: (d) => previewModal.item?.mac === d.mac && previewModal.loading,
+      loading: (d) => previewModal.item?.id === d.id && previewModal.loading,
       disabled: (d) => !d.config_template && !d.vendor,
     },
     {
-      icon: (d) => loadingIcon(netboxModal.item?.mac === d.mac && netboxModal.loading, 'cloud'),
+      icon: (d) => loadingIcon(netboxModal.item?.id === d.id && netboxModal.loading, 'cloud'),
       label: 'NetBox',
       onClick: handleShowNetbox,
       variant: 'secondary',
       tooltip: 'NetBox info',
-      loading: (d) => netboxModal.item?.mac === d.mac && netboxModal.loading,
+      loading: (d) => netboxModal.item?.id === d.id && netboxModal.loading,
     },
     {
       icon: <Icon name="terminal" size={14} />,
@@ -324,7 +326,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
       label: 'Delete',
       onClick: (d) => {
         if (confirm(`Delete device ${d.hostname}?`)) {
-          onDelete(d.mac);
+          onDelete(d.id);
         }
       },
       variant: 'danger',
@@ -352,7 +354,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
         <Table
           data={devices}
           columns={columns}
-          getRowKey={(d) => d.mac}
+          getRowKey={(d) => d.id}
           actions={actions}
           tableId="devices"
           searchable
@@ -365,7 +367,15 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
       <ConnectModal modal={{ ...connectModal, close: () => { connectModal.close(); modalRoute.closeModal(); } }} />
 
       {configModal.isOpen && configModal.item && (
-        <Modal title={`Configs: ${configModal.item.hostname}`} onClose={handleCloseConfig} variant="extra-wide">
+        <Modal title={`Configs: ${configModal.item.hostname}`} onClose={handleCloseConfig} variant="extra-wide"
+          footer={
+            <DialogActions>
+              <Button variant="secondary" onClick={handleCloseConfig}>
+                Close
+              </Button>
+            </DialogActions>
+          }
+        >
           {configModal.loading ? (
             <ModalLoading message="Loading configurations..." />
           ) : (
@@ -467,17 +477,25 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
               )}
             </>
           )}
-
-          <DialogActions>
-            <Button variant="secondary" onClick={handleCloseConfig}>
-              Close
-            </Button>
-          </DialogActions>
         </Modal>
       )}
 
       {previewModal.isOpen && previewModal.item && (
-        <Modal title={`Config Preview: ${previewModal.item.hostname}`} onClose={handleClosePreview} variant="extra-wide">
+        <Modal title={`Config Preview: ${previewModal.item.hostname}`} onClose={handleClosePreview} variant="extra-wide"
+          footer={
+            <DialogActions>
+              {previewModal.result && (!deployJob || deployJob.status === 'queued' || deployJob.status === 'running') && (
+                <Button onClick={handleDeployConfig} disabled={deploying}>
+                  {deploying ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
+                  {deploying ? 'Deploying...' : 'Deploy to Device'}
+                </Button>
+              )}
+              <Button variant="secondary" onClick={handleClosePreview}>
+                Close
+              </Button>
+            </DialogActions>
+          }
+        >
           {previewModal.loading ? (
             <ModalLoading message="Rendering configuration..." />
           ) : previewModal.error ? (
@@ -512,23 +530,25 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
               )}
             </>
           ) : null}
-
-          <DialogActions>
-            {previewModal.result && (!deployJob || deployJob.status === 'queued' || deployJob.status === 'running') && (
-              <Button onClick={handleDeployConfig} disabled={deploying}>
-                {deploying ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
-                {deploying ? 'Deploying...' : 'Deploy to Device'}
-              </Button>
-            )}
-            <Button variant="secondary" onClick={handleClosePreview}>
-              Close
-            </Button>
-          </DialogActions>
         </Modal>
       )}
 
       {netboxModal.isOpen && netboxModal.item && (
-        <Modal title={`NetBox: ${netboxModal.item.hostname}`} onClose={handleCloseNetbox}>
+        <Modal title={`NetBox: ${netboxModal.item.hostname}`} onClose={handleCloseNetbox}
+          footer={
+            <DialogActions>
+              {netboxModal.result?.connected && (
+                <Button onClick={handlePushToNetbox} disabled={netboxModal.loading}>
+                  {netboxModal.loading ? <SpinnerIcon size={14} /> : <Icon name="cloud_upload" size={14} />}
+                  Push to NetBox
+                </Button>
+              )}
+              <Button variant="secondary" onClick={handleCloseNetbox}>
+                Close
+              </Button>
+            </DialogActions>
+          }
+        >
           {netboxModal.loading && !netboxModal.result ? (
             <ModalLoading message="Checking NetBox connection..." />
           ) : netboxModal.result ? (
@@ -573,60 +593,37 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
               </div>
             </div>
           ) : null}
-
-          <DialogActions>
-            {netboxModal.result?.connected && (
-              <Button onClick={handlePushToNetbox} disabled={netboxModal.loading}>
-                {netboxModal.loading ? <SpinnerIcon size={14} /> : <Icon name="cloud_upload" size={14} />}
-                Push to NetBox
-              </Button>
-            )}
-            <Button variant="secondary" onClick={handleCloseNetbox}>
-              Close
-            </Button>
-          </DialogActions>
         </Modal>
       )}
 
       <CommandDrawer device={commandDevice} onClose={() => setCommandDevice(null)} />
 
       {topoAssign && (
-        <Modal title={`Assign ${topoAssign.device.hostname} to Topology`} onClose={() => setTopoAssign(null)}>
-          <div className="form-group">
-            <label htmlFor="topo-select">Topology</label>
-            <select
-              id="topo-select"
+        <FormDialog isOpen={true} onClose={() => setTopoAssign(null)} title={`Assign ${topoAssign.device.hostname} to Topology`} onSubmit={(e) => { e.preventDefault(); handleAssignTopology(); }} submitText="Assign">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <SelectField
+              label="Topology"
+              name="topo-select"
               value={topoAssign.topologyId}
               onChange={(e) => setTopoAssign({ ...topoAssign, topologyId: e.target.value })}
-            >
-              <option value="">— Select topology —</option>
-              {topologies.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label htmlFor="role-select">Role</label>
-            <select
-              id="role-select"
+              options={[
+                { value: '', label: '— Select topology —' },
+                ...topologies.map((t) => ({ value: t.id, label: t.name })),
+              ]}
+            />
+            <SelectField
+              label="Role"
+              name="role-select"
               value={topoAssign.role}
               onChange={(e) => setTopoAssign({ ...topoAssign, role: e.target.value as TopologyRole })}
-            >
-              <option value="super-spine">Super-Spine</option>
-              <option value="spine">Spine</option>
-              <option value="leaf">Leaf</option>
-            </select>
+              options={[
+                { value: 'super-spine', label: 'Super-Spine' },
+                { value: 'spine', label: 'Spine' },
+                { value: 'leaf', label: 'Leaf' },
+              ]}
+            />
           </div>
-          <DialogActions>
-            <Button onClick={handleAssignTopology} disabled={!topoAssign.topologyId}>
-              <Icon name="account_tree" size={14} />
-              Assign
-            </Button>
-            <Button variant="secondary" onClick={() => setTopoAssign(null)}>
-              Cancel
-            </Button>
-          </DialogActions>
-        </Modal>
+        </FormDialog>
       )}
     </>
   );

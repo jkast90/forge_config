@@ -32,7 +32,7 @@ pub async fn serve_config(
                 let mac = normalize_mac(&mac_part);
 
                 // Get device info if available
-                if let Ok(Some(device)) = state.store.get_device(&mac).await {
+                if let Ok(Some(device)) = state.store.get_device_by_mac(&mac).await {
                     // Broadcast config pulled event via WebSocket
                     if let Some(ws_hub) = &state.ws_hub {
                         ws_hub

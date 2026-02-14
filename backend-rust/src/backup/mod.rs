@@ -34,28 +34,28 @@ impl BackupService {
         service
     }
 
-    /// Queue a backup for a device
-    pub async fn queue_backup(&self, mac: String) {
-        if let Err(e) = self.pending_tx.send(mac.clone()).await {
-            tracing::warn!("Failed to queue backup for {}: {}", mac, e);
+    /// Queue a backup for a device by ID
+    pub async fn queue_backup(&self, device_id: String) {
+        if let Err(e) = self.pending_tx.send(device_id.clone()).await {
+            tracing::warn!("Failed to queue backup for {}: {}", device_id, e);
         }
     }
 
-    /// Trigger an immediate backup for a device
-    pub async fn trigger_backup(&self, mac: String) {
-        self.queue_backup(mac).await;
+    /// Trigger an immediate backup for a device by ID
+    pub async fn trigger_backup(&self, device_id: String) {
+        self.queue_backup(device_id).await;
     }
 
     /// Handle a new DHCP lease event
     pub async fn on_new_lease(&self, lease: Lease) {
         // Check if this MAC is registered
-        let device = match self.store.get_device(&lease.mac).await {
+        let device = match self.store.get_device_by_mac(&lease.mac).await {
             Ok(Some(device)) => device,
             _ => return,
         };
 
         // Update device status
-        if let Err(e) = self.store.update_device_status(&lease.mac, crate::models::device_status::PROVISIONING).await {
+        if let Err(e) = self.store.update_device_status(&device.id, crate::models::device_status::PROVISIONING).await {
             tracing::warn!("Failed to update device status: {}", e);
         }
 
@@ -75,31 +75,31 @@ impl BackupService {
             backup_delay
         );
 
-        // Schedule backup after delay
-        let mac = lease.mac.clone();
+        // Schedule backup after delay using device ID
+        let device_id = device.id.clone();
         let tx = self.pending_tx.clone();
         tokio::spawn(async move {
             sleep(Duration::from_secs(backup_delay as u64)).await;
-            if let Err(e) = tx.send(mac).await {
+            if let Err(e) = tx.send(device_id).await {
                 tracing::warn!("Failed to queue scheduled backup: {}", e);
             }
         });
     }
 
     async fn worker(&self, mut pending_rx: mpsc::Receiver<String>) {
-        while let Some(mac) = pending_rx.recv().await {
-            if let Err(e) = self.perform_backup(&mac).await {
-                tracing::error!("Backup failed for {}: {}", mac, e);
+        while let Some(device_id) = pending_rx.recv().await {
+            if let Err(e) = self.perform_backup(&device_id).await {
+                tracing::error!("Backup failed for {}: {}", device_id, e);
             }
         }
     }
 
-    async fn perform_backup(&self, mac: &str) -> Result<()> {
+    async fn perform_backup(&self, device_id: &str) -> Result<()> {
         let device = self
             .store
-            .get_device(mac)
+            .get_device(device_id)
             .await?
-            .ok_or_else(|| crate::db::NotFoundError::new("Device", mac))?;
+            .ok_or_else(|| crate::db::NotFoundError::new("Device", device_id))?;
 
         let settings = self.store.get_settings().await?;
 
@@ -158,24 +158,24 @@ impl BackupService {
 
         if let Some(e) = last_error {
             let err_msg = format!("SSH failed: {}", e);
-            self.store.update_device_status(mac, crate::models::device_status::OFFLINE).await?;
-            self.store.update_device_error(mac, &err_msg).await?;
+            self.store.update_device_status(device_id, crate::models::device_status::OFFLINE).await?;
+            self.store.update_device_error(device_id, &err_msg).await?;
             return Err(anyhow::anyhow!("All SSH attempts failed: {}", e));
         }
 
         // Save backup
-        self.save_backup(&device.hostname, mac, &config_output).await?;
+        self.save_backup(&device.hostname, device_id, &config_output).await?;
 
         // Update device status
-        self.store.update_device_status(mac, crate::models::device_status::ONLINE).await?;
-        self.store.update_device_backup_time(mac).await?;
-        self.store.clear_device_error(mac).await?;
+        self.store.update_device_status(device_id, crate::models::device_status::ONLINE).await?;
+        self.store.update_device_backup_time(device_id).await?;
+        self.store.clear_device_error(device_id).await?;
 
         tracing::info!("Backup completed for {}", device.hostname);
         Ok(())
     }
 
-    async fn save_backup(&self, hostname: &str, mac: &str, config: &str) -> Result<()> {
+    async fn save_backup(&self, hostname: &str, device_id: &str, config: &str) -> Result<()> {
         // Ensure backup directory exists
         tokio::fs::create_dir_all(&self.backup_dir).await?;
 
@@ -190,7 +190,7 @@ impl BackupService {
 
         // Record in database
         let size = config.len() as i64;
-        self.store.create_backup(mac, &filename, size).await?;
+        self.store.create_backup(device_id, &filename, size).await?;
 
         Ok(())
     }

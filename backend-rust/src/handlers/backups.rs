@@ -5,7 +5,6 @@ use axum::{
 };
 use std::sync::Arc;
 
-use crate::utils::normalize_mac;
 use crate::AppState;
 
 use super::ApiError;
@@ -14,18 +13,16 @@ use super::ApiError;
 pub async fn list_backups(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<Json<Vec<crate::models::Backup>>, ApiError> {
-    let mac = normalize_mac(&mac);
-
     // Verify device exists
     state
         .store
-        .get_device(&mac)
+        .get_device(&id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
-    let backups = state.store.list_backups(&mac).await?;
+    let backups = state.store.list_backups(&id).await?;
     Ok(Json(backups))
 }
 
@@ -50,7 +47,7 @@ pub async fn get_backup(
 
     Ok(Json(BackupWithContent {
         id: backup.id,
-        device_mac: backup.device_mac,
+        device_id: backup.device_id,
         filename: backup.filename,
         size: backup.size,
         created_at: backup.created_at,
@@ -64,20 +61,18 @@ pub async fn get_backup(
 pub async fn trigger_backup(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(mac): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
-    let mac = normalize_mac(&mac);
-
     // Verify device exists
     let _device = state
         .store
-        .get_device(&mac)
+        .get_device(&id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
     // Queue backup via backup service
     if let Some(backup_svc) = &state.backup_service {
-        backup_svc.trigger_backup(mac.clone()).await;
+        backup_svc.trigger_backup(id.clone()).await;
     }
 
     Ok((StatusCode::ACCEPTED, Json(serde_json::json!({
@@ -89,7 +84,7 @@ pub async fn trigger_backup(
 #[derive(serde::Serialize)]
 pub struct BackupWithContent {
     pub id: i64,
-    pub device_mac: String,
+    pub device_id: String,
     pub filename: String,
     pub size: i64,
     pub created_at: chrono::DateTime<chrono::Utc>,

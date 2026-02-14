@@ -62,8 +62,8 @@ export function Jobs() {
     },
     {
       header: 'Device',
-      accessor: (job) => Cell.code(job.device_mac),
-      searchValue: (job) => job.device_mac,
+      accessor: (job) => Cell.code(job.device_id),
+      searchValue: (job) => job.device_id,
     },
     {
       header: 'Command',
@@ -135,7 +135,7 @@ export function Jobs() {
               </div>
               <div className="info-item">
                 <label>Device</label>
-                <code>{selectedJob.device_mac}</code>
+                <code>{selectedJob.device_id}</code>
               </div>
               <div className="info-item">
                 <label>Job ID</label>

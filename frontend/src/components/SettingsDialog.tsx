@@ -5,6 +5,8 @@ import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { LayoutSettings } from './LayoutSettings';
 import { SelectField } from './SelectField';
+import { ValidatedInput } from './ValidatedInput';
+import { validators } from '@core';
 import { Icon } from './Icon';
 
 interface Props {
@@ -147,42 +149,47 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
               DHCP Settings
             </h3>
             <div className="form-row">
-              <FormField
+              <ValidatedInput
                 label="Range Start"
                 name="dhcp_range_start"
                 type="text"
                 value={formData.dhcp_range_start}
                 onChange={handleChange}
+                validate={validators.ipv4}
               />
-              <FormField
+              <ValidatedInput
                 label="Range End"
                 name="dhcp_range_end"
                 type="text"
                 value={formData.dhcp_range_end}
                 onChange={handleChange}
+                validate={validators.ipv4}
               />
-              <FormField
+              <ValidatedInput
                 label="Subnet Mask"
                 name="dhcp_subnet"
                 type="text"
                 value={formData.dhcp_subnet}
                 onChange={handleChange}
+                validate={validators.ipv4}
               />
             </div>
             <div className="form-row">
-              <FormField
+              <ValidatedInput
                 label="Gateway"
                 name="dhcp_gateway"
                 type="text"
                 value={formData.dhcp_gateway}
                 onChange={handleChange}
+                validate={validators.ipv4}
               />
-              <FormField
+              <ValidatedInput
                 label="TFTP Server IP"
                 name="tftp_server_ip"
                 type="text"
                 value={formData.tftp_server_ip}
                 onChange={handleChange}
+                validate={validators.ipv4}
               />
             </div>
           </div>

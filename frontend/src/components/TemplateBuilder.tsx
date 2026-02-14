@@ -123,13 +123,13 @@ export function TemplateBuilder() {
   // Build device options for preview selection
   const deviceOptions = useMemo(() => [
     { value: '', label: 'Sample Device' },
-    ...devices.map((d) => ({ value: d.mac, label: `${d.hostname} (${d.ip})` })),
+    ...devices.map((d) => ({ value: d.id, label: `${d.hostname} (${d.ip})` })),
   ], [devices]);
 
   // Get selected device for preview
   const previewDevice = useMemo(() => {
     if (!previewDeviceMAC) return null;
-    return devices.find((d) => d.mac === previewDeviceMAC) || null;
+    return devices.find((d) => d.id === previewDeviceMAC) || null;
   }, [devices, previewDeviceMAC]);
 
   // Filter templates by vendor (client-side for immediate UI response)
@@ -336,6 +336,7 @@ export function TemplateBuilder() {
           data={filteredTemplates}
           columns={templateColumns}
           getRowKey={(t) => t.id}
+          tableId="templates"
           actions={templateActions}
           renderExpandedRow={(t) => (
             <ConfigViewer

@@ -14,9 +14,9 @@ const initialState: BackupsState = {
   error: null,
 };
 
-export const fetchBackups = createAsyncThunk('backups/fetch', async (mac: string) => {
-  const data = await getServices().devices.listBackups(mac);
-  return { mac, backups: data || [] };
+export const fetchBackups = createAsyncThunk('backups/fetch', async (deviceId: string) => {
+  const data = await getServices().devices.listBackups(deviceId);
+  return { deviceId, backups: data || [] };
 });
 
 const backupsSlice = createSlice({
@@ -35,7 +35,7 @@ const backupsSlice = createSlice({
         state.error = null;
       })
       .addCase(fetchBackups.fulfilled, (state, action) => {
-        state.byDevice[action.payload.mac] = action.payload.backups;
+        state.byDevice[action.payload.deviceId] = action.payload.backups;
         state.loading = false;
       })
       .addCase(fetchBackups.rejected, (state, action) => {

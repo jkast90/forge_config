@@ -4,6 +4,8 @@ import { useForm, useTemplates, useVendors, useTopologies, validateDeviceForm, l
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { SelectField } from './SelectField';
+import { ValidatedInput } from './ValidatedInput';
+import { validators } from '@core';
 
 interface Props {
   isOpen: boolean;
@@ -176,7 +178,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
     >
       <div className="form-columns">
         <div className="form-column">
-          <FormField
+          <ValidatedInput
             label="MAC Address *"
             name="mac"
             type="text"
@@ -184,10 +186,10 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
             onChange={onInputChange}
             placeholder="aa:bb:cc:dd:ee:ff"
             required
-            disabled={isEditing}
+            validate={validators.mac}
             error={errors.mac}
           />
-          <FormField
+          <ValidatedInput
             label="IP Address *"
             name="ip"
             type="text"
@@ -195,9 +197,10 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
             onChange={onInputChange}
             placeholder="192.168.1.100"
             required
+            validate={validators.ip}
             error={errors.ip}
           />
-          <FormField
+          <ValidatedInput
             label="Hostname *"
             name="hostname"
             type="text"
@@ -205,6 +208,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
             onChange={onInputChange}
             placeholder="switch-01"
             required
+            validate={validators.hostname}
             error={errors.hostname}
           />
           <SelectField

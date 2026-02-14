@@ -64,7 +64,22 @@ export function ConnectModal({ modal }: ConnectModalProps) {
     : `Connection Test: ${modal.item.ip}`;
 
   return (
-    <Modal title={title} onClose={modal.close}>
+    <Modal title={title} onClose={modal.close}
+      footer={
+        <DialogActions>
+          <Button
+            variant="primary"
+            onClick={() => modal.open(modal.item!)}
+            disabled={modal.loading}
+          >
+            Retest
+          </Button>
+          <Button variant="secondary" onClick={modal.close}>
+            Close
+          </Button>
+        </DialogActions>
+      }
+    >
       {modal.loading ? (
         <ModalLoading message={`Testing connectivity to ${modal.item.ip}...`} />
       ) : modal.result ? (
@@ -116,19 +131,6 @@ export function ConnectModal({ modal }: ConnectModalProps) {
           )}
         </div>
       ) : null}
-
-      <DialogActions>
-        <Button
-          variant="primary"
-          onClick={() => modal.open(modal.item!)}
-          disabled={modal.loading}
-        >
-          Retest
-        </Button>
-        <Button variant="secondary" onClick={modal.close}>
-          Close
-        </Button>
-      </DialogActions>
     </Modal>
   );
 }

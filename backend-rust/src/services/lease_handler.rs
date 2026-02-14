@@ -43,7 +43,7 @@ pub fn on_lease_event(
             .await;
 
         // Discovery log callback
-        let event_type = if store.get_device(&lease.mac).await.ok().flatten().is_some() {
+        let event_type = if store.get_device_by_mac(&lease.mac).await.ok().flatten().is_some() {
             discovery_event::LEASE_RENEWED
         } else {
             discovery_event::DISCOVERED

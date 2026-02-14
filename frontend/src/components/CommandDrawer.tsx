@@ -56,14 +56,14 @@ export function CommandDrawer({ device, onClose }: Props) {
   useEffect(() => {
     setHistory([]);
     setCustomCommand('');
-  }, [device?.mac]);
+  }, [device?.id]);
 
   const runCommand = async (label: string, command: string) => {
     if (!device) return;
 
     try {
       const services = getServices();
-      const job = await services.devices.exec(device.mac, command);
+      const job = await services.devices.exec(device.id, command);
       const entry: CommandEntry = {
         jobId: job.id,
         label,

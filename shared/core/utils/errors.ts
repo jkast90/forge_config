@@ -14,6 +14,15 @@ export function getErrorMessage(
   if (typeof error === 'string') {
     return error;
   }
+  // Handle plain objects with a message property (e.g. Redux SerializedError)
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof (error as Record<string, unknown>).message === 'string'
+  ) {
+    return (error as Record<string, unknown>).message as string;
+  }
   return fallback;
 }
 

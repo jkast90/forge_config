@@ -11,6 +11,7 @@ import {
   triggerBackup as triggerBackupThunk,
 } from '../store/slices/devicesSlice';
 import { addNotification } from '../services/notifications';
+import { getErrorMessage } from '../utils/errors';
 
 export interface UseDevicesOptions {
   autoRefresh?: boolean;
@@ -23,9 +24,9 @@ export interface UseDevicesReturn {
   error: string | null;
   refresh: () => Promise<void>;
   createDevice: (device: Partial<Device>) => Promise<boolean>;
-  updateDevice: (mac: string, device: Partial<Device>) => Promise<boolean>;
-  deleteDevice: (mac: string) => Promise<boolean>;
-  triggerBackup: (mac: string) => Promise<boolean>;
+  updateDevice: (id: string, device: Partial<Device>) => Promise<boolean>;
+  deleteDevice: (id: string) => Promise<boolean>;
+  triggerBackup: (id: string) => Promise<boolean>;
 }
 
 export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
@@ -56,42 +57,42 @@ export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
       dispatch(fetchDevices());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to add device: ${err}`);
+      addNotification('error', `Failed to add device: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
 
-  const updateDevice = useCallback(async (mac: string, data: Partial<Device>): Promise<boolean> => {
+  const updateDevice = useCallback(async (id: string, data: Partial<Device>): Promise<boolean> => {
     try {
-      await dispatch(updateDeviceThunk({ mac, data })).unwrap();
+      await dispatch(updateDeviceThunk({ id, data })).unwrap();
       addNotification('success', 'Device updated successfully');
       dispatch(fetchDevices());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to update device: ${err}`);
+      addNotification('error', `Failed to update device: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
 
-  const deleteDevice = useCallback(async (mac: string): Promise<boolean> => {
+  const deleteDevice = useCallback(async (id: string): Promise<boolean> => {
     try {
-      await dispatch(deleteDeviceThunk(mac)).unwrap();
+      await dispatch(deleteDeviceThunk(id)).unwrap();
       addNotification('success', 'Device deleted successfully');
       dispatch(fetchDevices());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to delete device: ${err}`);
+      addNotification('error', `Failed to delete device: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
 
-  const triggerBackupFn = useCallback(async (mac: string): Promise<boolean> => {
+  const triggerBackupFn = useCallback(async (id: string): Promise<boolean> => {
     try {
-      await dispatch(triggerBackupThunk(mac)).unwrap();
+      await dispatch(triggerBackupThunk(id)).unwrap();
       addNotification('success', 'Backup initiated');
       return true;
     } catch (err) {
-      addNotification('error', `Failed to trigger backup: ${err}`);
+      addNotification('error', `Failed to trigger backup: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);

@@ -1,6 +1,10 @@
 pub mod auth;
 pub mod benchmarks;
+pub mod device_models;
 pub mod devices;
+pub mod device_variables;
+pub mod groups;
+pub mod ipam;
 pub mod jobs;
 pub mod settings;
 pub mod vendors;

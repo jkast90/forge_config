@@ -11,6 +11,7 @@ import {
   deleteDhcpOption as deleteDhcpOptionThunk,
 } from '../store/slices/dhcpOptionsSlice';
 import { addNotification } from '../services/notifications';
+import { getErrorMessage } from '../utils/errors';
 
 export interface UseDhcpOptionsOptions {
   autoRefresh?: boolean;
@@ -65,7 +66,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
       dispatch(fetchDhcpOptions());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to add DHCP option: ${err}`);
+      addNotification('error', `Failed to add DHCP option: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -77,7 +78,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
       dispatch(fetchDhcpOptions());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to update DHCP option: ${err}`);
+      addNotification('error', `Failed to update DHCP option: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -89,7 +90,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
       dispatch(fetchDhcpOptions());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to delete DHCP option: ${err}`);
+      addNotification('error', `Failed to delete DHCP option: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);

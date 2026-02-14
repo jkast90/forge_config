@@ -12,6 +12,7 @@ import {
   deleteTemplate as deleteTemplateThunk,
 } from '../store/slices/templatesSlice';
 import { addNotification } from '../services/notifications';
+import { getErrorMessage } from '../utils/errors';
 
 export interface UseTemplatesOptions {
   vendorFilter?: string;
@@ -67,7 +68,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
       dispatch(fetchTemplates());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to add template: ${err}`);
+      addNotification('error', `Failed to add template: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -79,7 +80,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
       dispatch(fetchTemplates());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to update template: ${err}`);
+      addNotification('error', `Failed to update template: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
@@ -91,7 +92,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
       dispatch(fetchTemplates());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to delete template: ${err}`);
+      addNotification('error', `Failed to delete template: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);

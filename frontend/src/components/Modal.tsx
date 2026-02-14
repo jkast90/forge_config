@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, FormEvent } from 'react';
 import { CloseButton } from './CloseButton';
 import { ResizableModal } from './ResizableModal';
 
@@ -14,6 +14,8 @@ export interface ModalProps {
   resizable?: boolean;
   /** Footer content rendered outside the scrollable area */
   footer?: ReactNode;
+  /** If provided, wraps the body+footer in a <form> element */
+  onSubmit?: (e: FormEvent) => void | Promise<void>;
 }
 
 /**
@@ -31,7 +33,7 @@ export interface ModalProps {
  * // Controlled (Dialog pattern)
  * <Modal isOpen={showModal} title="My Modal" onClose={handleClose}>Content</Modal>
  */
-export function Modal({ title, children, onClose, isOpen, variant = 'default', resizable = false, footer }: ModalProps) {
+export function Modal({ title, children, onClose, isOpen, variant = 'default', resizable = false, footer, onSubmit }: ModalProps) {
   // Use ResizableModal for resizable mode
   if (resizable) {
     return (
@@ -73,6 +75,19 @@ export function Modal({ title, children, onClose, isOpen, variant = 'default', r
   const modalClass = variant === 'extra-wide' ? 'modal modal-extra-wide'
     : variant === 'wide' ? 'modal modal-wide' : 'modal';
 
+  const body = (
+    <>
+      <div className="modal-content">
+        {children}
+      </div>
+      {footer && (
+        <div className="modal-footer">
+          {footer}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className={modalClass} onClick={(e) => e.stopPropagation()}>
@@ -80,14 +95,11 @@ export function Modal({ title, children, onClose, isOpen, variant = 'default', r
           <h3>{title}</h3>
           <CloseButton onClick={onClose} label="Close modal" />
         </div>
-        <div className="modal-content">
-          {children}
-        </div>
-        {footer && (
-          <div className="modal-footer">
-            {footer}
-          </div>
-        )}
+        {onSubmit ? (
+          <form onSubmit={onSubmit} className="modal-form">
+            {body}
+          </form>
+        ) : body}
       </div>
     </div>
   );

@@ -14,10 +14,15 @@ export {
 export {
   validateMacAddress,
   validateIpAddress,
+  validateIpv4,
+  validateIpv6,
+  validatePrefix,
   validateHostname,
   validateDeviceForm,
   validateSettingsForm,
+  validators,
   type ValidationResult,
+  type Validator,
 } from './validation';
 
 export {
