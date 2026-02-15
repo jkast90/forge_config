@@ -20,3 +20,10 @@ export {
   getVendorModels,
   getAllChassisLayouts,
 } from './switch-models';
+
+export {
+  CONNECTOR_WIDTHS,
+  SPEED_COLOR_NAMES,
+  getConnectorWidth,
+  getSpeedColorName,
+} from './hardware';

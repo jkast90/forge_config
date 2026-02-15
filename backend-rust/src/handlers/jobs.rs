@@ -12,7 +12,7 @@ use crate::AppState;
 #[derive(Debug, Deserialize)]
 pub struct JobsQuery {
     #[serde(default)]
-    pub device_id: Option<String>,
+    pub device_id: Option<i64>,
     #[serde(default = "default_limit")]
     pub limit: i32,
 }
@@ -42,7 +42,7 @@ pub async fn list_jobs(
     Query(query): Query<JobsQuery>,
 ) -> Result<Json<Vec<Job>>, ApiError> {
     let limit = query.limit.clamp(1, 200);
-    let jobs = if let Some(device_id) = &query.device_id {
+    let jobs = if let Some(device_id) = query.device_id {
         state.store.list_jobs_by_device(device_id, limit).await?
     } else {
         state.store.list_jobs_recent(limit).await?

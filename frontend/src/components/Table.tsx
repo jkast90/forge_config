@@ -1,8 +1,10 @@
-import { ReactNode, useState, useCallback, useMemo, isValidElement, Children, cloneElement, ReactElement } from 'react';
+import { ReactNode, useState, useCallback, useMemo, useRef, useEffect, isValidElement, Children, cloneElement, ReactElement } from 'react';
 import { useTableFeatures, getDefaultPageSize, getTablePageSize, setTablePageSize } from '@core';
+import type { ColumnFilterDef } from '@core';
 import { IconButton } from './IconButton';
 import { Tooltip } from './Tooltip';
 import { EditIcon, TrashIcon, Icon } from './Icon';
+import { useConfirm } from './ConfirmDialog';
 
 /**
  * Highlights matching text within a ReactNode tree.
@@ -63,6 +65,10 @@ export interface TableColumn<T> {
   searchable?: boolean;
   /** Extract searchable text (useful for function-accessor columns) */
   searchValue?: (row: T) => string;
+  /** Extract filterable value for per-column dropdown filter. When set, a filter icon appears in the header. */
+  filterValue?: (row: T) => string;
+  /** Set to false to disable auto-filtering on this column */
+  filterable?: boolean;
 }
 
 /**
@@ -141,42 +147,98 @@ export interface TableProps<T> {
 }
 
 /**
+ * Per-column filter dropdown that appears in the column header.
+ */
+function ColumnFilter({ options, selected, onChange }: {
+  options: string[];
+  selected: Set<string>;
+  onChange: (selected: Set<string>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filterSearch, setFilterSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const hasFilter = selected.size > 0;
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      setFilterSearch('');
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [open]);
+
+  const filteredOptions = filterSearch
+    ? options.filter((opt) => (opt || '(empty)').toLowerCase().includes(filterSearch.toLowerCase()))
+    : options;
+
+  const toggle = (value: string) => {
+    const next = new Set(selected);
+    if (next.has(value)) {
+      next.delete(value);
+    } else {
+      next.add(value);
+    }
+    onChange(next);
+  };
+
+  return (
+    <div className="column-filter" ref={ref}>
+      <button
+        className={`column-filter-toggle ${hasFilter ? 'column-filter-active' : ''}`}
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        title="Filter column"
+      >
+        <Icon name={hasFilter ? 'filter_list' : 'filter_list'} size={14} />
+      </button>
+      {open && (
+        <div className="column-filter-dropdown" onClick={(e) => e.stopPropagation()}>
+          <input
+            ref={inputRef}
+            type="text"
+            className="column-filter-search"
+            placeholder="Search..."
+            value={filterSearch}
+            onChange={(e) => setFilterSearch(e.target.value)}
+          />
+          {hasFilter && (
+            <button className="column-filter-clear" onClick={() => onChange(new Set())}>
+              Clear filter
+            </button>
+          )}
+          <div className="column-filter-options">
+            {filteredOptions.map((opt) => (
+              <label key={opt} className="column-filter-option">
+                <input
+                  type="checkbox"
+                  checked={selected.has(opt)}
+                  onChange={() => toggle(opt)}
+                />
+                <span>{opt || '(empty)'}</span>
+              </label>
+            ))}
+            {filteredOptions.length === 0 && (
+              <div className="column-filter-no-results">No matches</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Flexible Table component for displaying data with actions.
- *
- * Features:
- * - Flexible column definitions with accessor functions
- * - Built-in edit/delete shortcuts
- * - Custom actions with loading states
- * - Tooltips on action buttons
- * - Empty state handling
- * - Row click handling
- * - Opt-in search bar and pagination
- *
- * @example
- * // Simple usage with edit/delete
- * <Table
- *   data={items}
- *   columns={[
- *     { header: 'Name', accessor: 'name' },
- *     { header: 'Count', accessor: (row) => <Badge>{row.count}</Badge> },
- *   ]}
- *   getRowKey={(item) => item.id}
- *   onEdit={handleEdit}
- *   onDelete={handleDelete}
- *   deleteConfirmMessage={(item) => `Delete "${item.name}"?`}
- * />
- *
- * @example
- * // With search and pagination
- * <Table
- *   data={devices}
- *   columns={columns}
- *   getRowKey={(d) => d.id}
- *   searchable
- *   searchPlaceholder="Search devices..."
- *   paginate
- *   pageSize={25}
- * />
  */
 export function Table<T>({
   data,
@@ -205,9 +267,23 @@ export function Table<T>({
   pageSizeOptions = [10, 25, 50, 100],
   tableId,
 }: TableProps<T>) {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [expandedKeys, setExpandedKeys] = useState<Set<string | number>>(new Set());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+
+  // Track scroll container width for constraining expanded row content
+  useEffect(() => {
+    if (!renderExpandedRow || !scrollRef.current) return;
+    const el = scrollRef.current;
+    const measure = () => setScrollWidth(el.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [!!renderExpandedRow]);
 
   // Page size priority: per-table override > prop > user preference > 25
   const resolvedInitialPageSize = initialPageSize
@@ -252,6 +328,63 @@ export function Table<T>({
     };
   }, [getSearchTextProp, columns]);
 
+  // Per-column filter state
+  const [activeFilters, setActiveFilters] = useState<Map<number, Set<string>>>(new Map());
+
+  // Build column filter definitions: explicit filterValue OR auto-detect from searchValue/accessor
+  const columnFilterDefs = useMemo<ColumnFilterDef<T>[]>(() => {
+    const defs: ColumnFilterDef<T>[] = [];
+    for (let idx = 0; idx < columns.length; idx++) {
+      const col = columns[idx];
+      if (col.filterable === false) continue;
+      let getValue: ((row: T) => string) | null = null;
+      if (col.filterValue) {
+        getValue = col.filterValue;
+      } else if (col.searchValue) {
+        getValue = col.searchValue;
+      } else if (typeof col.accessor === 'string') {
+        const key = col.accessor as keyof T;
+        getValue = (row: T) => {
+          const v = row[key];
+          return v != null ? String(v) : '';
+        };
+      }
+      if (getValue) {
+        defs.push({ columnIndex: idx, getValue });
+      }
+    }
+    return defs;
+  }, [columns]);
+
+  // Compute unique filter options per column (skip columns with <2 distinct values — nothing to filter)
+  const filterOptions = useMemo(() => {
+    const map = new Map<number, string[]>();
+    for (const def of columnFilterDefs) {
+      const values = new Set<string>();
+      for (const row of data) {
+        values.add(def.getValue(row));
+      }
+      if (values.size < 2) continue;
+      const sorted = [...values].sort((a, b) => a.localeCompare(b));
+      map.set(def.columnIndex, sorted);
+    }
+    return map;
+  }, [data, columnFilterDefs]);
+
+  const handleFilterChange = useCallback((columnIndex: number, selected: Set<string>) => {
+    setActiveFilters(prev => {
+      const next = new Map(prev);
+      if (selected.size === 0) {
+        next.delete(columnIndex);
+      } else {
+        next.set(columnIndex, selected);
+      }
+      return next;
+    });
+  }, []);
+
+  const hasActiveFilters = activeFilters.size > 0;
+
   const {
     displayData,
     filteredCount,
@@ -268,9 +401,12 @@ export function Table<T>({
     getSearchText,
     paginate,
     pageSize,
+    columnFilters: filterOptions.size > 0 ? columnFilterDefs.filter(d => filterOptions.has(d.columnIndex)) : undefined,
+    activeFilters: hasActiveFilters ? activeFilters : undefined,
   });
 
   const isSearching = searchable && searchQuery.trim().length > 0;
+  const isFiltering = hasActiveFilters;
 
   // Build actions array from shortcuts + custom actions
   const allActions: TableAction<T>[] = [];
@@ -291,9 +427,9 @@ export function Table<T>({
     allActions.push({
       icon: <TrashIcon size={14} />,
       label: 'Delete',
-      onClick: (row) => {
+      onClick: async (row) => {
         if (deleteConfirmMessage) {
-          if (confirm(deleteConfirmMessage(row))) {
+          if (await confirm({ title: 'Confirm Delete', message: deleteConfirmMessage(row), confirmText: 'Delete', destructive: true })) {
             onDelete(row);
           }
         } else {
@@ -366,12 +502,17 @@ export function Table<T>({
         </div>
       )}
 
-      {isSearching && displayData.length === 0 ? (
+      {(isSearching || isFiltering) && displayData.length === 0 ? (
         <div className="table-no-results">
-          No results for &ldquo;{searchQuery}&rdquo;
+          {isSearching ? `No results for "${searchQuery}"` : 'No results match the active filters'}
+          {isFiltering && (
+            <button className="table-clear-filters" onClick={() => setActiveFilters(new Map())}>
+              Clear all filters
+            </button>
+          )}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div ref={scrollRef} style={{ overflowX: 'auto' }}>
         <table className={tableClassName}>
           <thead>
             <tr>
@@ -384,7 +525,16 @@ export function Table<T>({
                   }}
                   className={[col.className, col.hideOnMobile && 'hide-mobile'].filter(Boolean).join(' ')}
                 >
-                  {col.header}
+                  <span className={filterOptions.has(idx) ? 'column-header-filterable' : undefined}>
+                    {col.header}
+                    {filterOptions.has(idx) && (
+                      <ColumnFilter
+                        options={filterOptions.get(idx)!}
+                        selected={activeFilters.get(idx) ?? new Set()}
+                        onChange={(selected) => handleFilterChange(idx, selected)}
+                      />
+                    )}
+                  </span>
                 </th>
               ))}
               {hasActions && (
@@ -506,7 +656,7 @@ export function Table<T>({
                   {isExpanded && renderExpandedRow && (
                     <tr className="expanded-detail-row">
                       <td colSpan={totalCols}>
-                        <div className="expanded-detail-content">
+                        <div className="expanded-detail-content" style={scrollWidth ? { maxWidth: scrollWidth } : undefined}>
                           {renderExpandedRow(row)}
                         </div>
                       </td>
@@ -521,76 +671,83 @@ export function Table<T>({
       )}
 
       {filteredCount > 0 && (
-        <div className={`table-pagination${totalPages > 1 ? '' : ' table-pagination-minimal'}`}>
+        <div className={`table-pagination${paginate ? '' : ' table-pagination-minimal'}`}>
           <div className="table-row-count">
             <span className="table-pagination-info">
               {filteredCount} {filteredCount === 1 ? 'row' : 'rows'}
               {filteredCount !== totalCount && ` (filtered from ${totalCount})`}
             </span>
+            {isFiltering && (
+              <button className="table-clear-filters" onClick={() => setActiveFilters(new Map())}>
+                <Icon name="filter_list_off" size={14} />
+                Clear filters
+              </button>
+            )}
           </div>
           {paginate && totalPages > 1 && (
-            <>
-              <div className="table-pagination-center">
-                <div className="table-pagination-prev">
-                  <IconButton
-                    variant="ghost"
-                    disabled={currentPage <= 1}
-                    onClick={() => setCurrentPage(1)}
-                    title="First page"
-                  >
-                    <Icon name="first_page" size={16} />
-                  </IconButton>
-                  <IconButton
-                    variant="ghost"
-                    disabled={currentPage <= 1}
-                    onClick={() => setCurrentPage(currentPage - 1)}
-                    title="Previous page"
-                  >
-                    <Icon name="chevron_left" size={16} />
-                  </IconButton>
-                </div>
-                <div className="table-pagination-labels">
-                  <span className="table-pagination-page">
-                    Page {currentPage} of {totalPages}
-                  </span>
-                  <span className="table-pagination-info">
-                    {startIndex}&ndash;{endIndex} of {filteredCount}
-                  </span>
-                </div>
-                <div className="table-pagination-next">
-                  <IconButton
-                    variant="ghost"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage(currentPage + 1)}
-                    title="Next page"
-                  >
-                    <Icon name="chevron_right" size={16} />
-                  </IconButton>
-                  <IconButton
-                    variant="ghost"
-                    disabled={currentPage >= totalPages}
-                    onClick={() => setCurrentPage(totalPages)}
-                    title="Last page"
-                  >
-                    <Icon name="last_page" size={16} />
-                  </IconButton>
-                </div>
-              </div>
-              <div className="table-pagination-size">
-                <select
-                  className="table-pagination-select"
-                  value={pageSize}
-                  onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+            <div className="table-pagination-center">
+              <div className="table-pagination-prev">
+                <IconButton
+                  variant="ghost"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage(1)}
+                  title="First page"
                 >
-                  {pageSizeOptions.map((size) => (
-                    <option key={size} value={size}>{size} / page</option>
-                  ))}
-                </select>
+                  <Icon name="first_page" size={16} />
+                </IconButton>
+                <IconButton
+                  variant="ghost"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  title="Previous page"
+                >
+                  <Icon name="chevron_left" size={16} />
+                </IconButton>
               </div>
-            </>
+              <div className="table-pagination-labels">
+                <span className="table-pagination-page">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <span className="table-pagination-info">
+                  {startIndex}&ndash;{endIndex} of {filteredCount}
+                </span>
+              </div>
+              <div className="table-pagination-next">
+                <IconButton
+                  variant="ghost"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  title="Next page"
+                >
+                  <Icon name="chevron_right" size={16} />
+                </IconButton>
+                <IconButton
+                  variant="ghost"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(totalPages)}
+                  title="Last page"
+                >
+                  <Icon name="last_page" size={16} />
+                </IconButton>
+              </div>
+            </div>
+          )}
+          {paginate && (
+            <div className="table-pagination-size">
+              <select
+                className="table-pagination-select"
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              >
+                {pageSizeOptions.map((size) => (
+                  <option key={size} value={size}>{size} / page</option>
+                ))}
+              </select>
+            </div>
           )}
         </div>
       )}
+      <ConfirmDialogRenderer />
     </>
   );
 }
@@ -658,6 +815,11 @@ export const Cell = {
     <span className={`status ${count > 0 ? 'online' : 'offline'}`}>
       {count > 0 ? count : zeroLabel}
     </span>
+  ),
+
+  /** Render a badge with variant */
+  badge: (text: string, variant: 'success' | 'error' | 'warning' | 'info' | 'default' = 'default') => (
+    <span className={`badge badge-${variant}`}>{text}</span>
   ),
 
   /** Render a dash for empty/null values */

@@ -37,33 +37,33 @@ export class GroupService extends BaseService {
   }
 
   // Membership
-  async listMembers(groupId: string): Promise<string[]> {
-    return this.get<string[]>(`/groups/${encodeURIComponent(groupId)}/members`);
+  async listMembers(groupId: string): Promise<number[]> {
+    return this.get<number[]>(`/groups/${encodeURIComponent(groupId)}/members`);
   }
 
-  async setMembers(groupId: string, deviceIds: string[]): Promise<void> {
+  async setMembers(groupId: string, deviceIds: number[]): Promise<void> {
     return this.put<void>(`/groups/${encodeURIComponent(groupId)}/members`, { device_ids: deviceIds });
   }
 
-  async addMember(groupId: string, deviceId: string): Promise<void> {
+  async addMember(groupId: string, deviceId: number): Promise<void> {
     return this.put<void>(`/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(deviceId)}`, {});
   }
 
-  async removeMember(groupId: string, deviceId: string): Promise<void> {
+  async removeMember(groupId: string, deviceId: number): Promise<void> {
     return this.delete<void>(`/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(deviceId)}`);
   }
 
   // Device groups
-  async listDeviceGroups(deviceId: string): Promise<Group[]> {
+  async listDeviceGroups(deviceId: number): Promise<Group[]> {
     return this.get<Group[]>(`/devices/${encodeURIComponent(deviceId)}/groups`);
   }
 
-  async setDeviceGroups(deviceId: string, groupIds: string[]): Promise<void> {
+  async setDeviceGroups(deviceId: number, groupIds: string[]): Promise<void> {
     return this.put<void>(`/devices/${encodeURIComponent(deviceId)}/groups`, { group_ids: groupIds });
   }
 
   // Resolved variables
-  async getResolvedVariables(deviceId: string): Promise<ResolvedVariablesResponse> {
+  async getResolvedVariables(deviceId: number): Promise<ResolvedVariablesResponse> {
     return this.get<ResolvedVariablesResponse>(`/devices/${encodeURIComponent(deviceId)}/resolved-variables`);
   }
 }

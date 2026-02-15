@@ -14,6 +14,11 @@ import deviceVariablesReducer from './slices/deviceVariablesSlice';
 import groupsReducer from './slices/groupsSlice';
 import ipamReducer from './slices/ipamSlice';
 import deviceModelsReducer from './slices/deviceModelsSlice';
+import credentialsReducer from './slices/credentialsSlice';
+import jobTemplatesReducer from './slices/jobTemplatesSlice';
+import outputParsersReducer from './slices/outputParsersSlice';
+import deviceRolesReducer from './slices/deviceRolesSlice';
+import usersReducer from './slices/usersSlice';
 
 export const store = configureStore({
   reducer: {
@@ -32,7 +37,18 @@ export const store = configureStore({
     groups: groupsReducer,
     ipam: ipamReducer,
     deviceModels: deviceModelsReducer,
+    credentials: credentialsReducer,
+    jobTemplates: jobTemplatesReducer,
+    outputParsers: outputParsersReducer,
+    deviceRoles: deviceRolesReducer,
+    users: usersReducer,
   },
+  middleware: (getDefaultMiddleware) =>
+    getDefaultMiddleware({
+      // Disable checks that use window APIs not available in React Native
+      immutableCheck: false,
+      serializableCheck: false,
+    }),
 });
 
 export type RootState = ReturnType<typeof store.getState>;

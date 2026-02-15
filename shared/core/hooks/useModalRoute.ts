@@ -6,7 +6,7 @@ interface ModalRoute {
 }
 
 function parseHash(): ModalRoute {
-  const hash = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
+  const hash = typeof window !== 'undefined' && window.location ? window.location.hash.slice(1) : '';
   if (!hash) return { modal: null, params: {} };
 
   const parts = hash.split('&');
@@ -57,6 +57,7 @@ export function useModalRoute(): UseModalRouteReturn {
   const [route, setRoute] = useState<ModalRoute>(parseHash);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     const handleHashChange = () => {
       setRoute(parseHash());
     };
@@ -65,12 +66,16 @@ export function useModalRoute(): UseModalRouteReturn {
   }, []);
 
   const openModal = useCallback((name: string, params?: Record<string, string>) => {
-    window.location.hash = buildHash(name, params);
+    if (typeof window !== 'undefined' && window.location) {
+      window.location.hash = buildHash(name, params);
+    }
   }, []);
 
   const closeModal = useCallback(() => {
-    // Use replaceState to avoid polluting history with empty hash entries
-    history.replaceState(null, '', window.location.pathname + window.location.search);
+    if (typeof window !== 'undefined' && window.location && typeof history !== 'undefined' && history.replaceState) {
+      // Use replaceState to avoid polluting history with empty hash entries
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
     setRoute({ modal: null, params: {} });
   }, []);
 

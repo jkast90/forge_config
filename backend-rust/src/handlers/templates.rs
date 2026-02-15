@@ -128,11 +128,11 @@ pub async fn preview_template(
     context.insert("Gateway", &req.gateway);
 
     // Load resolved variables (group + host inheritance) as {{vars.KeyName}}
-    let vars_map = state
-        .store
-        .resolve_device_variables_flat(&req.device.id)
-        .await
-        .unwrap_or_default();
+    let vars_map = if let Ok(device_id) = req.device.id.parse::<i64>() {
+        state.store.resolve_device_variables_flat(device_id).await.unwrap_or_default()
+    } else {
+        std::collections::HashMap::new()
+    };
     context.insert("vars", &vars_map);
 
     // Render the template

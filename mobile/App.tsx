@@ -3,9 +3,10 @@ import './src/setup';
 
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Provider } from 'react-redux';
 import { AppNavigator } from './src/navigation';
 import { ThemeProvider, useAppTheme } from './src/context';
-import { useAuthState, AuthProvider } from './src/core';
+import { store, useAuthState, AuthProvider } from './src/core';
 
 function AppContent() {
   const { theme } = useAppTheme();
@@ -28,10 +29,12 @@ function AuthGate() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <AuthGate />
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <Provider store={store}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AuthGate />
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </Provider>
   );
 }

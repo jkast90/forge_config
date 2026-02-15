@@ -32,7 +32,6 @@ export function DiscoveryScreen() {
     refresh,
     refreshLeases,
     clearKnownDevices,
-    message,
   } = useDiscovery({ autoRefresh: true, refreshInterval: 10000 });
   const { vendors } = useVendors();
 
@@ -45,14 +44,6 @@ export function DiscoveryScreen() {
       setVendorCache(vendors);
     }
   }, [vendors]);
-
-  // Show messages
-  if (message) {
-    Alert.alert(
-      message.type === 'error' ? 'Error' : 'Success',
-      message.text
-    );
-  }
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

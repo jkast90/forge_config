@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tera::{Context, Tera};
 use tokio::sync::mpsc;
@@ -66,6 +67,127 @@ impl JobService {
         }
     }
 
+    /// Start the cron scheduler for job templates
+    pub fn start_scheduler(self: &Arc<Self>) {
+        let svc = self.clone();
+        tokio::spawn(async move {
+            use std::time::Duration;
+            use croner::Cron;
+
+            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+
+                let templates = match svc.store.list_scheduled_job_templates().await {
+                    Ok(t) => t,
+                    Err(e) => {
+                        tracing::error!("Scheduler: failed to list templates: {}", e);
+                        continue;
+                    }
+                };
+
+                let now = chrono::Utc::now();
+
+                for tmpl in &templates {
+                    // Parse cron expression
+                    let cron = match Cron::new(&tmpl.schedule).parse() {
+                        Ok(c) => c,
+                        Err(e) => {
+                            tracing::warn!("Scheduler: invalid cron '{}' for template {}: {}", tmpl.schedule, tmpl.id, e);
+                            continue;
+                        }
+                    };
+
+                    // Check if the template is due to run
+                    let reference = tmpl.last_run_at.unwrap_or(tmpl.created_at);
+                    let reference_chrono: chrono::DateTime<chrono::Utc> = reference;
+
+                    // Find the next occurrence after last_run_at
+                    let next = match cron.find_next_occurrence(&reference_chrono, false) {
+                        Ok(n) => n,
+                        Err(_) => continue,
+                    };
+
+                    if next > now {
+                        continue; // Not due yet
+                    }
+
+                    tracing::info!("Scheduler: running template '{}' ({})", tmpl.name, tmpl.id);
+
+                    // Resolve target device IDs
+                    let device_ids: Vec<i64> = if tmpl.target_mode == "group" && !tmpl.target_group_id.is_empty() {
+                        match svc.store.list_group_members(&tmpl.target_group_id).await {
+                            Ok(ids) => ids,
+                            Err(e) => {
+                                tracing::warn!("Scheduler: failed to resolve group {}: {}", tmpl.target_group_id, e);
+                                continue;
+                            }
+                        }
+                    } else {
+                        tmpl.target_device_ids.clone()
+                    };
+
+                    let is_webhook = tmpl.job_type == crate::models::job_type::WEBHOOK;
+
+                    if is_webhook && device_ids.is_empty() {
+                        // Static webhook — run once without device
+                        let job_id = uuid::Uuid::new_v4().to_string();
+                        let req = CreateJobRequest {
+                            device_id: 0,
+                            job_type: crate::models::job_type::WEBHOOK.to_string(),
+                            command: tmpl.action_id.clone(),
+                            credential_id: tmpl.credential_id.clone(),
+                        };
+                        if let Ok(job) = svc.store.create_job(&job_id, &req).await {
+                            if let Some(ref hub) = svc.ws_hub {
+                                hub.broadcast_job_update(EventType::JobQueued, &job).await;
+                            }
+                            svc.submit(job_id).await;
+                        }
+                    } else {
+                        // Create a job for each target device
+                        for device_id in &device_ids {
+                            let job_id = uuid::Uuid::new_v4().to_string();
+                            let command = if is_webhook {
+                                tmpl.action_id.clone()
+                            } else if !tmpl.action_id.is_empty() {
+                                match svc.store.get_vendor_action(&tmpl.action_id).await {
+                                    Ok(Some(action)) => action.command.clone(),
+                                    _ => tmpl.command.clone(),
+                                }
+                            } else {
+                                tmpl.command.clone()
+                            };
+
+                            let jt = if is_webhook {
+                                crate::models::job_type::WEBHOOK.to_string()
+                            } else {
+                                tmpl.job_type.clone()
+                            };
+
+                            let req = CreateJobRequest {
+                                device_id: *device_id,
+                                job_type: jt,
+                                command,
+                                credential_id: tmpl.credential_id.clone(),
+                            };
+
+                            if let Ok(job) = svc.store.create_job(&job_id, &req).await {
+                                if let Some(ref hub) = svc.ws_hub {
+                                    hub.broadcast_job_update(EventType::JobQueued, &job).await;
+                                }
+                                svc.submit(job_id).await;
+                            }
+                        }
+                    }
+
+                    // Update last_run_at
+                    let _ = svc.store.update_job_template_last_run(&tmpl.id).await;
+                }
+            }
+        });
+    }
+
     async fn worker(&self, mut rx: mpsc::Receiver<String>) {
         while let Some(job_id) = rx.recv().await {
             if let Err(e) = self.process_job(&job_id).await {
@@ -91,6 +213,8 @@ impl JobService {
         let result = match job.job_type.as_str() {
             job_type::COMMAND => self.execute_command_job(&job).await,
             job_type::DEPLOY => self.execute_deploy_job(&job).await,
+            job_type::WEBHOOK => self.execute_webhook_job(&job).await,
+            job_type::APPLY_TEMPLATE => self.execute_apply_template_job(&job).await,
             _ => Err(anyhow::anyhow!("Unknown job type: {}", job.job_type)),
         };
 
@@ -111,10 +235,18 @@ impl JobService {
     }
 
     async fn execute_command_job(&self, job: &Job) -> Result<String> {
-        let device = self.store.get_device(&job.device_id).await?
+        let device = self.store.get_device(job.device_id).await?
             .ok_or_else(|| anyhow::anyhow!("Device not found: {}", job.device_id))?;
 
-        let (ssh_user, ssh_pass) = crate::utils::resolve_ssh_credentials(&self.store, &device).await;
+        let (mut ssh_user, mut ssh_pass) = crate::utils::resolve_ssh_credentials(&self.store, device.ssh_user.clone(), device.ssh_pass.clone(), device.vendor.as_deref()).await;
+
+        // Override with job-specific credential if set
+        if !job.credential_id.is_empty() {
+            if let Some(cred) = self.store.get_credential(&job.credential_id).await? {
+                if !cred.username.is_empty() { ssh_user = cred.username; }
+                if !cred.password.is_empty() { ssh_pass = cred.password; }
+            }
+        }
 
         if ssh_user.is_empty() || ssh_pass.is_empty() {
             return Err(anyhow::anyhow!("No SSH credentials available for this device"));
@@ -126,7 +258,7 @@ impl JobService {
     }
 
     async fn execute_deploy_job(&self, job: &Job) -> Result<String> {
-        let device = self.store.get_device(&job.device_id).await?
+        let device = self.store.get_device(job.device_id).await?
             .ok_or_else(|| anyhow::anyhow!("Device not found: {}", job.device_id))?;
 
         // Resolve template: use device's config_template, or fall back to vendor's default_template
@@ -159,15 +291,26 @@ impl JobService {
         // Load resolved variables (group + host inheritance) for template rendering
         let vars = self
             .store
-            .resolve_device_variables_flat(&device.id)
+            .resolve_device_variables_flat(device.id)
             .await
             .unwrap_or_default();
 
+        // Load port assignments for VRF context
+        let port_assignments = self.store.list_port_assignments(device.id).await.unwrap_or_default();
+
         // Render the template
-        let rendered_config = render_config(&device, &template, &settings, role_template.as_ref(), &vars)?;
+        let rendered_config = render_config(&device, &template, &settings, role_template.as_ref(), &vars, Some(&port_assignments))?;
 
         // Resolve SSH credentials
-        let (ssh_user, ssh_pass) = crate::utils::resolve_ssh_credentials(&self.store, &device).await;
+        let (mut ssh_user, mut ssh_pass) = crate::utils::resolve_ssh_credentials(&self.store, device.ssh_user.clone(), device.ssh_pass.clone(), device.vendor.as_deref()).await;
+
+        // Override with job-specific credential if set
+        if !job.credential_id.is_empty() {
+            if let Some(cred) = self.store.get_credential(&job.credential_id).await? {
+                if !cred.username.is_empty() { ssh_user = cred.username; }
+                if !cred.password.is_empty() { ssh_pass = cred.password; }
+            }
+        }
 
         if ssh_user.is_empty() || ssh_pass.is_empty() {
             return Err(anyhow::anyhow!("No SSH credentials available for this device"));
@@ -203,9 +346,160 @@ impl JobService {
         };
 
         // Update device status on successful deploy
-        let _ = self.store.update_device_status(&device.id, device_status::ONLINE).await;
+        let _ = self.store.update_device_status(device.id, device_status::ONLINE).await;
 
         Ok(output)
+    }
+
+    async fn execute_apply_template_job(&self, job: &Job) -> Result<String> {
+        // job.command stores the template ID to apply
+        let template_id = if !job.command.is_empty() {
+            job.command.clone()
+        } else {
+            return Err(anyhow::anyhow!("No template ID specified in apply_template job"));
+        };
+
+        let device = self.store.get_device(job.device_id).await?
+            .ok_or_else(|| anyhow::anyhow!("Device not found: {}", job.device_id))?;
+
+        let template = self.store.get_template(&template_id).await?
+            .ok_or_else(|| anyhow::anyhow!("Template not found: {}", template_id))?;
+
+        let settings = self.store.get_settings().await?;
+
+        // Look up role-specific template variant
+        let role_template = if let Some(ref role) = device.topology_role {
+            let role_id = format!("{}-{}", template.id, role);
+            self.store.get_template(&role_id).await.ok().flatten()
+        } else {
+            None
+        };
+
+        let vars = self
+            .store
+            .resolve_device_variables_flat(device.id)
+            .await
+            .unwrap_or_default();
+
+        let port_assignments = self.store.list_port_assignments(device.id).await.unwrap_or_default();
+
+        let rendered_config = render_config(&device, &template, &settings, role_template.as_ref(), &vars, Some(&port_assignments))?;
+
+        let (mut ssh_user, mut ssh_pass) = crate::utils::resolve_ssh_credentials(&self.store, device.ssh_user.clone(), device.ssh_pass.clone(), device.vendor.as_deref()).await;
+
+        // Override with job-specific credential if set
+        if !job.credential_id.is_empty() {
+            if let Some(cred) = self.store.get_credential(&job.credential_id).await? {
+                if !cred.username.is_empty() { ssh_user = cred.username; }
+                if !cred.password.is_empty() { ssh_pass = cred.password; }
+            }
+        }
+
+        if ssh_user.is_empty() || ssh_pass.is_empty() {
+            return Err(anyhow::anyhow!("No SSH credentials available for this device"));
+        }
+
+        let vendor = match device.vendor.as_deref() {
+            Some(v) if !v.is_empty() => self.store.get_vendor(v).await.ok().flatten(),
+            _ => None,
+        };
+
+        let has_deploy_command = vendor.as_ref().map_or(false, |v| !v.deploy_command.is_empty());
+
+        let deploy_payload = if let Some(ref v) = vendor {
+            if !v.deploy_command.is_empty() {
+                v.deploy_command.replace("{CONFIG}", &rendered_config)
+            } else {
+                rendered_config
+            }
+        } else {
+            rendered_config
+        };
+
+        let output = if has_deploy_command {
+            crate::utils::ssh_run_interactive_async(&device.ip, &ssh_user, &ssh_pass, &deploy_payload)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?
+        } else {
+            crate::utils::ssh_run_command_async(&device.ip, &ssh_user, &ssh_pass, &deploy_payload)
+                .await
+                .map_err(|e| anyhow::anyhow!(e))?
+        };
+
+        // Update device's config_template to the applied template
+        let _ = self.store.update_device_status(device.id, device_status::ONLINE).await;
+
+        Ok(output)
+    }
+
+    async fn execute_webhook_job(&self, job: &Job) -> Result<String> {
+        // The command field stores the action ID for webhook jobs
+        let action = self.store.get_vendor_action(&job.command).await?
+            .ok_or_else(|| anyhow::anyhow!("Vendor action not found: {}", job.command))?;
+
+        if action.action_type != "webhook" {
+            return Err(anyhow::anyhow!("Action {} is not a webhook action", action.id));
+        }
+
+        if action.webhook_url.is_empty() {
+            return Err(anyhow::anyhow!("Webhook URL is empty for action {}", action.id));
+        }
+
+        // Optionally resolve device context for variable substitution in URL/body
+        let device = self.store.get_device(job.device_id).await?;
+        let url = if let Some(ref dev) = device {
+            substitute_device_vars(&action.webhook_url, dev)
+        } else {
+            action.webhook_url.clone()
+        };
+        let body = if let Some(ref dev) = device {
+            substitute_device_vars(&action.webhook_body, dev)
+        } else {
+            action.webhook_body.clone()
+        };
+
+        // Parse headers JSON
+        let headers: HashMap<String, String> = serde_json::from_str(&action.webhook_headers)
+            .unwrap_or_default();
+
+        // Build HTTP request
+        let client = reqwest::Client::new();
+        let method = match action.webhook_method.to_uppercase().as_str() {
+            "GET" => reqwest::Method::GET,
+            "POST" => reqwest::Method::POST,
+            "PUT" => reqwest::Method::PUT,
+            "PATCH" => reqwest::Method::PATCH,
+            "DELETE" => reqwest::Method::DELETE,
+            other => return Err(anyhow::anyhow!("Unsupported HTTP method: {}", other)),
+        };
+
+        let mut request = client.request(method.clone(), &url);
+
+        for (key, value) in &headers {
+            request = request.header(key.as_str(), value.as_str());
+        }
+
+        // Add body for methods that support it
+        if !body.is_empty() && matches!(method, reqwest::Method::POST | reqwest::Method::PUT | reqwest::Method::PATCH) {
+            // Auto-set Content-Type if not specified
+            if !headers.keys().any(|k| k.to_lowercase() == "content-type") {
+                request = request.header("Content-Type", "application/json");
+            }
+            request = request.body(body);
+        }
+
+        let response = request.send().await
+            .map_err(|e| anyhow::anyhow!("HTTP request failed: {}", e))?;
+
+        let status = response.status();
+        let response_body = response.text().await
+            .unwrap_or_else(|_| "(could not read response body)".to_string());
+
+        if status.is_success() {
+            Ok(format!("HTTP {} {}\n\n{}", status.as_u16(), status.canonical_reason().unwrap_or(""), response_body))
+        } else {
+            Err(anyhow::anyhow!("HTTP {} {}\n\n{}", status.as_u16(), status.canonical_reason().unwrap_or(""), response_body))
+        }
     }
 
     async fn broadcast_job(&self, event_type: EventType, job_id: &str) {
@@ -224,6 +518,7 @@ pub fn render_config(
     settings: &Settings,
     role_template: Option<&Template>,
     vars: &std::collections::HashMap<String, String>,
+    port_assignments: Option<&[PortAssignment]>,
 ) -> Result<String> {
     let tera_content = crate::utils::convert_go_template_to_tera(&template.content);
 
@@ -243,7 +538,7 @@ pub fn render_config(
 
     let mut context = Context::new();
     context.insert("Hostname", &device.hostname);
-    context.insert("MAC", &device.mac);
+    context.insert("MAC", &device.mac.clone().unwrap_or_default());
     context.insert("IP", &device.ip);
     context.insert("Vendor", &device.vendor.clone().unwrap_or_default());
     context.insert("Model", &device.model.clone().unwrap_or_default());
@@ -254,6 +549,52 @@ pub fn render_config(
     context.insert("Gateway", &settings.dhcp_gateway);
     context.insert("vars", vars);
 
+    // Build VRF context from port assignments
+    // VRFs = list of unique VRFs with their interfaces
+    // Each VRF: { id, name, rd, interfaces: [{ port_name, remote_device, remote_port }] }
+    if let Some(assignments) = port_assignments {
+        let mut vrf_map: HashMap<String, serde_json::Value> = HashMap::new();
+        for pa in assignments {
+            if let Some(ref vrf_id) = pa.vrf_id {
+                if vrf_id.is_empty() { continue; }
+                let iface = serde_json::json!({
+                    "port_name": pa.port_name,
+                    "remote_device": pa.remote_device_hostname.clone().unwrap_or_default(),
+                    "remote_port": pa.remote_port_name,
+                    "description": pa.description.clone().unwrap_or_default(),
+                });
+                if let Some(existing) = vrf_map.get_mut(vrf_id) {
+                    if let Some(arr) = existing.get_mut("interfaces").and_then(|v| v.as_array_mut()) {
+                        arr.push(iface);
+                    }
+                } else {
+                    vrf_map.insert(vrf_id.clone(), serde_json::json!({
+                        "id": vrf_id,
+                        "name": pa.vrf_name.clone().unwrap_or_else(|| vrf_id.clone()),
+                        "interfaces": [iface],
+                    }));
+                }
+            }
+        }
+        let vrfs: Vec<serde_json::Value> = vrf_map.into_values().collect();
+        context.insert("VRFs", &vrfs);
+    } else {
+        let empty: Vec<serde_json::Value> = vec![];
+        context.insert("VRFs", &empty);
+    }
+
     tera.render("device", &context)
         .map_err(|e| anyhow::anyhow!("Template rendering failed: {}", e))
+}
+
+/// Simple variable substitution for webhook URLs/bodies using {{variable}} syntax
+fn substitute_device_vars(template: &str, device: &Device) -> String {
+    template
+        .replace("{{device_id}}", &device.id.to_string())
+        .replace("{{hostname}}", &device.hostname)
+        .replace("{{ip}}", &device.ip)
+        .replace("{{mac}}", device.mac.as_deref().unwrap_or(""))
+        .replace("{{vendor}}", device.vendor.as_deref().unwrap_or(""))
+        .replace("{{model}}", device.model.as_deref().unwrap_or(""))
+        .replace("{{serial_number}}", device.serial_number.as_deref().unwrap_or(""))
 }

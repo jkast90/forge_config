@@ -11,17 +11,17 @@ class WebTokenStorage implements TokenStorage {
   private static readonly KEY = 'ztp_auth_token';
 
   getToken(): string | null {
-    if (typeof window === 'undefined') return null;
+    if (typeof localStorage === 'undefined') return null;
     return localStorage.getItem(WebTokenStorage.KEY);
   }
 
   setToken(token: string): void {
-    if (typeof window === 'undefined') return;
+    if (typeof localStorage === 'undefined') return;
     localStorage.setItem(WebTokenStorage.KEY, token);
   }
 
   clearToken(): void {
-    if (typeof window === 'undefined') return;
+    if (typeof localStorage === 'undefined') return;
     localStorage.removeItem(WebTokenStorage.KEY);
   }
 }

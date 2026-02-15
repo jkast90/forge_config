@@ -1,6 +1,7 @@
 export {
   LayoutProvider,
   useLayout,
+  usePageWidthOverride,
   PAGE_WIDTH_OPTIONS,
   DIALOG_WIDTH_OPTIONS,
   PAGE_WIDTH_VALUES,

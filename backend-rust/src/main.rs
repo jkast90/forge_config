@@ -89,6 +89,9 @@ async fn main() -> anyhow::Result<()> {
     // Initialize job service
     let job_service = JobService::new(store.clone(), Some(ws_hub.clone()));
 
+    // Start job template scheduler
+    job_service.start_scheduler();
+
     // Initialize lease watcher
     let mut lease_watcher = LeaseWatcher::new(cfg.lease_path.clone());
 

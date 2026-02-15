@@ -24,9 +24,9 @@ export interface UseDevicesReturn {
   error: string | null;
   refresh: () => Promise<void>;
   createDevice: (device: Partial<Device>) => Promise<boolean>;
-  updateDevice: (id: string, device: Partial<Device>) => Promise<boolean>;
-  deleteDevice: (id: string) => Promise<boolean>;
-  triggerBackup: (id: string) => Promise<boolean>;
+  updateDevice: (id: number, device: Partial<Device>) => Promise<boolean>;
+  deleteDevice: (id: number) => Promise<boolean>;
+  triggerBackup: (id: number) => Promise<boolean>;
 }
 
 export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
@@ -62,7 +62,7 @@ export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
     }
   }, [dispatch]);
 
-  const updateDevice = useCallback(async (id: string, data: Partial<Device>): Promise<boolean> => {
+  const updateDevice = useCallback(async (id: number, data: Partial<Device>): Promise<boolean> => {
     try {
       await dispatch(updateDeviceThunk({ id, data })).unwrap();
       addNotification('success', 'Device updated successfully');
@@ -74,7 +74,7 @@ export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
     }
   }, [dispatch]);
 
-  const deleteDevice = useCallback(async (id: string): Promise<boolean> => {
+  const deleteDevice = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(deleteDeviceThunk(id)).unwrap();
       addNotification('success', 'Device deleted successfully');
@@ -86,7 +86,7 @@ export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
     }
   }, [dispatch]);
 
-  const triggerBackupFn = useCallback(async (id: string): Promise<boolean> => {
+  const triggerBackupFn = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(triggerBackupThunk(id)).unwrap();
       addNotification('success', 'Backup initiated');

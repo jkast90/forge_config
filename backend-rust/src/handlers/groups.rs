@@ -128,14 +128,14 @@ pub async fn list_group_members(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<Vec<String>>, ApiError> {
+) -> Result<Json<Vec<i64>>, ApiError> {
     let members = state.store.list_group_members(&id).await?;
     Ok(Json(members))
 }
 
 #[derive(Deserialize)]
 pub struct SetMembersRequest {
-    pub device_ids: Vec<String>,
+    pub device_ids: Vec<i64>,
 }
 
 pub async fn set_group_members(
@@ -151,18 +151,18 @@ pub async fn set_group_members(
 pub async fn add_group_member(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path((id, device_id)): Path<(String, String)>,
+    Path((id, device_id)): Path<(String, i64)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.add_device_to_group(&device_id, &id).await?;
+    state.store.add_device_to_group(device_id, &id).await?;
     Ok(Json(serde_json::json!({"message": "device added to group"})))
 }
 
 pub async fn remove_group_member(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path((id, device_id)): Path<(String, String)>,
+    Path((id, device_id)): Path<(String, i64)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.remove_device_from_group(&device_id, &id).await?;
+    state.store.remove_device_from_group(device_id, &id).await?;
     Ok(Json(serde_json::json!({"message": "device removed from group"})))
 }
 
@@ -171,9 +171,9 @@ pub async fn remove_group_member(
 pub async fn list_device_groups(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Vec<Group>>, ApiError> {
-    let groups = state.store.list_device_groups(&id).await?;
+    let groups = state.store.list_device_groups(id).await?;
     Ok(Json(groups))
 }
 
@@ -185,10 +185,10 @@ pub struct SetDeviceGroupsRequest {
 pub async fn set_device_groups(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<SetDeviceGroupsRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.set_device_groups(&id, &req.group_ids).await?;
+    state.store.set_device_groups(id, &req.group_ids).await?;
     Ok(Json(serde_json::json!({"message": "device groups updated"})))
 }
 
@@ -197,8 +197,8 @@ pub async fn set_device_groups(
 pub async fn get_resolved_variables(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<ResolvedVariablesResponse>, ApiError> {
-    let result = state.store.resolve_device_variables(&id).await?;
+    let result = state.store.resolve_device_variables(id).await?;
     Ok(Json(result))
 }

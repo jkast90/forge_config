@@ -33,12 +33,12 @@ export interface UseGroupsReturn {
   setGroupVariable: (groupId: string, key: string, value: string) => Promise<boolean>;
   deleteGroupVariable: (groupId: string, key: string) => Promise<boolean>;
   // Membership
-  members: string[];
+  members: number[];
   membersLoading: boolean;
   fetchMembers: (groupId: string) => Promise<void>;
-  setMembers: (groupId: string, deviceIds: string[]) => Promise<boolean>;
-  addMember: (groupId: string, deviceId: string) => Promise<boolean>;
-  removeMember: (groupId: string, deviceId: string) => Promise<boolean>;
+  setMembers: (groupId: string, deviceIds: number[]) => Promise<boolean>;
+  addMember: (groupId: string, deviceId: number) => Promise<boolean>;
+  removeMember: (groupId: string, deviceId: number) => Promise<boolean>;
 }
 
 export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
@@ -48,7 +48,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
 
   const [groupVariables, setGroupVariables] = useState<GroupVariable[]>([]);
   const [groupVariablesLoading, setGroupVariablesLoading] = useState(false);
-  const [members, setMembers] = useState<string[]>([]);
+  const [members, setMembers] = useState<number[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -153,7 +153,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
     }
   }, []);
 
-  const setMembersAction = useCallback(async (groupId: string, deviceIds: string[]): Promise<boolean> => {
+  const setMembersAction = useCallback(async (groupId: string, deviceIds: number[]): Promise<boolean> => {
     try {
       await getServices().groups.setMembers(groupId, deviceIds);
       addNotification('success', 'Members updated');
@@ -166,7 +166,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
     }
   }, [fetchMembers, dispatch]);
 
-  const addMember = useCallback(async (groupId: string, deviceId: string): Promise<boolean> => {
+  const addMember = useCallback(async (groupId: string, deviceId: number): Promise<boolean> => {
     try {
       await getServices().groups.addMember(groupId, deviceId);
       addNotification('success', 'Device added to group');
@@ -179,7 +179,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
     }
   }, [fetchMembers, dispatch]);
 
-  const removeMember = useCallback(async (groupId: string, deviceId: string): Promise<boolean> => {
+  const removeMember = useCallback(async (groupId: string, deviceId: number): Promise<boolean> => {
     try {
       await getServices().groups.removeMember(groupId, deviceId);
       addNotification('success', 'Device removed from group');

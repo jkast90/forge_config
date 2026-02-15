@@ -61,15 +61,21 @@ export class WebSocketService {
     const baseUrl = config.baseUrl || '/api';
 
     // Convert HTTP URL to WebSocket URL
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     let wsUrl: string;
 
     if (baseUrl.startsWith('http')) {
       // Absolute URL - replace protocol
+      const protocol = baseUrl.startsWith('https') ? 'wss:' : 'ws:';
       wsUrl = baseUrl.replace(/^https?:/, protocol) + '/ws';
-    } else {
-      // Relative URL - use current host
+    } else if (typeof window !== 'undefined' && window.location) {
+      // Relative URL - use current host (web only)
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       wsUrl = `${protocol}//${window.location.host}${baseUrl}/ws`;
+    } else {
+      // React Native fallback - can't derive host from window
+      console.warn('WebSocket: Cannot determine host from relative URL in non-browser environment');
+      this.isConnecting = false;
+      return;
     }
 
     // Append auth token as query param (WebSocket can't send custom headers)

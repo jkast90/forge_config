@@ -1,7 +1,7 @@
 // Vendor service - handles all vendor-related API operations
 
 import { BaseService } from './base';
-import type { Vendor, VendorAction } from '../types';
+import type { Vendor, VendorAction, Job } from '../types';
 
 export class VendorService extends BaseService {
   async list(): Promise<Vendor[]> {
@@ -47,5 +47,9 @@ export class VendorService extends BaseService {
 
   async deleteAction(id: string): Promise<void> {
     return this.delete<void>(`/vendor-actions/${encodeURIComponent(id)}`);
+  }
+
+  async runAction(id: string): Promise<Job> {
+    return this.post<Job>(`/vendor-actions/${encodeURIComponent(id)}/run`, {});
   }
 }

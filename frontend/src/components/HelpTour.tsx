@@ -46,9 +46,11 @@ const SLIDES: Slide[] = [
         <div className="help-tour-tips">
           <h4>Features</h4>
           <ul>
-            <li><strong>Metric cards</strong> show device counts, status breakdown, templates, and vendors</li>
+            <li><strong>Metric cards</strong> show device counts, discovery status, topologies, and IPAM data</li>
             <li>Click any metric card to <strong>navigate</strong> to that section</li>
+            <li><strong>Device Status</strong> breaks down online, offline, provisioning, and unknown counts</li>
             <li><strong>Recent activity</strong> shows the latest discovery events</li>
+            <li><strong>Feature links</strong> provide a quick overview of all configuration and infrastructure sections with live counts</li>
             <li>Data refreshes automatically every 10 seconds</li>
           </ul>
         </div>
@@ -56,113 +58,191 @@ const SLIDES: Slide[] = [
     ),
   },
   {
-    title: 'Devices',
+    title: 'Devices & Discovery',
     icon: 'devices',
     page: 'devices',
     content: (
       <>
         <p>
-          The Devices page is where you manage your network inventory.
-          Each device is identified by its MAC address.
+          The Devices page combines device management and network discovery in a single view.
         </p>
         <div className="help-tour-tips">
-          <h4>Features</h4>
+          <h4>Devices</h4>
           <ul>
             <li><strong>Add Device</strong> to manually register a device with MAC, IP, hostname, and vendor</li>
-            <li>Click a row to <strong>expand</strong> and see full device details</li>
-            <li>Use the action buttons to <strong>connect test</strong> (ping + SSH), <strong>deploy config</strong>, <strong>sync to NetBox</strong>, or <strong>backup</strong></li>
+            <li>Click a row to <strong>expand</strong> and see full device details including topology placement</li>
+            <li>Use action buttons to <strong>connect test</strong> (ping + SSH), <strong>deploy config</strong>, <strong>sync to NetBox</strong>, or <strong>backup</strong></li>
             <li><strong>Search</strong> across all fields using the search bar</li>
-            <li>Status badges show <strong>online</strong>, <strong>offline</strong>, or <strong>pending</strong> state</li>
           </ul>
-        </div>
-      </>
-    ),
-  },
-  {
-    title: 'Discovery',
-    icon: 'search',
-    page: 'discovery',
-    content: (
-      <>
-        <p>
-          Discovery scans your network for devices via DHCP leases and ARP tables.
-          New devices appear automatically and can be added to your inventory.
-        </p>
-        <div className="help-tour-tips">
-          <h4>Features</h4>
+          <h4>Discovery</h4>
           <ul>
-            <li><strong>Scan</strong> triggers a network discovery sweep</li>
-            <li>Discovered devices show MAC, IP, hostname, and detected vendor</li>
-            <li>Click <strong>Add</strong> on any discovered device to register it</li>
-            <li>The <strong>DHCP Leases</strong> tab shows all current leases from dnsmasq</li>
-            <li>WebSocket notifications alert you in real-time when new devices appear</li>
+            <li>Discovery scans your network for devices via <strong>DHCP leases</strong> and <strong>ARP tables</strong></li>
+            <li>New devices appear automatically and can be added to your inventory</li>
+            <li><strong>WebSocket</strong> notifications alert you in real-time when new devices appear</li>
           </ul>
         </div>
       </>
     ),
   },
   {
-    title: 'Templates',
+    title: 'Configuration',
     icon: 'description',
-    page: 'templates',
+    page: 'config',
     content: (
       <>
         <p>
-          Configuration templates use Go template syntax to generate
-          device-specific configs. Variables like {'{{.Hostname}}'} and {'{{.IP}}'} are
-          replaced with actual device values at deploy time.
+          The Configuration page combines templates, groups, variables, and the variable inspector
+          into a single tabbed interface.
         </p>
         <div className="help-tour-tips">
-          <h4>Features</h4>
+          <h4>Templates</h4>
           <ul>
-            <li><strong>Template Variables</strong> reference table shows all available variables with examples</li>
-            <li>The <strong>variable chips</strong> in the editor insert template syntax at your cursor position</li>
+            <li>Configuration templates use <strong>Go template syntax</strong> — variables like {'{{.Hostname}}'} are replaced with device values at deploy time</li>
+            <li><strong>Variable chips</strong> insert template syntax at your cursor position</li>
             <li><strong>Preview</strong> renders a template with a real or sample device to verify output</li>
             <li><strong>Templatize Config</strong> takes a raw config and detects variables automatically</li>
-            <li>Templates can be scoped to a specific <strong>vendor</strong> or left as global</li>
+          </ul>
+          <h4>Groups</h4>
+          <ul>
+            <li>Organize devices into <strong>hierarchical groups</strong> with parent-child relationships</li>
+            <li>Assign <strong>group-level variables</strong> that are inherited by member devices</li>
+            <li>Control variable <strong>precedence</strong> across the hierarchy</li>
+          </ul>
+          <h4>Variables</h4>
+          <ul>
+            <li>Manage device-level variables in a <strong>spreadsheet-like</strong> interface</li>
+            <li><strong>Bulk operations</strong> let you set all devices to the same value at once</li>
+          </ul>
+          <h4>Inspector</h4>
+          <ul>
+            <li>Select any device to see all <strong>resolved variables</strong> and their sources (global, group, host)</li>
+            <li>Understand how variable <strong>precedence and inheritance</strong> works for each device</li>
           </ul>
         </div>
       </>
     ),
   },
   {
-    title: 'Vendors',
+    title: 'Vendors & Models',
     icon: 'business',
-    page: 'vendors',
+    page: 'vendors-models',
     content: (
       <>
         <p>
-          Vendors represent network equipment manufacturers. Each vendor has
-          MAC prefix (OUI) patterns used for automatic device identification.
+          The Vendors & Models page manages equipment manufacturers, DHCP options,
+          and device model chassis layouts.
         </p>
         <div className="help-tour-tips">
-          <h4>Features</h4>
+          <h4>Vendors</h4>
           <ul>
-            <li><strong>MAC prefixes</strong> are matched against discovered devices to auto-detect vendor</li>
-            <li>Each vendor has <strong>SSH credentials</strong> and connection settings</li>
-            <li>The <strong>default template</strong> is used when deploying config to devices of that vendor</li>
+            <li><strong>MAC prefixes (OUI)</strong> are matched against discovered devices to auto-detect vendor</li>
+            <li>Each vendor has <strong>SSH credentials</strong>, connection settings, and a default template</li>
             <li>Vendor-specific <strong>commands</strong> customize how configs are pushed (e.g., Cisco IOS vs Arista EOS)</li>
           </ul>
+          <h4>DHCP Options</h4>
+          <ul>
+            <li>Configure <strong>dnsmasq DHCP server</strong> options sent to devices during provisioning</li>
+            <li>Supports variables like <code>{'${tftp_server_ip}'}</code> that resolve at config generation time</li>
+            <li>Quick-add buttons for <strong>common options</strong> (boot server, boot file, NTP, etc.)</li>
+          </ul>
+          <h4>Device Models</h4>
+          <ul>
+            <li>Define <strong>chassis port layouts</strong> with rows, sections, and individual ports</li>
+            <li>Specify <strong>connector type</strong> (RJ45, SFP+, QSFP28, etc.) and <strong>speed</strong> per port</li>
+            <li>Live <strong>visual chassis preview</strong> updates as you build the layout</li>
+            <li><strong>Bulk add</strong> ports with auto-incrementing names and column numbers</li>
+          </ul>
         </div>
       </>
     ),
   },
   {
-    title: 'DHCP Options',
-    icon: 'lan',
-    page: 'dhcp',
+    title: 'Topologies',
+    icon: 'hub',
+    page: 'topologies',
     content: (
       <>
         <p>
-          DHCP Options configure the dnsmasq DHCP server options that are sent
-          to devices during the provisioning process.
+          Build and manage CLOS fabric network topologies with spine, leaf,
+          and superspine roles.
         </p>
         <div className="help-tour-tips">
           <h4>Features</h4>
           <ul>
-            <li>Add standard DHCP options by <strong>number</strong> (e.g., option 66 for TFTP server)</li>
-            <li>Options are written to the <strong>dnsmasq configuration</strong> and take effect on restart</li>
-            <li>Common options include boot server, boot file, domain name, and NTP server</li>
+            <li>Create topologies with <strong>named roles</strong> (spine, leaf, border-leaf, etc.) and define the number of nodes per role</li>
+            <li><strong>Connect devices</strong> to topology roles — assign real devices from your inventory to each position</li>
+            <li>View a <strong>visual topology diagram</strong> showing the fabric layout in the expanded row</li>
+            <li><strong>Deploy configurations</strong> to all devices in a topology at once</li>
+            <li>Send <strong>commands</strong> to topology members (show interfaces, show BGP, etc.)</li>
+          </ul>
+        </div>
+      </>
+    ),
+  },
+  {
+    title: 'IPAM',
+    icon: 'lan',
+    page: 'ipam',
+    content: (
+      <>
+        <p>
+          IP Address Management provides hierarchical organization of your network's
+          IP space with prefixes, addresses, VRFs, and roles.
+        </p>
+        <div className="help-tour-tips">
+          <h4>Features</h4>
+          <ul>
+            <li><strong>Org Hierarchy</strong> — organize by Region, Location, and Datacenter</li>
+            <li><strong>Prefixes</strong> — manage network prefixes with CIDR notation, nesting, and supernet relationships</li>
+            <li><strong>IP Addresses</strong> — track individual IPs with assignment status and DNS names</li>
+            <li><strong>VRFs</strong> — Virtual Routing and Forwarding instances for network segmentation</li>
+            <li><strong>Roles</strong> — classify resources (e.g., production, management, loopback)</li>
+            <li><strong>Tags</strong> — attach arbitrary key-value metadata for filtering and organization</li>
+            <li>Use left-side tabs to navigate between IPAM sections</li>
+          </ul>
+        </div>
+      </>
+    ),
+  },
+  {
+    title: 'Actions',
+    icon: 'terminal',
+    page: 'jobs',
+    content: (
+      <>
+        <p>
+          Actions let you define and execute vendor-specific SSH commands
+          on your devices as quick one-click operations.
+        </p>
+        <div className="help-tour-tips">
+          <h4>Features</h4>
+          <ul>
+            <li>Define <strong>reusable commands</strong> per vendor (e.g., "show version", "show ip bgp summary")</li>
+            <li>Organize commands with <strong>sort order</strong> and descriptions</li>
+            <li>Filter commands by <strong>vendor</strong></li>
+            <li>Execute commands on devices directly from the device table actions</li>
+          </ul>
+        </div>
+      </>
+    ),
+  },
+  {
+    title: 'Jobs',
+    icon: 'schedule',
+    page: 'jobs',
+    content: (
+      <>
+        <p>
+          The Jobs page shows a history of all background operations — config deployments,
+          backups, discovery scans, and more.
+        </p>
+        <div className="help-tour-tips">
+          <h4>Features</h4>
+          <ul>
+            <li>View jobs with <strong>status indicators</strong> — completed, failed, running, queued</li>
+            <li>Click a job to <strong>expand</strong> and see detailed logs and output</li>
+            <li><strong>Duration</strong> tracking shows how long each job took</li>
+            <li>Jobs update in <strong>real-time</strong> via WebSocket</li>
           </ul>
         </div>
       </>
@@ -206,7 +286,7 @@ const SLIDES: Slide[] = [
             <li><Icon name="restart_alt" size={16} /> <strong>Reset Discovery</strong> — clears the discovery tracking so all devices are treated as new</li>
             <li><Icon name="insights" size={16} /> <strong>Telemetry</strong> — view application event tracking and performance metrics</li>
             <li><Icon name="history" size={16} /> <strong>API History</strong> — browse all API calls made by the app, with request/response details</li>
-            <li><Icon name="settings" size={16} /> <strong>Settings</strong> — configure server URL, SSH credentials, layout, and other preferences</li>
+            <li><Icon name="settings" size={16} /> <strong>Settings</strong> — configure server URL, SSH credentials, branding, layout, and other preferences</li>
             <li><Icon name="palette" size={16} /> <strong>Theme</strong> — switch between light, dark, and system color themes</li>
             <li><Icon name="help" size={16} /> <strong>Help</strong> — open this guide</li>
           </ul>
@@ -227,6 +307,7 @@ const SLIDES: Slide[] = [
           <h4>Layout Settings</h4>
           <ul>
             <li>Open <strong>Settings</strong> to adjust <strong>page width</strong> (narrow, default, wide, full) and <strong>dialog size</strong></li>
+            <li>Some pages (like Device Models) automatically use a wider layout for complex content</li>
             <li>Layout preferences persist across sessions</li>
           </ul>
           <h4>Notifications</h4>
@@ -239,6 +320,11 @@ const SLIDES: Slide[] = [
           <ul>
             <li>Click the <strong>sticky note icon</strong> in the header to open a quick notes panel</li>
             <li>Notes are saved in your browser and persist across sessions</li>
+          </ul>
+          <h4>Branding</h4>
+          <ul>
+            <li>Upload a custom <strong>logo</strong> and set a custom <strong>app name</strong> in Settings</li>
+            <li>The logo and title update on the browser tab, header, and login page</li>
           </ul>
         </div>
       </>

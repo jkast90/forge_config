@@ -13,6 +13,7 @@ export interface LayoutContextValue extends LayoutSettings {
   setPageWidth: (width: PageWidth) => void;
   setDialogWidth: (width: DialogWidth) => void;
   resetToDefaults: () => void;
+  pushPageWidthOverride: (minWidth: PageWidth) => () => void;
 }
 
 const STORAGE_KEY = 'ztp_layout_settings';
@@ -92,6 +93,17 @@ interface LayoutProviderProps {
   children: ReactNode;
 }
 
+const PAGE_WIDTH_ORDER: PageWidth[] = ['narrow', 'default', 'wide', 'full'];
+
+function resolveMaxWidth(base: PageWidth, overrides: PageWidth[]): PageWidth {
+  let maxIdx = PAGE_WIDTH_ORDER.indexOf(base);
+  for (const o of overrides) {
+    const idx = PAGE_WIDTH_ORDER.indexOf(o);
+    if (idx > maxIdx) maxIdx = idx;
+  }
+  return PAGE_WIDTH_ORDER[maxIdx];
+}
+
 export function LayoutProvider({ children }: LayoutProviderProps) {
   const [settings, setSettings] = useState<LayoutSettings>(() => {
     const loaded = loadSettings();
@@ -99,12 +111,15 @@ export function LayoutProvider({ children }: LayoutProviderProps) {
     applyCSSVariables(loaded);
     return loaded;
   });
+  const [overrides, setOverrides] = useState<PageWidth[]>([]);
 
-  // Apply CSS variables whenever settings change
+  // Apply CSS variables whenever settings or overrides change
   useEffect(() => {
-    applyCSSVariables(settings);
-    saveSettings(settings);
-  }, [settings]);
+    const effective = resolveMaxWidth(settings.pageWidth, overrides);
+    const effectiveSettings = { ...settings, pageWidth: effective };
+    applyCSSVariables(effectiveSettings);
+    saveSettings(settings); // save user's actual setting, not overridden
+  }, [settings, overrides]);
 
   const setPageWidth = useCallback((width: PageWidth) => {
     setSettings((prev) => ({ ...prev, pageWidth: width }));
@@ -118,11 +133,26 @@ export function LayoutProvider({ children }: LayoutProviderProps) {
     setSettings(DEFAULT_SETTINGS);
   }, []);
 
+  // Push a minimum page width override. Returns a cleanup function to remove it.
+  const pushPageWidthOverride = useCallback((minWidth: PageWidth) => {
+    setOverrides((prev) => [...prev, minWidth]);
+    return () => {
+      setOverrides((prev) => {
+        const idx = prev.indexOf(minWidth);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        next.splice(idx, 1);
+        return next;
+      });
+    };
+  }, []);
+
   const value: LayoutContextValue = {
     ...settings,
     setPageWidth,
     setDialogWidth,
     resetToDefaults,
+    pushPageWidthOverride,
   };
 
   return (
@@ -138,4 +168,12 @@ export function useLayout(): LayoutContextValue {
     throw new Error('useLayout must be used within a LayoutProvider');
   }
   return context;
+}
+
+/** Override page width to at least `minWidth` while the calling component is mounted. */
+export function usePageWidthOverride(minWidth: PageWidth) {
+  const { pushPageWidthOverride } = useLayout();
+  useEffect(() => {
+    return pushPageWidthOverride(minWidth);
+  }, [minWidth, pushPageWidthOverride]);
 }

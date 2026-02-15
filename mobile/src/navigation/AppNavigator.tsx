@@ -1,7 +1,7 @@
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useMemo } from 'react';
@@ -14,6 +14,17 @@ import { DeviceFormScreen } from '../screens/DeviceFormScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ScannerScreen } from '../screens/ScannerScreen';
 import { TemplatizerScreen } from '../screens/TemplatizerScreen';
+import { IpamScreen } from '../screens/IpamScreen';
+import { LocationsScreen } from '../screens/LocationsScreen';
+import { GroupsScreen } from '../screens/GroupsScreen';
+import { VariablesScreen } from '../screens/VariablesScreen';
+import { InspectorScreen } from '../screens/InspectorScreen';
+import { DeviceModelsScreen } from '../screens/DeviceModelsScreen';
+import { TopologiesScreen } from '../screens/TopologiesScreen';
+import { ActionsScreen } from '../screens/ActionsScreen';
+import { JobsScreen } from '../screens/JobsScreen';
+import { DataExplorerScreen } from '../screens/DataExplorerScreen';
+import { CredentialsScreen } from '../screens/CredentialsScreen';
 import { useAuth } from '../core';
 import { LoginScreen } from '../screens/LoginScreen';
 import { useAppTheme } from '../context';
@@ -127,6 +138,61 @@ function ConfigStack() {
         component={SettingsScreen}
         options={{ title: 'Server Settings' }}
       />
+      <ConfigStackNav.Screen
+        name="DeviceModels"
+        component={DeviceModelsScreen}
+        options={{ title: 'Device Models' }}
+      />
+      <ConfigStackNav.Screen
+        name="Groups"
+        component={GroupsScreen}
+        options={{ title: 'Groups' }}
+      />
+      <ConfigStackNav.Screen
+        name="Variables"
+        component={VariablesScreen}
+        options={{ title: 'Variables' }}
+      />
+      <ConfigStackNav.Screen
+        name="Inspector"
+        component={InspectorScreen}
+        options={{ title: 'Variable Inspector' }}
+      />
+      <ConfigStackNav.Screen
+        name="Topologies"
+        component={TopologiesScreen}
+        options={{ title: 'Topologies' }}
+      />
+      <ConfigStackNav.Screen
+        name="Actions"
+        component={ActionsScreen}
+        options={{ title: 'Actions' }}
+      />
+      <ConfigStackNav.Screen
+        name="Jobs"
+        component={JobsScreen}
+        options={{ title: 'Jobs' }}
+      />
+      <ConfigStackNav.Screen
+        name="Ipam"
+        component={IpamScreen}
+        options={{ title: 'IPAM' }}
+      />
+      <ConfigStackNav.Screen
+        name="Locations"
+        component={LocationsScreen}
+        options={{ title: 'Locations' }}
+      />
+      <ConfigStackNav.Screen
+        name="DataExplorer"
+        component={DataExplorerScreen}
+        options={{ title: 'Data Explorer' }}
+      />
+      <ConfigStackNav.Screen
+        name="Credentials"
+        component={CredentialsScreen}
+        options={{ title: 'Credentials' }}
+      />
     </ConfigStackNav.Navigator>
   );
 }
@@ -140,6 +206,17 @@ function ConfigMenuScreen() {
     { title: 'Server Settings', subtitle: 'API connection and server config', icon: 'settings', screen: 'SettingsConfig' },
     { title: 'Vendors', subtitle: 'Manage vendor configurations', icon: 'business', screen: 'Vendors' },
     { title: 'DHCP Options', subtitle: 'Configure DHCP options', icon: 'lan', screen: 'DhcpOptions' },
+    { title: 'Device Models', subtitle: 'Hardware models and port layouts', icon: 'memory', screen: 'DeviceModels' },
+    { title: 'Topologies', subtitle: 'Network fabric topologies', icon: 'hub', screen: 'Topologies' },
+    { title: 'Groups', subtitle: 'Device groups with variables', icon: 'group-work', screen: 'Groups' },
+    { title: 'Variables', subtitle: 'Per-device variable keys', icon: 'vpn-key', screen: 'Variables' },
+    { title: 'Inspector', subtitle: 'Resolve variables for a device', icon: 'search', screen: 'Inspector' },
+    { title: 'IPAM', subtitle: 'IP address management', icon: 'account-tree', screen: 'Ipam' },
+    { title: 'Locations', subtitle: 'Regions, campuses, datacenters', icon: 'location-city', screen: 'Locations' },
+    { title: 'Actions', subtitle: 'Vendor quick commands', icon: 'play-arrow', screen: 'Actions' },
+    { title: 'Credentials', subtitle: 'SSH and API key credentials', icon: 'vpn-key', screen: 'Credentials' },
+    { title: 'Jobs', subtitle: 'View job history', icon: 'schedule', screen: 'Jobs' },
+    { title: 'Data Explorer', subtitle: 'Inspect Redux store data', icon: 'storage', screen: 'DataExplorer' },
   ];
 
   const dynamicStyles = useMemo(() => ({
@@ -216,7 +293,7 @@ function ConfigMenuScreen() {
   }), [colors]);
 
   return (
-    <View style={dynamicStyles.container}>
+    <ScrollView style={dynamicStyles.container} contentContainerStyle={{ paddingBottom: 32 }}>
       {menuItems.map((item) => (
         <Pressable
           key={item.screen}
@@ -269,7 +346,7 @@ function ConfigMenuScreen() {
           </Pressable>
         );
       })}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -297,11 +374,15 @@ export function AppNavigator() {
   }), [colors]);
 
   if (authLoading) {
-    return null;
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.bgPrimary, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={colors.accentBlue} />
+      </View>
+    );
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer key={isAuthenticated ? 'auth' : 'unauth'} theme={navigationTheme}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: {

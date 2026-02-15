@@ -13,9 +13,15 @@ import { DeviceVariableService } from './deviceVariables';
 import { GroupService } from './groups';
 import { IpamService } from './ipam';
 import { DeviceModelService } from './deviceModels';
+import { PortAssignmentService } from './portAssignments';
+import { JobTemplateService } from './jobTemplates';
+import { CredentialService } from './credentials';
+import { OutputParserService } from './outputParsers';
+import { DeviceRoleService } from './deviceRoles';
+import { UserService } from './users';
 import { AuthService } from './auth';
 
-export { BaseService, configureServices, getServiceConfig, getInflightCount, onInflightChange, getApiHistory, clearApiHistory, onApiHistoryChange, type ServiceConfig, type ApiHistoryEntry } from './base';
+export { BaseService, configureServices, getServiceConfig, getInflightCount, onInflightChange, getApiHistory, clearApiHistory, onApiHistoryChange, checkApiHealth, type ServiceConfig, type ApiHistoryEntry } from './base';
 export { AuthService } from './auth';
 export type { LoginRequest, LoginResponse } from './auth';
 export { getTokenStorage, setTokenStorage, type TokenStorage } from './tokenStorage';
@@ -35,6 +41,12 @@ export { DeviceVariableService } from './deviceVariables';
 export { GroupService } from './groups';
 export { IpamService } from './ipam';
 export { DeviceModelService } from './deviceModels';
+export { PortAssignmentService } from './portAssignments';
+export { JobTemplateService } from './jobTemplates';
+export { CredentialService } from './credentials';
+export { OutputParserService } from './outputParsers';
+export { DeviceRoleService } from './deviceRoles';
+export { UserService } from './users';
 export { WebSocketService, getWebSocketService } from './websocket';
 export type { WebSocketEvent, WebSocketEventType, DeviceDiscoveredPayload, ConfigPulledPayload, WebSocketEventHandler } from './websocket';
 export { trackEvent, getTelemetryEvents, clearTelemetryEvents, onTelemetryChange, initTelemetry, type TelemetryEvent, type TelemetryEventType } from './telemetry';
@@ -55,6 +67,12 @@ export interface Services {
   groups: GroupService;
   ipam: IpamService;
   deviceModels: DeviceModelService;
+  portAssignments: PortAssignmentService;
+  jobTemplates: JobTemplateService;
+  credentials: CredentialService;
+  outputParsers: OutputParserService;
+  deviceRoles: DeviceRoleService;
+  users: UserService;
 }
 
 // Singleton services that use global config
@@ -77,6 +95,12 @@ export function getServices(): Services {
       groups: new GroupService(),
       ipam: new IpamService(),
       deviceModels: new DeviceModelService(),
+      portAssignments: new PortAssignmentService(),
+      jobTemplates: new JobTemplateService(),
+      credentials: new CredentialService(),
+      outputParsers: new OutputParserService(),
+      deviceRoles: new DeviceRoleService(),
+      users: new UserService(),
     };
   }
   return services;

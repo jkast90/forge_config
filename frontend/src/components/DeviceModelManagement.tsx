@@ -21,6 +21,7 @@ import {
   slugify,
   getVendorName,
 } from '@core';
+import { usePageWidthOverride } from '../context';
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
@@ -364,6 +365,7 @@ function LayoutEditor({ layout, onChange }: LayoutEditorProps) {
 // ---------------------------------------------------------------------------
 
 export function DeviceModelManagement() {
+  usePageWidthOverride('wide');
   const [showInfo, setShowInfo] = useState(false);
   const { vendors } = useVendors();
   const {

@@ -6,7 +6,9 @@ use crate::models::*;
 use super::row_helpers::map_topology_row;
 
 const SELECT_TOPOLOGY: &str = r#"
-    SELECT t.id, t.name, t.description, t.created_at, t.updated_at,
+    SELECT t.id, t.name, t.description,
+           t.region_id, t.campus_id, t.datacenter_id,
+           t.created_at, t.updated_at,
            COALESCE(COUNT(d.mac), 0) as device_count,
            COALESCE(SUM(CASE WHEN d.topology_role = 'super-spine' THEN 1 ELSE 0 END), 0) as super_spine_count,
            COALESCE(SUM(CASE WHEN d.topology_role = 'spine' THEN 1 ELSE 0 END), 0) as spine_count,
@@ -37,12 +39,15 @@ impl TopologyRepo {
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateTopologyRequest) -> Result<Topology> {
         let now = Utc::now();
         sqlx::query(
-            r#"INSERT INTO topologies (id, name, description, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?)"#,
+            r#"INSERT INTO topologies (id, name, description, region_id, campus_id, datacenter_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(&req.id)
         .bind(&req.name)
         .bind(req.description.as_deref().unwrap_or(""))
+        .bind(req.region_id.as_deref().unwrap_or(""))
+        .bind(req.campus_id.as_deref().unwrap_or(""))
+        .bind(req.datacenter_id.as_deref().unwrap_or(""))
         .bind(now)
         .bind(now)
         .execute(pool)
@@ -56,10 +61,13 @@ impl TopologyRepo {
     pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateTopologyRequest) -> Result<Topology> {
         let now = Utc::now();
         let result = sqlx::query(
-            r#"UPDATE topologies SET name = ?, description = ?, updated_at = ? WHERE id = ?"#,
+            r#"UPDATE topologies SET name = ?, description = ?, region_id = ?, campus_id = ?, datacenter_id = ?, updated_at = ? WHERE id = ?"#,
         )
         .bind(&req.name)
         .bind(req.description.as_deref().unwrap_or(""))
+        .bind(req.region_id.as_deref().unwrap_or(""))
+        .bind(req.campus_id.as_deref().unwrap_or(""))
+        .bind(req.datacenter_id.as_deref().unwrap_or(""))
         .bind(now)
         .bind(id)
         .execute(pool)

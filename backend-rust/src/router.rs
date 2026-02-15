@@ -12,7 +12,8 @@ use crate::AppState;
 /// Build the application router with all routes
 pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
     Router::new()
-        // Auth routes (public)
+        // Public routes
+        .route("/api/health", get(handlers::healthcheck))
         .route("/api/auth/login", post(handlers::auth::login))
         // Benchmark routes
         .route("/api/benchmark", get(handlers::benchmarks::benchmark_handler))
@@ -36,6 +37,13 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         // Job routes
         .route("/api/jobs", get(handlers::jobs::list_jobs))
         .route("/api/jobs/:id", get(handlers::jobs::get_job))
+        // Job template routes
+        .route("/api/job-templates", get(handlers::job_templates::list_job_templates))
+        .route("/api/job-templates", post(handlers::job_templates::create_job_template))
+        .route("/api/job-templates/:id", get(handlers::job_templates::get_job_template))
+        .route("/api/job-templates/:id", put(handlers::job_templates::update_job_template))
+        .route("/api/job-templates/:id", delete(handlers::job_templates::delete_job_template))
+        .route("/api/job-templates/:id/run", post(handlers::job_templates::run_job_template))
         // Device variable routes
         .route("/api/devices/:id/variables", get(handlers::device_variables::list_device_variables))
         .route("/api/devices/:id/variables", put(handlers::device_variables::set_device_variables))
@@ -45,6 +53,11 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/variables/keys/:key", delete(handlers::device_variables::delete_variable_key))
         .route("/api/variables/by-key/:key", get(handlers::device_variables::list_by_key))
         .route("/api/variables/bulk", post(handlers::device_variables::bulk_set_variables))
+        // Port assignment routes
+        .route("/api/devices/:id/port-assignments", get(handlers::port_assignments::list_port_assignments))
+        .route("/api/devices/:id/port-assignments", put(handlers::port_assignments::bulk_set_port_assignments))
+        .route("/api/devices/:id/port-assignments/:port_name", put(handlers::port_assignments::set_port_assignment))
+        .route("/api/devices/:id/port-assignments/:port_name", delete(handlers::port_assignments::delete_port_assignment))
         // Backup routes
         .route("/api/devices/:id/backup", post(handlers::backups::trigger_backup))
         .route("/api/devices/:id/backups", get(handlers::backups::list_backups))
@@ -54,6 +67,11 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/settings", put(handlers::settings::update_settings))
         .route("/api/reload", post(handlers::settings::reload_config))
         .route("/api/network/addresses", get(handlers::settings::get_local_addresses))
+        // Branding routes (get_branding and get_logo are public, upload/delete require auth)
+        .route("/api/branding", get(handlers::settings::get_branding))
+        .route("/api/branding/logo", get(handlers::settings::get_logo))
+        .route("/api/branding/logo", post(handlers::settings::upload_logo))
+        .route("/api/branding/logo", delete(handlers::settings::delete_logo))
         // Vendor routes
         .route("/api/vendors", get(handlers::vendors::list_vendors))
         .route("/api/vendors", post(handlers::vendors::create_vendor))
@@ -73,6 +91,7 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/vendor-actions", post(handlers::vendors::create_vendor_action))
         .route("/api/vendor-actions/:id", put(handlers::vendors::update_vendor_action))
         .route("/api/vendor-actions/:id", delete(handlers::vendors::delete_vendor_action))
+        .route("/api/vendor-actions/:id/run", post(handlers::vendors::run_vendor_action))
         // Topology routes
         .route("/api/topologies", get(handlers::topologies::list_topologies))
         .route("/api/topologies", post(handlers::topologies::create_topology))
@@ -149,18 +168,36 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/ipam/regions/:id", get(handlers::ipam::get_region))
         .route("/api/ipam/regions/:id", put(handlers::ipam::update_region))
         .route("/api/ipam/regions/:id", delete(handlers::ipam::delete_region))
-        // IPAM Location routes
-        .route("/api/ipam/locations", get(handlers::ipam::list_locations))
-        .route("/api/ipam/locations", post(handlers::ipam::create_location))
-        .route("/api/ipam/locations/:id", get(handlers::ipam::get_location))
-        .route("/api/ipam/locations/:id", put(handlers::ipam::update_location))
-        .route("/api/ipam/locations/:id", delete(handlers::ipam::delete_location))
+        // IPAM Campus routes
+        .route("/api/ipam/campuses", get(handlers::ipam::list_campuses))
+        .route("/api/ipam/campuses", post(handlers::ipam::create_campus))
+        .route("/api/ipam/campuses/:id", get(handlers::ipam::get_campus))
+        .route("/api/ipam/campuses/:id", put(handlers::ipam::update_campus))
+        .route("/api/ipam/campuses/:id", delete(handlers::ipam::delete_campus))
         // IPAM Datacenter routes
         .route("/api/ipam/datacenters", get(handlers::ipam::list_datacenters))
         .route("/api/ipam/datacenters", post(handlers::ipam::create_datacenter))
         .route("/api/ipam/datacenters/:id", get(handlers::ipam::get_datacenter))
         .route("/api/ipam/datacenters/:id", put(handlers::ipam::update_datacenter))
         .route("/api/ipam/datacenters/:id", delete(handlers::ipam::delete_datacenter))
+        // IPAM Hall routes
+        .route("/api/ipam/halls", get(handlers::ipam::list_halls))
+        .route("/api/ipam/halls", post(handlers::ipam::create_hall))
+        .route("/api/ipam/halls/:id", get(handlers::ipam::get_hall))
+        .route("/api/ipam/halls/:id", put(handlers::ipam::update_hall))
+        .route("/api/ipam/halls/:id", delete(handlers::ipam::delete_hall))
+        // IPAM Row routes
+        .route("/api/ipam/rows", get(handlers::ipam::list_rows))
+        .route("/api/ipam/rows", post(handlers::ipam::create_row))
+        .route("/api/ipam/rows/:id", get(handlers::ipam::get_row))
+        .route("/api/ipam/rows/:id", put(handlers::ipam::update_row))
+        .route("/api/ipam/rows/:id", delete(handlers::ipam::delete_row))
+        // IPAM Rack routes
+        .route("/api/ipam/racks", get(handlers::ipam::list_racks))
+        .route("/api/ipam/racks", post(handlers::ipam::create_rack))
+        .route("/api/ipam/racks/:id", get(handlers::ipam::get_rack))
+        .route("/api/ipam/racks/:id", put(handlers::ipam::update_rack))
+        .route("/api/ipam/racks/:id", delete(handlers::ipam::delete_rack))
         // IPAM Role routes
         .route("/api/ipam/roles", get(handlers::ipam::list_roles))
         .route("/api/ipam/roles", post(handlers::ipam::create_role))
@@ -189,6 +226,30 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/ipam/tags/:resource_type/:resource_id", get(handlers::ipam::list_tags))
         .route("/api/ipam/tags/:resource_type/:resource_id", post(handlers::ipam::set_tag))
         .route("/api/ipam/tags/:resource_type/:resource_id/:key", delete(handlers::ipam::delete_tag))
+        // Credential routes
+        .route("/api/credentials", get(handlers::credentials::list_credentials))
+        .route("/api/credentials", post(handlers::credentials::create_credential))
+        .route("/api/credentials/:id", get(handlers::credentials::get_credential))
+        .route("/api/credentials/:id", put(handlers::credentials::update_credential))
+        .route("/api/credentials/:id", delete(handlers::credentials::delete_credential))
+        // Device Role routes
+        .route("/api/device-roles", get(handlers::device_roles::list_device_roles))
+        .route("/api/device-roles", post(handlers::device_roles::create_device_role))
+        .route("/api/device-roles/:id", get(handlers::device_roles::get_device_role))
+        .route("/api/device-roles/:id", put(handlers::device_roles::update_device_role))
+        .route("/api/device-roles/:id", delete(handlers::device_roles::delete_device_role))
+        // Output Parser routes
+        .route("/api/output-parsers", get(handlers::output_parsers::list_output_parsers))
+        .route("/api/output-parsers", post(handlers::output_parsers::create_output_parser))
+        .route("/api/output-parsers/:id", get(handlers::output_parsers::get_output_parser))
+        .route("/api/output-parsers/:id", put(handlers::output_parsers::update_output_parser))
+        .route("/api/output-parsers/:id", delete(handlers::output_parsers::delete_output_parser))
+        // User management routes
+        .route("/api/users", get(handlers::users::list_users))
+        .route("/api/users", post(handlers::users::create_user))
+        .route("/api/users/:id", get(handlers::users::get_user))
+        .route("/api/users/:id", put(handlers::users::update_user))
+        .route("/api/users/:id", delete(handlers::users::delete_user))
         // WebSocket route
         .route("/api/ws", get(crate::ws_upgrade_handler))
         // Config server route

@@ -1,5 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
 
+export interface ColumnFilterDef<T> {
+  /** Column index this filter applies to */
+  columnIndex: number;
+  /** Extract the filterable value for a row */
+  getValue: (row: T) => string;
+}
+
 export interface UseTableFeaturesOptions<T> {
   data: T[];
   searchable?: boolean;
@@ -7,6 +14,10 @@ export interface UseTableFeaturesOptions<T> {
   getSearchText: (row: T) => string;
   paginate?: boolean;
   pageSize?: number;
+  /** Per-column filter definitions */
+  columnFilters?: ColumnFilterDef<T>[];
+  /** Active column filter values: columnIndex -> Set of selected values */
+  activeFilters?: Map<number, Set<string>>;
 }
 
 export interface UseTableFeaturesReturn<T> {
@@ -27,15 +38,31 @@ export function useTableFeatures<T>({
   getSearchText,
   paginate = false,
   pageSize = 25,
+  columnFilters,
+  activeFilters,
 }: UseTableFeaturesOptions<T>): UseTableFeaturesReturn<T> {
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Apply column filters first, then search
+  const columnFilteredData = useMemo(() => {
+    if (!columnFilters || !activeFilters || activeFilters.size === 0) return data;
+    return data.filter((row) => {
+      for (const filter of columnFilters) {
+        const selected = activeFilters.get(filter.columnIndex);
+        if (!selected || selected.size === 0) continue;
+        const value = filter.getValue(row);
+        if (!selected.has(value)) return false;
+      }
+      return true;
+    });
+  }, [data, columnFilters, activeFilters]);
+
   // Filter data by search query
   const filteredData = useMemo(() => {
-    if (!searchable || !searchQuery.trim()) return data;
+    if (!searchable || !searchQuery.trim()) return columnFilteredData;
     const query = searchQuery.toLowerCase().trim();
-    return data.filter((row) => getSearchText(row).toLowerCase().includes(query));
-  }, [data, searchable, searchQuery, getSearchText]);
+    return columnFilteredData.filter((row) => getSearchText(row).toLowerCase().includes(query));
+  }, [columnFilteredData, searchable, searchQuery, getSearchText]);
 
   const totalCount = data.length;
   const filteredCount = filteredData.length;
@@ -48,10 +75,10 @@ export function useTableFeatures<T>({
     }
   }, [currentPage, totalPages]);
 
-  // Reset to page 1 when search or pageSize changes
+  // Reset to page 1 when search, pageSize, or column filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, pageSize]);
+  }, [searchQuery, pageSize, activeFilters]);
 
   // Paginate
   const displayData = useMemo(() => {

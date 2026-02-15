@@ -28,11 +28,11 @@ export interface UseDeviceVariablesReturn {
   refresh: () => Promise<void>;
   selectKey: (key: string) => Promise<void>;
   clearSelection: () => void;
-  addKey: (key: string, deviceIds: string[], defaultValue: string) => Promise<boolean>;
+  addKey: (key: string, deviceIds: number[], defaultValue: string) => Promise<boolean>;
   deleteKey: (key: string) => Promise<boolean>;
-  setVariable: (deviceId: string, key: string, value: string) => Promise<boolean>;
-  deleteVariable: (deviceId: string, key: string) => Promise<boolean>;
-  bulkSet: (entries: { device_id: string; key: string; value: string }[]) => Promise<boolean>;
+  setVariable: (deviceId: number, key: string, value: string) => Promise<boolean>;
+  deleteVariable: (deviceId: number, key: string) => Promise<boolean>;
+  bulkSet: (entries: { device_id: number; key: string; value: string }[]) => Promise<boolean>;
 }
 
 export function useDeviceVariables(options: UseDeviceVariablesOptions = {}): UseDeviceVariablesReturn {
@@ -73,7 +73,7 @@ export function useDeviceVariables(options: UseDeviceVariablesOptions = {}): Use
     dispatch(setSelectedKey(null));
   }, [dispatch]);
 
-  const addKey = useCallback(async (key: string, deviceIds: string[], defaultValue: string): Promise<boolean> => {
+  const addKey = useCallback(async (key: string, deviceIds: number[], defaultValue: string): Promise<boolean> => {
     try {
       const entries = deviceIds.map(device_id => ({ device_id, key, value: defaultValue }));
       await dispatch(bulkSetThunk(entries)).unwrap();
@@ -98,7 +98,7 @@ export function useDeviceVariables(options: UseDeviceVariablesOptions = {}): Use
     }
   }, [dispatch]);
 
-  const setVariable = useCallback(async (deviceId: string, key: string, value: string): Promise<boolean> => {
+  const setVariable = useCallback(async (deviceId: number, key: string, value: string): Promise<boolean> => {
     try {
       await getServices().deviceVariables.setVariable(deviceId, key, value);
       if (selectedKey === key) {
@@ -112,7 +112,7 @@ export function useDeviceVariables(options: UseDeviceVariablesOptions = {}): Use
     }
   }, [dispatch, selectedKey]);
 
-  const deleteVariable = useCallback(async (deviceId: string, key: string): Promise<boolean> => {
+  const deleteVariable = useCallback(async (deviceId: number, key: string): Promise<boolean> => {
     try {
       await getServices().deviceVariables.deleteVariable(deviceId, key);
       addNotification('success', 'Variable deleted');
@@ -127,7 +127,7 @@ export function useDeviceVariables(options: UseDeviceVariablesOptions = {}): Use
     }
   }, [dispatch, selectedKey]);
 
-  const bulkSet = useCallback(async (entries: { device_id: string; key: string; value: string }[]): Promise<boolean> => {
+  const bulkSet = useCallback(async (entries: { device_id: number; key: string; value: string }[]): Promise<boolean> => {
     try {
       await dispatch(bulkSetThunk(entries)).unwrap();
       addNotification('success', `Updated ${entries.length} variable(s)`);

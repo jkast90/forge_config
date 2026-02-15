@@ -21,7 +21,7 @@ impl VariableResolver {
     /// Full resolution with provenance tracking (for the inspector API).
     pub async fn resolve(
         pool: &Pool<Sqlite>,
-        device_id: &str,
+        device_id: i64,
     ) -> Result<ResolvedVariablesResponse> {
         // 1. Load all groups into a lookup map
         let all_groups = GroupRepo::list_all_raw(pool).await?;
@@ -171,7 +171,7 @@ impl VariableResolver {
     /// Drop-in replacement for the old `list_device_variables → HashMap` pattern.
     pub async fn resolve_flat(
         pool: &Pool<Sqlite>,
-        device_id: &str,
+        device_id: i64,
     ) -> Result<HashMap<String, String>> {
         let result = Self::resolve(pool, device_id).await?;
         Ok(result.variables)

@@ -1,12 +1,17 @@
+mod credentials;
 mod device_models;
+mod device_roles;
 mod device_variables;
 mod devices;
 mod dhcp_options;
+mod port_assignments;
 mod discovery;
 mod groups;
 mod ipam;
+mod job_templates;
 mod jobs;
-mod row_helpers;
+mod output_parsers;
+pub(crate) mod row_helpers;
 pub mod seeds;
 mod settings;
 mod templates;
@@ -15,6 +20,7 @@ mod users;
 mod variable_resolution;
 mod vendor_actions;
 mod vendors;
+mod store_ipam;
 
 use anyhow::{Context, Result};
 use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
@@ -101,6 +107,7 @@ impl Store {
         self.seed_default_dhcp_options().await?;
         self.seed_default_user().await?;
         self.seed_default_vendor_actions().await?;
+        self.seed_default_output_parsers().await?;
         self.seed_default_device_models().await?;
         self.seed_default_ipam_supernets().await?;
 
@@ -202,11 +209,11 @@ impl Store {
     async fn seed_default_vendor_actions(&self) -> Result<()> {
         // INSERT OR IGNORE ensures new seed actions are added to existing databases
         // without overwriting user-modified actions (matched by primary key)
-        for (id, vendor_id, label, command, sort_order) in seeds::seed_vendor_action_params() {
+        for (id, vendor_id, label, command, sort_order, action_type, webhook_url, webhook_method, webhook_headers, webhook_body) in seeds::seed_vendor_action_params() {
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO vendor_actions (id, vendor_id, label, command, sort_order, created_at)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT OR IGNORE INTO vendor_actions (id, vendor_id, label, command, sort_order, action_type, webhook_url, webhook_method, webhook_headers, webhook_body, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 "#,
             )
             .bind(&id)
@@ -214,6 +221,45 @@ impl Store {
             .bind(&label)
             .bind(&command)
             .bind(sort_order)
+            .bind(&action_type)
+            .bind(&webhook_url)
+            .bind(&webhook_method)
+            .bind(&webhook_headers)
+            .bind(&webhook_body)
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn seed_default_output_parsers(&self) -> Result<()> {
+        for parser in seeds::seed_output_parser_data() {
+            // Insert the parser if it doesn't already exist (by name)
+            sqlx::query(
+                r#"
+                INSERT OR IGNORE INTO output_parsers (name, description, pattern, extract_names, enabled, created_at, updated_at)
+                SELECT ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                WHERE NOT EXISTS (SELECT 1 FROM output_parsers WHERE name = ?)
+                "#,
+            )
+            .bind(parser.name)
+            .bind(parser.description)
+            .bind(parser.pattern)
+            .bind(parser.extract_names)
+            .bind(parser.name)
+            .execute(&self.pool)
+            .await?;
+
+            // Link the parser to its vendor action (only if action has no parser yet)
+            sqlx::query(
+                r#"
+                UPDATE vendor_actions
+                SET output_parser_id = (SELECT id FROM output_parsers WHERE name = ?)
+                WHERE id = ? AND output_parser_id IS NULL
+                "#,
+            )
+            .bind(parser.name)
+            .bind(parser.action_id)
             .execute(&self.pool)
             .await?;
         }
@@ -267,12 +313,32 @@ impl Store {
 
     // ========== User Operations ==========
 
+    pub async fn list_users(&self) -> Result<Vec<User>> {
+        users::UserRepo::list(&self.pool).await
+    }
+
+    pub async fn get_user(&self, id: &str) -> Result<Option<User>> {
+        users::UserRepo::get(&self.pool, id).await
+    }
+
     pub async fn get_user_by_username(&self, username: &str) -> Result<Option<User>> {
         users::UserRepo::get_by_username(&self.pool, username).await
     }
 
     pub async fn create_user(&self, id: &str, username: &str, password_hash: &str) -> Result<()> {
         users::UserRepo::create(&self.pool, id, username, password_hash).await
+    }
+
+    pub async fn create_user_full(&self, id: &str, req: &CreateUserRequest) -> Result<User> {
+        users::UserRepo::create_full(&self.pool, id, req).await
+    }
+
+    pub async fn update_user(&self, id: &str, req: &UpdateUserRequest) -> Result<User> {
+        users::UserRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_user(&self, id: &str) -> Result<()> {
+        users::UserRepo::delete(&self.pool, id).await
     }
 
     // ========== Device Operations ==========
@@ -285,7 +351,7 @@ impl Store {
         devices::DeviceRepo::list_paged(&self.pool, limit, offset).await
     }
 
-    pub async fn get_device(&self, id: &str) -> Result<Option<Device>> {
+    pub async fn get_device(&self, id: i64) -> Result<Option<Device>> {
         devices::DeviceRepo::get(&self.pool, id).await
     }
 
@@ -297,11 +363,11 @@ impl Store {
         devices::DeviceRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_device(&self, id: &str, req: &UpdateDeviceRequest) -> Result<Device> {
+    pub async fn update_device(&self, id: i64, req: &UpdateDeviceRequest) -> Result<Device> {
         devices::DeviceRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_device(&self, id: &str) -> Result<()> {
+    pub async fn delete_device(&self, id: i64) -> Result<()> {
         devices::DeviceRepo::delete(&self.pool, id).await
     }
 
@@ -309,19 +375,19 @@ impl Store {
         devices::DeviceRepo::delete_by_topology(&self.pool, topology_id).await
     }
 
-    pub async fn update_device_status(&self, id: &str, status: &str) -> Result<()> {
+    pub async fn update_device_status(&self, id: i64, status: &str) -> Result<()> {
         devices::DeviceRepo::update_status(&self.pool, id, status).await
     }
 
-    pub async fn update_device_backup_time(&self, id: &str) -> Result<()> {
+    pub async fn update_device_backup_time(&self, id: i64) -> Result<()> {
         devices::DeviceRepo::update_backup_time(&self.pool, id).await
     }
 
-    pub async fn update_device_error(&self, id: &str, error_msg: &str) -> Result<()> {
+    pub async fn update_device_error(&self, id: i64, error_msg: &str) -> Result<()> {
         devices::DeviceRepo::update_error(&self.pool, id, error_msg).await
     }
 
-    pub async fn clear_device_error(&self, id: &str) -> Result<()> {
+    pub async fn clear_device_error(&self, id: i64) -> Result<()> {
         devices::DeviceRepo::update_error(&self.pool, id, "").await
     }
 
@@ -337,7 +403,7 @@ impl Store {
 
     // ========== Device Variable Operations ==========
 
-    pub async fn list_device_variables(&self, device_id: &str) -> Result<Vec<DeviceVariable>> {
+    pub async fn list_device_variables(&self, device_id: i64) -> Result<Vec<DeviceVariable>> {
         device_variables::DeviceVariableRepo::list_by_device(&self.pool, device_id).await
     }
 
@@ -345,19 +411,19 @@ impl Store {
         device_variables::DeviceVariableRepo::list_by_key(&self.pool, key).await
     }
 
-    pub async fn get_device_variable(&self, device_id: &str, key: &str) -> Result<Option<DeviceVariable>> {
+    pub async fn get_device_variable(&self, device_id: i64, key: &str) -> Result<Option<DeviceVariable>> {
         device_variables::DeviceVariableRepo::get(&self.pool, device_id, key).await
     }
 
-    pub async fn set_device_variable(&self, device_id: &str, key: &str, value: &str) -> Result<()> {
+    pub async fn set_device_variable(&self, device_id: i64, key: &str, value: &str) -> Result<()> {
         device_variables::DeviceVariableRepo::set(&self.pool, device_id, key, value).await
     }
 
-    pub async fn delete_device_variable(&self, device_id: &str, key: &str) -> Result<()> {
+    pub async fn delete_device_variable(&self, device_id: i64, key: &str) -> Result<()> {
         device_variables::DeviceVariableRepo::delete(&self.pool, device_id, key).await
     }
 
-    pub async fn delete_all_device_variables(&self, device_id: &str) -> Result<()> {
+    pub async fn delete_all_device_variables(&self, device_id: i64) -> Result<()> {
         device_variables::DeviceVariableRepo::delete_all_for_device(&self.pool, device_id).await
     }
 
@@ -365,7 +431,7 @@ impl Store {
         device_variables::DeviceVariableRepo::list_keys(&self.pool).await
     }
 
-    pub async fn bulk_set_device_variables(&self, entries: &[(String, String, String)]) -> Result<()> {
+    pub async fn bulk_set_device_variables(&self, entries: &[(i64, String, String)]) -> Result<()> {
         device_variables::DeviceVariableRepo::bulk_set(&self.pool, entries).await
     }
 
@@ -375,11 +441,11 @@ impl Store {
 
     // ========== Backup Operations ==========
 
-    pub async fn create_backup(&self, device_id: &str, filename: &str, size: i64) -> Result<Backup> {
+    pub async fn create_backup(&self, device_id: i64, filename: &str, size: i64) -> Result<Backup> {
         settings::BackupRepo::create(&self.pool, device_id, filename, size).await
     }
 
-    pub async fn list_backups(&self, device_id: &str) -> Result<Vec<Backup>> {
+    pub async fn list_backups(&self, device_id: i64) -> Result<Vec<Backup>> {
         settings::BackupRepo::list(&self.pool, device_id).await
     }
 
@@ -429,6 +495,28 @@ impl Store {
 
     pub async fn delete_device_model(&self, id: &str) -> Result<()> {
         device_models::DeviceModelRepo::delete(&self.pool, id).await
+    }
+
+    // ========== Port Assignment Operations ==========
+
+    pub async fn list_port_assignments(&self, device_id: i64) -> Result<Vec<PortAssignment>> {
+        port_assignments::PortAssignmentRepo::list_for_device(&self.pool, device_id).await
+    }
+
+    pub async fn list_port_assignments_for_patch_panel(&self, pp_device_id: i64) -> Result<Vec<PortAssignment>> {
+        port_assignments::PortAssignmentRepo::list_for_patch_panel(&self.pool, pp_device_id).await
+    }
+
+    pub async fn set_port_assignment(&self, device_id: i64, req: &SetPortAssignmentRequest) -> Result<PortAssignment> {
+        port_assignments::PortAssignmentRepo::set(&self.pool, device_id, req).await
+    }
+
+    pub async fn bulk_set_port_assignments(&self, device_id: i64, assignments: &[SetPortAssignmentRequest]) -> Result<Vec<PortAssignment>> {
+        port_assignments::PortAssignmentRepo::bulk_set(&self.pool, device_id, assignments).await
+    }
+
+    pub async fn delete_port_assignment(&self, device_id: i64, port_name: &str) -> Result<()> {
+        port_assignments::PortAssignmentRepo::delete(&self.pool, device_id, port_name).await
     }
 
     // ========== DHCP Option Operations ==========
@@ -521,6 +609,10 @@ impl Store {
 
     // ========== Vendor Action Operations ==========
 
+    pub async fn get_vendor_action(&self, id: &str) -> Result<Option<VendorAction>> {
+        vendor_actions::VendorActionRepo::get(&self.pool, id).await
+    }
+
     pub async fn list_vendor_actions(&self) -> Result<Vec<VendorAction>> {
         vendor_actions::VendorActionRepo::list_all(&self.pool).await
     }
@@ -563,7 +655,7 @@ impl Store {
         jobs::JobRepo::update_failed(&self.pool, id, error).await
     }
 
-    pub async fn list_jobs_by_device(&self, device_id: &str, limit: i32) -> Result<Vec<Job>> {
+    pub async fn list_jobs_by_device(&self, device_id: i64, limit: i32) -> Result<Vec<Job>> {
         jobs::JobRepo::list_by_device(&self.pool, device_id, limit).await
     }
 
@@ -573,6 +665,36 @@ impl Store {
 
     pub async fn list_jobs_stuck(&self) -> Result<Vec<Job>> {
         jobs::JobRepo::list_stuck(&self.pool).await
+    }
+
+    // ========== Job Template Operations ==========
+
+    pub async fn list_job_templates(&self) -> Result<Vec<JobTemplate>> {
+        job_templates::JobTemplateRepo::list(&self.pool).await
+    }
+
+    pub async fn get_job_template(&self, id: &str) -> Result<Option<JobTemplate>> {
+        job_templates::JobTemplateRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_job_template(&self, req: &CreateJobTemplateRequest) -> Result<JobTemplate> {
+        job_templates::JobTemplateRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_job_template(&self, id: &str, req: &CreateJobTemplateRequest) -> Result<JobTemplate> {
+        job_templates::JobTemplateRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_job_template(&self, id: &str) -> Result<()> {
+        job_templates::JobTemplateRepo::delete(&self.pool, id).await
+    }
+
+    pub async fn list_scheduled_job_templates(&self) -> Result<Vec<JobTemplate>> {
+        job_templates::JobTemplateRepo::list_scheduled(&self.pool).await
+    }
+
+    pub async fn update_job_template_last_run(&self, id: &str) -> Result<()> {
+        job_templates::JobTemplateRepo::update_last_run(&self.pool, id).await
     }
 
     // ========== Topology Operations ==========
@@ -635,27 +757,27 @@ impl Store {
 
     // ========== Group Membership Operations ==========
 
-    pub async fn list_group_members(&self, group_id: &str) -> Result<Vec<String>> {
+    pub async fn list_group_members(&self, group_id: &str) -> Result<Vec<i64>> {
         groups::GroupRepo::list_group_members(&self.pool, group_id).await
     }
 
-    pub async fn list_device_groups(&self, device_id: &str) -> Result<Vec<Group>> {
+    pub async fn list_device_groups(&self, device_id: i64) -> Result<Vec<Group>> {
         groups::GroupRepo::list_device_groups(&self.pool, device_id).await
     }
 
-    pub async fn add_device_to_group(&self, device_id: &str, group_id: &str) -> Result<()> {
+    pub async fn add_device_to_group(&self, device_id: i64, group_id: &str) -> Result<()> {
         groups::GroupRepo::add_device_to_group(&self.pool, device_id, group_id).await
     }
 
-    pub async fn remove_device_from_group(&self, device_id: &str, group_id: &str) -> Result<()> {
+    pub async fn remove_device_from_group(&self, device_id: i64, group_id: &str) -> Result<()> {
         groups::GroupRepo::remove_device_from_group(&self.pool, device_id, group_id).await
     }
 
-    pub async fn set_group_members(&self, group_id: &str, device_ids: &[String]) -> Result<()> {
+    pub async fn set_group_members(&self, group_id: &str, device_ids: &[i64]) -> Result<()> {
         groups::GroupRepo::set_group_members(&self.pool, group_id, device_ids).await
     }
 
-    pub async fn set_device_groups(&self, device_id: &str, group_ids: &[String]) -> Result<()> {
+    pub async fn set_device_groups(&self, device_id: i64, group_ids: &[String]) -> Result<()> {
         groups::GroupRepo::set_device_groups(&self.pool, device_id, group_ids).await
     }
 
@@ -671,188 +793,78 @@ impl Store {
 
     // ========== Variable Resolution ==========
 
-    pub async fn resolve_device_variables(&self, device_id: &str) -> Result<ResolvedVariablesResponse> {
+    pub async fn resolve_device_variables(&self, device_id: i64) -> Result<ResolvedVariablesResponse> {
         variable_resolution::VariableResolver::resolve(&self.pool, device_id).await
     }
 
-    pub async fn resolve_device_variables_flat(&self, device_id: &str) -> Result<HashMap<String, String>> {
+    pub async fn resolve_device_variables_flat(&self, device_id: i64) -> Result<HashMap<String, String>> {
         variable_resolution::VariableResolver::resolve_flat(&self.pool, device_id).await
     }
 
-    // ========== IPAM Region Operations ==========
+    // ========== Credential Operations ==========
 
-    pub async fn list_ipam_regions(&self) -> Result<Vec<IpamRegion>> {
-        ipam::IpamRegionRepo::list(&self.pool).await
+    pub async fn list_credentials(&self) -> Result<Vec<Credential>> {
+        credentials::CredentialRepo::list(&self.pool).await
     }
 
-    pub async fn get_ipam_region(&self, id: &str) -> Result<Option<IpamRegion>> {
-        ipam::IpamRegionRepo::get(&self.pool, id).await
+    pub async fn get_credential(&self, id: &str) -> Result<Option<Credential>> {
+        credentials::CredentialRepo::get(&self.pool, id).await
     }
 
-    pub async fn create_ipam_region(&self, req: &CreateIpamRegionRequest) -> Result<IpamRegion> {
-        ipam::IpamRegionRepo::create(&self.pool, req).await
+    pub async fn create_credential(&self, req: &CreateCredentialRequest) -> Result<Credential> {
+        credentials::CredentialRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_region(&self, id: &str, req: &CreateIpamRegionRequest) -> Result<IpamRegion> {
-        ipam::IpamRegionRepo::update(&self.pool, id, req).await
+    pub async fn update_credential(&self, id: &str, req: &CreateCredentialRequest) -> Result<Credential> {
+        credentials::CredentialRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_region(&self, id: &str) -> Result<()> {
-        ipam::IpamRegionRepo::delete(&self.pool, id).await
+    pub async fn delete_credential(&self, id: &str) -> Result<()> {
+        credentials::CredentialRepo::delete(&self.pool, id).await
     }
 
-    // ========== IPAM Location Operations ==========
+    // ========== Device Role Operations ==========
 
-    pub async fn list_ipam_locations(&self) -> Result<Vec<IpamLocation>> {
-        ipam::IpamLocationRepo::list(&self.pool).await
+    pub async fn list_device_roles(&self) -> Result<Vec<DeviceRole>> {
+        device_roles::DeviceRoleRepo::list(&self.pool).await
     }
 
-    pub async fn get_ipam_location(&self, id: &str) -> Result<Option<IpamLocation>> {
-        ipam::IpamLocationRepo::get(&self.pool, id).await
+    pub async fn get_device_role(&self, id: &str) -> Result<Option<DeviceRole>> {
+        device_roles::DeviceRoleRepo::get(&self.pool, id).await
     }
 
-    pub async fn create_ipam_location(&self, req: &CreateIpamLocationRequest) -> Result<IpamLocation> {
-        ipam::IpamLocationRepo::create(&self.pool, req).await
+    pub async fn create_device_role(&self, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
+        device_roles::DeviceRoleRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_location(&self, id: &str, req: &CreateIpamLocationRequest) -> Result<IpamLocation> {
-        ipam::IpamLocationRepo::update(&self.pool, id, req).await
+    pub async fn update_device_role(&self, id: &str, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
+        device_roles::DeviceRoleRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_location(&self, id: &str) -> Result<()> {
-        ipam::IpamLocationRepo::delete(&self.pool, id).await
+    pub async fn delete_device_role(&self, id: &str) -> Result<()> {
+        device_roles::DeviceRoleRepo::delete(&self.pool, id).await
     }
 
-    // ========== IPAM Datacenter Operations ==========
+    // ========== Output Parser Operations ==========
 
-    pub async fn list_ipam_datacenters(&self) -> Result<Vec<IpamDatacenter>> {
-        ipam::IpamDatacenterRepo::list(&self.pool).await
+    pub async fn list_output_parsers(&self) -> Result<Vec<OutputParser>> {
+        output_parsers::OutputParserRepo::list(&self.pool).await
     }
 
-    pub async fn get_ipam_datacenter(&self, id: &str) -> Result<Option<IpamDatacenter>> {
-        ipam::IpamDatacenterRepo::get(&self.pool, id).await
+    pub async fn get_output_parser(&self, id: i64) -> Result<Option<OutputParser>> {
+        output_parsers::OutputParserRepo::get(&self.pool, id).await
     }
 
-    pub async fn create_ipam_datacenter(&self, req: &CreateIpamDatacenterRequest) -> Result<IpamDatacenter> {
-        ipam::IpamDatacenterRepo::create(&self.pool, req).await
+    pub async fn create_output_parser(&self, req: &CreateOutputParserRequest) -> Result<OutputParser> {
+        output_parsers::OutputParserRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_datacenter(&self, id: &str, req: &CreateIpamDatacenterRequest) -> Result<IpamDatacenter> {
-        ipam::IpamDatacenterRepo::update(&self.pool, id, req).await
+    pub async fn update_output_parser(&self, id: i64, req: &CreateOutputParserRequest) -> Result<OutputParser> {
+        output_parsers::OutputParserRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_datacenter(&self, id: &str) -> Result<()> {
-        ipam::IpamDatacenterRepo::delete(&self.pool, id).await
-    }
-
-    // ========== IPAM Role Operations ==========
-
-    pub async fn list_ipam_roles(&self) -> Result<Vec<IpamRole>> {
-        ipam::IpamRoleRepo::list(&self.pool).await
-    }
-
-    pub async fn create_ipam_role(&self, req: &CreateIpamRoleRequest) -> Result<IpamRole> {
-        ipam::IpamRoleRepo::create(&self.pool, req).await
-    }
-
-    pub async fn delete_ipam_role(&self, id: &str) -> Result<()> {
-        ipam::IpamRoleRepo::delete(&self.pool, id).await
-    }
-
-    // ========== IPAM Prefix Operations ==========
-
-    pub async fn list_ipam_prefixes(&self) -> Result<Vec<IpamPrefix>> {
-        ipam::IpamPrefixRepo::list(&self.pool).await
-    }
-
-    pub async fn list_ipam_supernets(&self) -> Result<Vec<IpamPrefix>> {
-        ipam::IpamPrefixRepo::list_supernets(&self.pool).await
-    }
-
-    pub async fn get_ipam_prefix(&self, id: i64) -> Result<Option<IpamPrefix>> {
-        ipam::IpamPrefixRepo::get(&self.pool, id).await
-    }
-
-    pub async fn find_ipam_prefix_by_cidr(&self, cidr: &str, vrf_id: Option<&str>) -> Result<Option<IpamPrefix>> {
-        ipam::IpamPrefixRepo::find_by_cidr(&self.pool, cidr, vrf_id).await
-    }
-
-    pub async fn create_ipam_prefix(&self, req: &CreateIpamPrefixRequest) -> Result<IpamPrefix> {
-        ipam::IpamPrefixRepo::create(&self.pool, req).await
-    }
-
-    pub async fn update_ipam_prefix(&self, id: i64, req: &CreateIpamPrefixRequest) -> Result<IpamPrefix> {
-        ipam::IpamPrefixRepo::update(&self.pool, id, req).await
-    }
-
-    pub async fn delete_ipam_prefix(&self, id: i64) -> Result<()> {
-        ipam::IpamPrefixRepo::delete(&self.pool, id).await
-    }
-
-    pub async fn next_available_ipam_prefix(&self, parent_id: i64, req: &NextAvailablePrefixRequest) -> Result<IpamPrefix> {
-        ipam::IpamPrefixRepo::next_available_prefix(&self.pool, parent_id, req).await
-    }
-
-    // ========== IPAM IP Address Operations ==========
-
-    pub async fn list_ipam_ip_addresses(&self) -> Result<Vec<IpamIpAddress>> {
-        ipam::IpamIpAddressRepo::list(&self.pool).await
-    }
-
-    pub async fn list_ipam_ip_addresses_by_prefix(&self, prefix_id: i64) -> Result<Vec<IpamIpAddress>> {
-        ipam::IpamIpAddressRepo::list_by_prefix(&self.pool, prefix_id).await
-    }
-
-    pub async fn get_ipam_ip_address(&self, id: &str) -> Result<Option<IpamIpAddress>> {
-        ipam::IpamIpAddressRepo::get(&self.pool, id).await
-    }
-
-    pub async fn create_ipam_ip_address(&self, req: &CreateIpamIpAddressRequest) -> Result<IpamIpAddress> {
-        ipam::IpamIpAddressRepo::create(&self.pool, req).await
-    }
-
-    pub async fn update_ipam_ip_address(&self, id: &str, req: &CreateIpamIpAddressRequest) -> Result<IpamIpAddress> {
-        ipam::IpamIpAddressRepo::update(&self.pool, id, req).await
-    }
-
-    pub async fn delete_ipam_ip_address(&self, id: &str) -> Result<()> {
-        ipam::IpamIpAddressRepo::delete(&self.pool, id).await
-    }
-
-    pub async fn next_available_ipam_ip(&self, prefix_id: i64, req: &NextAvailableIpRequest) -> Result<IpamIpAddress> {
-        ipam::IpamIpAddressRepo::next_available_ip(&self.pool, prefix_id, req).await
-    }
-
-    // ========== IPAM Tag Operations ==========
-
-    pub async fn list_ipam_tags(&self, resource_type: &str, resource_id: &str) -> Result<Vec<IpamTag>> {
-        ipam::IpamTagRepo::list_for_resource(&self.pool, resource_type, resource_id).await
-    }
-
-    pub async fn set_ipam_tag(&self, resource_type: &str, resource_id: &str, key: &str, value: &str) -> Result<()> {
-        ipam::IpamTagRepo::set(&self.pool, resource_type, resource_id, key, value).await
-    }
-
-    pub async fn delete_ipam_tag(&self, resource_type: &str, resource_id: &str, key: &str) -> Result<()> {
-        ipam::IpamTagRepo::delete(&self.pool, resource_type, resource_id, key).await
-    }
-
-    pub async fn list_ipam_tag_keys(&self) -> Result<Vec<String>> {
-        ipam::IpamTagRepo::list_distinct_keys(&self.pool).await
-    }
-
-    // ========== IPAM VRF Operations ==========
-
-    pub async fn list_ipam_vrfs(&self) -> Result<Vec<IpamVrf>> {
-        ipam::IpamVrfRepo::list(&self.pool).await
-    }
-
-    pub async fn create_ipam_vrf(&self, req: &CreateIpamVrfRequest) -> Result<IpamVrf> {
-        ipam::IpamVrfRepo::create(&self.pool, req).await
-    }
-
-    pub async fn delete_ipam_vrf(&self, id: &str) -> Result<()> {
-        ipam::IpamVrfRepo::delete(&self.pool, id).await
+    pub async fn delete_output_parser(&self, id: i64) -> Result<()> {
+        output_parsers::OutputParserRepo::delete(&self.pool, id).await
     }
 
     // ========== Ensure "all" group ==========

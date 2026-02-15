@@ -51,7 +51,7 @@ export function useAuthState(): UseAuthReturn {
       setIsAuthenticated(false);
       setUsername(null);
     };
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       window.addEventListener('auth:unauthorized', handler);
       return () => window.removeEventListener('auth:unauthorized', handler);
     }

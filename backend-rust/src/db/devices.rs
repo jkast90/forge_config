@@ -9,7 +9,8 @@ use super::row_helpers::map_device_row;
 const SELECT_DEVICE: &str = r#"
     SELECT id, mac, ip, hostname, vendor, model, serial_number, config_template,
            ssh_user, ssh_pass, topology_id, topology_role,
-           status, last_seen, last_backup, last_error,
+           hall_id, row_id, rack_id, rack_position,
+           status, device_type, last_seen, last_backup, last_error,
            created_at, updated_at
     FROM devices
 "#;
@@ -36,7 +37,7 @@ impl DeviceRepo {
         Ok(rows.iter().map(map_device_row).collect())
     }
 
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<Device>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<Device>> {
         let row = sqlx::query(&format!("{} WHERE id = ?", SELECT_DEVICE))
             .bind(id)
             .fetch_optional(pool)
@@ -56,16 +57,15 @@ impl DeviceRepo {
 
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateDeviceRequest) -> Result<Device> {
         let now = Utc::now();
-        let generated_id = req.mac.replace(':', "");
-        let id = req.id.as_deref().unwrap_or(&generated_id);
-        sqlx::query(
+        let result = sqlx::query(
             r#"
-            INSERT INTO devices (id, mac, ip, hostname, vendor, model, serial_number, config_template,
-                                ssh_user, ssh_pass, topology_id, topology_role, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'offline', ?, ?)
+            INSERT INTO devices (mac, ip, hostname, vendor, model, serial_number, config_template,
+                                ssh_user, ssh_pass, topology_id, topology_role,
+                                hall_id, row_id, rack_id, rack_position,
+                                device_type, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'offline', ?, ?)
             "#,
         )
-        .bind(id)
         .bind(&req.mac)
         .bind(&req.ip)
         .bind(&req.hostname)
@@ -77,23 +77,32 @@ impl DeviceRepo {
         .bind(&req.ssh_pass.clone().unwrap_or_default())
         .bind(&req.topology_id.clone().unwrap_or_default())
         .bind(&req.topology_role.clone().unwrap_or_default())
+        .bind(&req.hall_id.clone().unwrap_or_default())
+        .bind(&req.row_id.clone().unwrap_or_default())
+        .bind(&req.rack_id.clone().unwrap_or_default())
+        .bind(req.rack_position.unwrap_or(0))
+        .bind(&req.device_type.clone().unwrap_or_else(|| "internal".to_string()))
         .bind(now)
         .bind(now)
         .execute(pool)
         .await?;
 
-        Self::get(pool, id)
+        let new_id = result.last_insert_rowid();
+
+        Self::get(pool, new_id)
             .await?
             .context("Device not found after creation")
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &UpdateDeviceRequest) -> Result<Device> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &UpdateDeviceRequest) -> Result<Device> {
         let now = Utc::now();
         let result = sqlx::query(
             r#"
             UPDATE devices SET ip = ?, hostname = ?, vendor = ?, model = ?, serial_number = ?,
                               config_template = ?, ssh_user = ?, ssh_pass = ?,
-                              topology_id = ?, topology_role = ?, updated_at = ?
+                              topology_id = ?, topology_role = ?,
+                              hall_id = ?, row_id = ?, rack_id = ?, rack_position = ?,
+                              device_type = ?, updated_at = ?
             WHERE id = ?
             "#,
         )
@@ -107,13 +116,18 @@ impl DeviceRepo {
         .bind(&req.ssh_pass.clone().unwrap_or_default())
         .bind(&req.topology_id.clone().unwrap_or_default())
         .bind(&req.topology_role.clone().unwrap_or_default())
+        .bind(&req.hall_id.clone().unwrap_or_default())
+        .bind(&req.row_id.clone().unwrap_or_default())
+        .bind(&req.rack_id.clone().unwrap_or_default())
+        .bind(req.rack_position.unwrap_or(0))
+        .bind(&req.device_type.clone().unwrap_or_else(|| "internal".to_string()))
         .bind(now)
         .bind(id)
         .execute(pool)
         .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Device", id).into());
+            return Err(super::NotFoundError::new("Device", &id.to_string()).into());
         }
 
         Self::get(pool, id)
@@ -121,19 +135,19 @@ impl DeviceRepo {
             .context("Device not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM devices WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Device", id).into());
+            return Err(super::NotFoundError::new("Device", &id.to_string()).into());
         }
         Ok(())
     }
 
-    pub async fn update_status(pool: &Pool<Sqlite>, id: &str, status: &str) -> Result<()> {
+    pub async fn update_status(pool: &Pool<Sqlite>, id: i64, status: &str) -> Result<()> {
         let now = Utc::now();
         sqlx::query("UPDATE devices SET status = ?, last_seen = ?, updated_at = ? WHERE id = ?")
             .bind(status)
@@ -145,7 +159,7 @@ impl DeviceRepo {
         Ok(())
     }
 
-    pub async fn update_backup_time(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn update_backup_time(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let now = Utc::now();
         sqlx::query("UPDATE devices SET last_backup = ?, updated_at = ? WHERE id = ?")
             .bind(now)
@@ -158,7 +172,7 @@ impl DeviceRepo {
 
     pub async fn delete_by_topology(pool: &Pool<Sqlite>, topology_id: &str) -> Result<u64> {
         // Also clean up device variables for these devices
-        let device_ids: Vec<String> = sqlx::query_scalar(
+        let device_ids: Vec<i64> = sqlx::query_scalar(
             "SELECT id FROM devices WHERE topology_id = ?",
         )
         .bind(topology_id)
@@ -180,7 +194,7 @@ impl DeviceRepo {
         Ok(result.rows_affected())
     }
 
-    pub async fn update_error(pool: &Pool<Sqlite>, id: &str, error_msg: &str) -> Result<()> {
+    pub async fn update_error(pool: &Pool<Sqlite>, id: i64, error_msg: &str) -> Result<()> {
         let now = Utc::now();
         sqlx::query("UPDATE devices SET last_error = ?, updated_at = ? WHERE id = ?")
             .bind(error_msg)

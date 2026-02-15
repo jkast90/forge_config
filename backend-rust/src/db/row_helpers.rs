@@ -11,7 +11,7 @@ pub fn none_if_empty(opt: Option<String>) -> Option<String> {
 pub fn map_device_row(row: &SqliteRow) -> Device {
     Device {
         id: row.get("id"),
-        mac: row.get("mac"),
+        mac: row.get::<Option<String>, _>("mac"),
         ip: row.get("ip"),
         hostname: row.get("hostname"),
         vendor: none_if_empty(row.get("vendor")),
@@ -22,7 +22,15 @@ pub fn map_device_row(row: &SqliteRow) -> Device {
         ssh_pass: none_if_empty(row.get("ssh_pass")),
         topology_id: none_if_empty(row.get("topology_id")),
         topology_role: none_if_empty(row.get("topology_role")),
+        hall_id: none_if_empty(row.get("hall_id")),
+        row_id: none_if_empty(row.get("row_id")),
+        rack_id: none_if_empty(row.get("rack_id")),
+        rack_position: {
+            let v: i32 = row.get("rack_position");
+            if v == 0 { None } else { Some(v) }
+        },
         status: row.get("status"),
+        device_type: row.get("device_type"),
         last_seen: row.get("last_seen"),
         last_backup: row.get("last_backup"),
         last_error: none_if_empty(row.get("last_error")),
@@ -114,6 +122,9 @@ pub fn map_topology_row(row: &SqliteRow) -> Topology {
         id: row.get("id"),
         name: row.get("name"),
         description: none_if_empty(row.get("description")),
+        region_id: none_if_empty(row.get("region_id")),
+        campus_id: none_if_empty(row.get("campus_id")),
+        datacenter_id: none_if_empty(row.get("datacenter_id")),
         device_count: Some(row.get("device_count")),
         super_spine_count: Some(row.get("super_spine_count")),
         spine_count: Some(row.get("spine_count")),

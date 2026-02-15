@@ -12,7 +12,7 @@ use crate::models::Lease;
 pub struct BackupService {
     store: Store,
     backup_dir: String,
-    pending_tx: mpsc::Sender<String>,
+    pending_tx: mpsc::Sender<i64>,
 }
 
 impl BackupService {
@@ -35,14 +35,14 @@ impl BackupService {
     }
 
     /// Queue a backup for a device by ID
-    pub async fn queue_backup(&self, device_id: String) {
-        if let Err(e) = self.pending_tx.send(device_id.clone()).await {
+    pub async fn queue_backup(&self, device_id: i64) {
+        if let Err(e) = self.pending_tx.send(device_id).await {
             tracing::warn!("Failed to queue backup for {}: {}", device_id, e);
         }
     }
 
     /// Trigger an immediate backup for a device by ID
-    pub async fn trigger_backup(&self, device_id: String) {
+    pub async fn trigger_backup(&self, device_id: i64) {
         self.queue_backup(device_id).await;
     }
 
@@ -55,7 +55,7 @@ impl BackupService {
         };
 
         // Update device status
-        if let Err(e) = self.store.update_device_status(&device.id, crate::models::device_status::PROVISIONING).await {
+        if let Err(e) = self.store.update_device_status(device.id, crate::models::device_status::PROVISIONING).await {
             tracing::warn!("Failed to update device status: {}", e);
         }
 
@@ -76,7 +76,7 @@ impl BackupService {
         );
 
         // Schedule backup after delay using device ID
-        let device_id = device.id.clone();
+        let device_id = device.id;
         let tx = self.pending_tx.clone();
         tokio::spawn(async move {
             sleep(Duration::from_secs(backup_delay as u64)).await;
@@ -86,20 +86,20 @@ impl BackupService {
         });
     }
 
-    async fn worker(&self, mut pending_rx: mpsc::Receiver<String>) {
+    async fn worker(&self, mut pending_rx: mpsc::Receiver<i64>) {
         while let Some(device_id) = pending_rx.recv().await {
-            if let Err(e) = self.perform_backup(&device_id).await {
+            if let Err(e) = self.perform_backup(device_id).await {
                 tracing::error!("Backup failed for {}: {}", device_id, e);
             }
         }
     }
 
-    async fn perform_backup(&self, device_id: &str) -> Result<()> {
+    async fn perform_backup(&self, device_id: i64) -> Result<()> {
         let device = self
             .store
             .get_device(device_id)
             .await?
-            .ok_or_else(|| crate::db::NotFoundError::new("Device", device_id))?;
+            .ok_or_else(|| crate::db::NotFoundError::new("Device", &device_id.to_string()))?;
 
         let settings = self.store.get_settings().await?;
 
@@ -175,7 +175,7 @@ impl BackupService {
         Ok(())
     }
 
-    async fn save_backup(&self, hostname: &str, device_id: &str, config: &str) -> Result<()> {
+    async fn save_backup(&self, hostname: &str, device_id: i64, config: &str) -> Result<()> {
         // Ensure backup directory exists
         tokio::fs::create_dir_all(&self.backup_dir).await?;
 

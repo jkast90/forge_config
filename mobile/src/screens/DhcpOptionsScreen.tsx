@@ -92,7 +92,6 @@ export function DhcpOptionsScreen() {
     createOption,
     updateOption,
     deleteOption,
-    message,
   } = useDhcpOptions({ vendorFilter: filterVendor || 'all' });
 
   const [showForm, setShowForm] = useState(false);

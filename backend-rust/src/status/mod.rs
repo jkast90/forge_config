@@ -64,7 +64,7 @@ async fn check_all_devices(store: &Store) -> anyhow::Result<()> {
 
         // Only update if status changed or device is online (to update last_seen)
         if device.status != new_status || is_reachable {
-            if let Err(e) = store.update_device_status(&device.id, new_status).await {
+            if let Err(e) = store.update_device_status(device.id, new_status).await {
                 tracing::warn!("Failed to update status for {}: {}", device.id, e);
             }
         }

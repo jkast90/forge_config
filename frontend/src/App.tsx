@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Provider } from 'react-redux';
-import { store, useAuth, useAuthState, AuthProvider, useDevices, useWebTheme, useWebSocket, useVendors, useInflight, useModalRoute, useNotificationHistory, lookupVendorByMac, setVendorCache, addNotification, DeviceDiscoveredPayload, getServices, initTelemetry, trackEvent } from '@core';
-import { DeviceList } from './components/DeviceList';
+import { store, useAuth, useAuthState, AuthProvider, useDevices, useWebTheme, useWebSocket, useVendors, useSettings, useInflight, useModalRoute, useNotificationHistory, lookupVendorByMac, setVendorCache, addNotification, DeviceDiscoveredPayload, getServices, initTelemetry, trackEvent } from '@core';
+import type { Branding } from '@core';
 import { DeviceForm } from './components/DeviceForm';
 import { LoginPage } from './components/LoginPage';
 import { SettingsDialog } from './components/SettingsDialog';
@@ -10,15 +10,14 @@ import {
   Button,
   Dashboard,
   DataExplorer,
-  DhcpOptions,
-  Discovery,
+  DevicesPage,
   DropdownSelect,
   HelpTour,
   Notifications,
   NotificationPopup,
   ScratchPad,
   Telemetry,
-  TemplateBuilder,
+  ConfigManagement,
   ThemeSelector,
   Tooltip,
   Icon,
@@ -26,36 +25,50 @@ import {
   RefreshIcon,
   SpinnerIcon,
   Jobs,
-  TopologyManagement,
-  VariableManager,
-  VendorActions,
-  VendorManagement,
-  GroupManagement,
-  ResolvedVariablesInspector,
+  VendorsAndModels,
   IpamManagement,
-  DeviceModelManagement,
+  Locations,
+  TopologyManagement,
+  UserManagement,
 } from './components';
 import type { DropdownOption } from './components';
 import type { Device, DeviceFormData } from '@core';
 import { LayoutProvider } from './context';
-import logo from './assets/image.png';
+import defaultLogo from './assets/image.png';
+
+// Hook to fetch public branding (works without auth, uses direct fetch)
+function useBranding() {
+  const [branding, setBranding] = useState<Branding>({ app_name: 'ZTP Manager', logo_url: null });
+  useEffect(() => {
+    fetch('/api/branding')
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(setBranding)
+      .catch(() => {/* use defaults */});
+  }, []);
+
+  // Update document title and favicon when branding changes
+  useEffect(() => {
+    document.title = branding.app_name || 'ZTP Manager';
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (link) {
+      link.href = branding.logo_url || '/favicon.png';
+    }
+  }, [branding.app_name, branding.logo_url]);
+
+  return branding;
+}
 
 const PAGES: DropdownOption[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', description: 'Overview and activity' },
-  { id: 'devices', label: 'Devices', icon: 'devices', description: 'Manage network devices' },
-  { id: 'discovery', label: 'Discovery', icon: 'search', description: 'Discover new devices' },
-  { id: 'templates', label: 'Templates', icon: 'description', description: 'Build config templates' },
-  { id: 'vendors', label: 'Vendors', icon: 'business', description: 'Configure vendor settings' },
-  { id: 'dhcp', label: 'DHCP Options', icon: 'lan', description: 'Manage DHCP options' },
-  { id: 'topologies', label: 'Topologies', icon: 'hub', description: 'CLOS fabric topologies' },
-  { id: 'groups', label: 'Groups', icon: 'account_tree', description: 'Device group management' },
-  { id: 'variables', label: 'Variables', icon: 'tune', description: 'Device variable management' },
-  { id: 'inspector', label: 'Variable Inspector', icon: 'search', description: 'Inspect resolved variables' },
-  { id: 'ipam', label: 'IPAM', icon: 'lan', description: 'IP Address Management' },
-  { id: 'device-models', label: 'Device Models', icon: 'memory', description: 'Chassis port layouts' },
-  { id: 'actions', label: 'Actions', icon: 'terminal', description: 'Vendor quick commands' },
-  { id: 'jobs', label: 'Jobs', icon: 'schedule', description: 'View job history' },
+  { id: 'config', label: 'Configuration', icon: 'description', description: 'Templates, groups, variables' },
   { id: 'explorer', label: 'Data Explorer', icon: 'storage', description: 'Inspect Redux store data' },
+  { id: 'devices', label: 'Devices', icon: 'devices', description: 'Devices, discovery, test containers' },
+  { id: 'ipam', label: 'IPAM', icon: 'lan', description: 'IP Address Management' },
+  { id: 'jobs', label: 'Jobs', icon: 'schedule', description: 'Actions, job history, templates, credentials' },
+  { id: 'locations', label: 'Locations', icon: 'account_tree', description: 'Regions, campuses, datacenters' },
+  { id: 'topologies', label: 'Topologies', icon: 'hub', description: 'Network topologies' },
+  { id: 'users', label: 'Users', icon: 'people', description: 'Manage user accounts' },
+  { id: 'vendors-models', label: 'Vendors & Models', icon: 'business', description: 'Vendors, DHCP options, device models' },
 ];
 
 const LOADING_MESSAGES = [
@@ -92,22 +105,40 @@ function InflightIndicator({ count }: { count: number }) {
 
 function AppContent() {
   const { isAuthenticated, username, logout, loading: authLoading } = useAuth();
+  const branding = useBranding();
 
   if (authLoading) {
     return null;
   }
 
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return <LoginPage branding={branding} />;
   }
 
   return <AuthenticatedApp username={username} onLogout={logout} />;
 }
 
 function AuthenticatedApp({ username, onLogout }: { username: string | null; onLogout: () => void }) {
+  const { settings } = useSettings();
   const [activePage, setActivePage] = useState(() => {
-    return localStorage.getItem('ztp_active_page') || 'dashboard';
+    const saved = localStorage.getItem('ztp_active_page') || 'dashboard';
+    // Migrate old page IDs to combined page
+    if (saved === 'vendors' || saved === 'dhcp' || saved === 'device-models') return 'vendors-models';
+    if (saved === 'templates' || saved === 'groups' || saved === 'variables' || saved === 'inspector') return 'config';
+    if (saved === 'discovery') return 'devices';
+    if (saved === 'actions') return 'jobs';
+    return saved;
   });
+
+  // Keep document title and favicon in sync with settings changes
+  useEffect(() => {
+    if (!settings) return;
+    document.title = settings.app_name || 'ZTP Manager';
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (link) {
+      link.href = settings.logo_url || '/favicon.png';
+    }
+  }, [settings?.app_name, settings?.logo_url]);
 
   // Persist active page to localStorage
   const handlePageChange = (page: string) => {
@@ -171,14 +202,14 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
     } else if (modalRoute.isModal('help')) {
       setShowHelp(true);
     } else if (modalRoute.isModal('device-form')) {
-      const id = modalRoute.getParam('id');
-      if (id && devices.length > 0) {
-        const device = devices.find(d => d.id === id);
+      const idParam = modalRoute.getParam('id');
+      if (idParam && devices.length > 0) {
+        const device = devices.find(d => d.id === Number(idParam));
         if (device) {
           setEditingDevice(device);
           setShowDeviceForm(true);
         }
-      } else if (!id) {
+      } else if (!idParam) {
         setShowDeviceForm(true);
       }
     }
@@ -242,7 +273,7 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
   const handleEdit = (device: Device) => {
     setEditingDevice(device);
     setShowDeviceForm(true);
-    modalRoute.openModal('device-form', { id: device.id });
+    modalRoute.openModal('device-form', { id: String(device.id) });
   };
 
   const handleCloseForm = () => {
@@ -256,8 +287,8 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
     <>
       <header>
         <div className="header-content">
-          <img src={logo} alt="Logo" className="header-logo" />
-          <h1>ZTP Manager</h1>
+          <img src={settings?.logo_url || defaultLogo} alt="Logo" className="header-logo" />
+          <h1>{settings?.app_name || 'ZTP Manager'}</h1>
           <div className="header-controls">
             <Tooltip content="Notifications" position="bottom">
               <button
@@ -310,36 +341,12 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
         )}
 
         {activePage === 'devices' && (
-          <>
-            <div className="actions-bar">
-              <Button
-                onClick={() => {
-                  setEditingDevice(null);
-                  setShowDeviceForm(true);
-                  modalRoute.openModal('device-form');
-                }}
-              >
-                <PlusIcon size={16} />
-                Add Device
-              </Button>
-              <Button variant="secondary" onClick={refresh}>
-                <RefreshIcon size={16} />
-                Refresh
-              </Button>
-            </div>
-
-            <DeviceList
-              onEdit={handleEdit}
-              onDelete={deleteDevice}
-              onBackup={triggerBackup}
-              onRefresh={refresh}
-            />
-          </>
-        )}
-
-        {activePage === 'discovery' && (
-          <Discovery
-            onAddDevice={(device) => {
+          <DevicesPage
+            onEdit={handleEdit}
+            onDelete={deleteDevice}
+            onBackup={triggerBackup}
+            onRefresh={refresh}
+            onAddDiscoveredDevice={(device) => {
               setEditingDevice(null);
               setInitialDeviceData(device);
               setShowDeviceForm(true);
@@ -348,44 +355,28 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
           />
         )}
 
-        {activePage === 'templates' && (
-          <TemplateBuilder />
-        )}
-
-        {activePage === 'vendors' && (
-          <VendorManagement />
-        )}
-
-        {activePage === 'dhcp' && (
-          <DhcpOptions />
-        )}
-
         {activePage === 'topologies' && (
           <TopologyManagement />
         )}
 
-        {activePage === 'groups' && (
-          <GroupManagement />
+        {activePage === 'config' && (
+          <ConfigManagement />
         )}
 
-        {activePage === 'variables' && (
-          <VariableManager />
+        {activePage === 'users' && (
+          <UserManagement />
         )}
 
-        {activePage === 'inspector' && (
-          <ResolvedVariablesInspector />
+        {activePage === 'vendors-models' && (
+          <VendorsAndModels />
         )}
 
         {activePage === 'ipam' && (
           <IpamManagement />
         )}
 
-        {activePage === 'device-models' && (
-          <DeviceModelManagement />
-        )}
-
-        {activePage === 'actions' && (
-          <VendorActions />
+        {activePage === 'locations' && (
+          <Locations />
         )}
 
         {activePage === 'jobs' && (

@@ -4,6 +4,8 @@ use sqlx::{Pool, Row, Sqlite, sqlite::SqliteRow};
 
 use crate::models::*;
 
+
+
 fn map_vendor_action_row(row: &SqliteRow) -> VendorAction {
     VendorAction {
         id: row.get("id"),
@@ -11,12 +13,20 @@ fn map_vendor_action_row(row: &SqliteRow) -> VendorAction {
         label: row.get("label"),
         command: row.get("command"),
         sort_order: row.get("sort_order"),
+        action_type: row.get("action_type"),
+        webhook_url: row.get("webhook_url"),
+        webhook_method: row.get("webhook_method"),
+        webhook_headers: row.get("webhook_headers"),
+        webhook_body: row.get("webhook_body"),
+        output_parser_id: row.try_get::<Option<i64>, _>("output_parser_id").ok().flatten(),
         created_at: row.get("created_at"),
     }
 }
 
 const SELECT_VENDOR_ACTION: &str = r#"
-    SELECT id, vendor_id, label, command, sort_order, created_at
+    SELECT id, vendor_id, label, command, sort_order,
+           action_type, webhook_url, webhook_method, webhook_headers, webhook_body,
+           output_parser_id, created_at
     FROM vendor_actions
 "#;
 
@@ -42,8 +52,10 @@ impl VendorActionRepo {
         let now = Utc::now();
         sqlx::query(
             r#"
-            INSERT INTO vendor_actions (id, vendor_id, label, command, sort_order, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO vendor_actions (id, vendor_id, label, command, sort_order,
+                                        action_type, webhook_url, webhook_method, webhook_headers, webhook_body,
+                                        output_parser_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&req.id)
@@ -51,6 +63,12 @@ impl VendorActionRepo {
         .bind(&req.label)
         .bind(&req.command)
         .bind(req.sort_order)
+        .bind(&req.action_type)
+        .bind(&req.webhook_url)
+        .bind(&req.webhook_method)
+        .bind(&req.webhook_headers)
+        .bind(&req.webhook_body)
+        .bind(&req.output_parser_id)
         .bind(now)
         .execute(pool)
         .await?;
@@ -71,7 +89,9 @@ impl VendorActionRepo {
     pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateVendorActionRequest) -> Result<VendorAction> {
         let result = sqlx::query(
             r#"
-            UPDATE vendor_actions SET vendor_id = ?, label = ?, command = ?, sort_order = ?
+            UPDATE vendor_actions SET vendor_id = ?, label = ?, command = ?, sort_order = ?,
+                                      action_type = ?, webhook_url = ?, webhook_method = ?,
+                                      webhook_headers = ?, webhook_body = ?, output_parser_id = ?
             WHERE id = ?
             "#,
         )
@@ -79,6 +99,12 @@ impl VendorActionRepo {
         .bind(&req.label)
         .bind(&req.command)
         .bind(req.sort_order)
+        .bind(&req.action_type)
+        .bind(&req.webhook_url)
+        .bind(&req.webhook_method)
+        .bind(&req.webhook_headers)
+        .bind(&req.webhook_body)
+        .bind(&req.output_parser_id)
         .bind(id)
         .execute(pool)
         .await?;

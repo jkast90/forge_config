@@ -138,10 +138,11 @@ tftp-root={}
         for device in devices {
             if let Some(vendor) = &device.vendor {
                 if let Some(opts) = vendor_options.get(vendor) {
-                    let cfg_file = crate::utils::mac_to_config_filename(&device.mac);
+                    let mac_str = device.mac.as_deref().unwrap_or("");
+                    let cfg_file = crate::utils::mac_to_config_filename(mac_str);
                     for opt in opts {
                         if opt.enabled {
-                            let mac_tag = device.mac.replace(':', "_");
+                            let mac_tag = mac_str.replace(':', "_");
                             if opt.option_number == 67 {
                                 // Override bootfile with per-device config filename
                                 config.push_str(&format!(
@@ -198,16 +199,20 @@ log-queries
         // Static DHCP reservations
         config.push_str("# Static DHCP reservations\n");
         for device in devices {
+            let mac_str = device.mac.as_deref().unwrap_or("");
+            if mac_str.is_empty() {
+                continue;
+            }
             if device.vendor.is_some() {
-                let mac_tag = device.mac.replace(':', "_");
+                let mac_tag = mac_str.replace(':', "_");
                 config.push_str(&format!(
                     "dhcp-host={},set:{},{},{}\n",
-                    device.mac, mac_tag, device.ip, device.hostname
+                    mac_str, mac_tag, device.ip, device.hostname
                 ));
             } else {
                 config.push_str(&format!(
                     "dhcp-host={},{},{}\n",
-                    device.mac, device.ip, device.hostname
+                    mac_str, device.ip, device.hostname
                 ));
             }
         }
@@ -230,7 +235,7 @@ log-queries
 
         for device in devices {
             if let Err(e) = self.generate_single_device_config(device, settings).await {
-                tracing::warn!("Failed to generate config for {}: {}", device.mac, e);
+                tracing::warn!("Failed to generate config for {}: {}", device.mac.as_deref().unwrap_or("unknown"), e);
             }
         }
 
@@ -287,7 +292,7 @@ log-queries
         // Build context
         let mut context = Context::new();
         context.insert("Hostname", &device.hostname);
-        context.insert("MAC", &device.mac);
+        context.insert("MAC", &device.mac.as_deref().unwrap_or(""));
         context.insert("IP", &device.ip);
         context.insert("Vendor", &device.vendor.clone().unwrap_or_default());
         context.insert("Model", &device.model.clone().unwrap_or_default());
@@ -300,16 +305,44 @@ log-queries
         // Load resolved variables (group + host inheritance) for template rendering
         let vars = self
             .store
-            .resolve_device_variables_flat(&device.id)
+            .resolve_device_variables_flat(device.id)
             .await
             .unwrap_or_default();
         context.insert("vars", &vars);
+
+        // Build VRF context from port assignments
+        let port_assignments = self.store.list_port_assignments(device.id).await.unwrap_or_default();
+        let mut vrf_map: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+        for pa in &port_assignments {
+            if let Some(ref vrf_id) = pa.vrf_id {
+                if vrf_id.is_empty() { continue; }
+                let iface = serde_json::json!({
+                    "port_name": pa.port_name,
+                    "remote_device": pa.remote_device_hostname.clone().unwrap_or_default(),
+                    "remote_port": pa.remote_port_name,
+                    "description": pa.description.clone().unwrap_or_default(),
+                });
+                if let Some(existing) = vrf_map.get_mut(vrf_id) {
+                    if let Some(arr) = existing.get_mut("interfaces").and_then(|v| v.as_array_mut()) {
+                        arr.push(iface);
+                    }
+                } else {
+                    vrf_map.insert(vrf_id.clone(), serde_json::json!({
+                        "id": vrf_id,
+                        "name": pa.vrf_name.clone().unwrap_or_else(|| vrf_id.clone()),
+                        "interfaces": [iface],
+                    }));
+                }
+            }
+        }
+        let vrfs: Vec<serde_json::Value> = vrf_map.into_values().collect();
+        context.insert("VRFs", &vrfs);
 
         // Render template
         let config = tera.render("device", &context)?;
 
         // Generate filename and write
-        let filename = format!("{}.cfg", device.mac.replace(':', "_"));
+        let filename = format!("{}.cfg", device.mac.as_deref().unwrap_or("").replace(':', "_"));
         let config_path = Path::new(&self.tftp_dir).join(&filename);
         fs::write(&config_path, config).await?;
 

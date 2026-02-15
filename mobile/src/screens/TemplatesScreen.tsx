@@ -41,7 +41,6 @@ export function TemplatesScreen() {
     updateTemplate,
     deleteTemplate,
     previewTemplate: generatePreview,
-    message,
   } = useTemplates();
 
   const { vendors } = useVendors();
@@ -96,8 +95,8 @@ export function TemplatesScreen() {
   const deviceSelectOptions = useMemo(() => {
     return [
       { value: '', label: 'Select a device...' },
-      ...devices.map((d) => ({
-        value: d.mac,
+      ...devices.filter((d) => d.mac).map((d) => ({
+        value: d.mac!,
         label: `${d.hostname} (${d.ip})`,
       })),
     ];
@@ -129,7 +128,7 @@ export function TemplatesScreen() {
     setPreviewLoading(true);
     const previewData = {
       device: {
-        mac: previewDevice.mac,
+        mac: previewDevice.mac || '',
         ip: previewDevice.ip,
         hostname: previewDevice.hostname,
         vendor: previewDevice.vendor,
@@ -402,7 +401,7 @@ export function TemplatesScreen() {
                 <Text style={[styles.previewDeviceTitle, { color: colors.textMuted }]}>Device Info</Text>
                 <View style={styles.previewDeviceGrid}>
                   <InfoRow label="Hostname" value={previewDevice.hostname} monospace />
-                  <InfoRow label="MAC" value={previewDevice.mac} monospace />
+                  <InfoRow label="MAC" value={previewDevice.mac || '—'} monospace />
                   <InfoRow label="IP" value={previewDevice.ip} monospace />
                   {previewDevice.vendor && (
                     <InfoRow label="Vendor" value={previewDevice.vendor} monospace />

@@ -3,6 +3,7 @@ import { useBackups, useDevices, useTopologies, useAsyncModal, useModalRoute, us
 import type { Device, ConfigResult, BackupContentResult, ConfigPreviewResult, Backup, NetBoxStatus, Job, TopologyRole } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
+import { useConfirm } from './ConfirmDialog';
 import { ConnectModal, useConnectModal } from './ConnectModal';
 import { DialogActions } from './DialogActions';
 import { FormDialog } from './FormDialog';
@@ -15,23 +16,26 @@ import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { ConfigViewer } from './ConfigViewer';
 import { CommandDrawer } from './CommandDrawer';
+import { DevicePortAssignments } from './DevicePortAssignments';
 import { Icon, EditIcon, DownloadIcon, ClockIcon, TrashIcon, SpinnerIcon, loadingIcon } from './Icon';
 
 interface Props {
   onEdit: (device: Device) => void;
-  onDelete: (id: string) => Promise<boolean>;
-  onBackup: (id: string) => Promise<boolean>;
+  onDelete: (id: number) => Promise<boolean>;
+  onBackup: (id: number) => Promise<boolean>;
   onRefresh?: () => void;
 }
 
 type NetBoxSyncResult = { message: string; result: { created: number; updated: number; errors?: string[] } };
 
 export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const { devices } = useDevices();
   const modalRoute = useModalRoute();
 
   const [showInfo, setShowInfo] = useState(false);
   const [commandDevice, setCommandDevice] = useState<Device | null>(null);
+  const [portsDevice, setPortsDevice] = useState<Device | null>(null);
 
   // Connection test modal state (shared with Discovery and TestContainers)
   const connectModal = useConnectModal();
@@ -76,8 +80,8 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
   // Restore modal state from URL hash
   useEffect(() => {
     if (devices.length === 0) return;
-    const id = modalRoute.getParam('id');
-    const device = id ? devices.find(d => d.id === id) : undefined;
+    const idParam = modalRoute.getParam('id');
+    const device = idParam ? devices.find(d => d.id === Number(idParam)) : undefined;
     if (!device) return;
 
     if (modalRoute.isModal('config') && !configModal.isOpen) {
@@ -94,7 +98,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
   const handleViewConfig = async (device: Device) => {
     configModal.open(device);
-    modalRoute.openModal('config', { id: device.id });
+    modalRoute.openModal('config', { id: String(device.id) });
     setConfigTab('tftp');
     setSelectedBackup(null);
     setBackupContent(null);
@@ -110,7 +114,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
     // Handle failure - set a fallback result
     if (!result && !configModal.result) {
       configModal.setResult({
-        mac: device.mac,
+        mac: device.mac || '',
         hostname: device.hostname,
         filename: '',
         content: '',
@@ -149,7 +153,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
   const handleShowNetbox = async (device: Device) => {
     netboxModal.open(device);
-    modalRoute.openModal('netbox', { id: device.id });
+    modalRoute.openModal('netbox', { id: String(device.id) });
     setNetboxSyncResult(null);
     const result = await netboxModal.execute(async () => {
       const services = getServices();
@@ -190,7 +194,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
   const handlePreviewConfig = async (device: Device) => {
     previewModal.open(device);
-    modalRoute.openModal('preview', { id: device.id });
+    modalRoute.openModal('preview', { id: String(device.id) });
     setDeployJob(null);
     await previewModal.execute(async () => {
       const services = getServices();
@@ -200,7 +204,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
   const handleDeployConfig = async () => {
     if (!previewModal.item) return;
-    if (!confirm(`Deploy configuration to ${previewModal.item.hostname} (${previewModal.item.ip})? This will push the config via SSH.`)) return;
+    if (!(await confirm({ title: 'Deploy Configuration', message: `Deploy configuration to ${previewModal.item.hostname} (${previewModal.item.ip})? This will push the config via SSH.`, confirmText: 'Deploy' }))) return;
     setDeploying(true);
     setDeployJob(null);
     try {
@@ -252,11 +256,12 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
   const columns: TableColumn<Device>[] = [
     { header: 'Hostname', accessor: 'hostname' },
     { header: 'Model', accessor: (d) => Cell.dash(d.model), searchValue: (d) => d.model || '', hideOnMobile: true },
-    { header: 'Serial Number', accessor: (d) => Cell.dash(d.serial_number), searchValue: (d) => d.serial_number || '', hideOnMobile: true },
-    { header: 'MAC Address', accessor: (d) => Cell.code(d.mac), searchValue: (d) => d.mac },
-    { header: 'IP Address', accessor: 'ip' },
+    { header: 'Serial Number', accessor: (d) => Cell.dash(d.serial_number), searchValue: (d) => d.serial_number || '', filterable: false, hideOnMobile: true },
+    { header: 'MAC Address', accessor: (d) => Cell.code(d.mac || ''), searchValue: (d) => d.mac || '', filterable: false },
+    { header: 'IP Address', accessor: 'ip', filterable: false },
     { header: 'Vendor', accessor: (d) => Cell.dash(d.vendor), searchValue: (d) => d.vendor || '', hideOnMobile: true },
     { header: 'Status', accessor: (d) => Cell.status(d.status, d.status as 'online' | 'offline' | 'provisioning'), searchValue: (d) => d.status },
+    { header: 'Type', accessor: (d) => Cell.status(d.device_type || 'internal', d.device_type === 'external' ? 'offline' : d.device_type === 'host' ? 'provisioning' : 'online'), searchValue: (d) => d.device_type || 'internal', hideOnMobile: true },
     { header: 'Last Backup', accessor: (d) => formatDate(d.last_backup), searchable: false, hideOnMobile: true },
   ];
 
@@ -315,6 +320,13 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
       tooltip: 'Run commands',
     },
     {
+      icon: <Icon name="settings_ethernet" size={14} />,
+      label: 'Ports',
+      onClick: setPortsDevice,
+      variant: 'secondary',
+      tooltip: 'Port assignments',
+    },
+    {
       icon: <Icon name="account_tree" size={14} />,
       label: 'Add to topology',
       onClick: (d) => setTopoAssign({ device: d, topologyId: d.topology_id || topologies[0]?.id || '', role: (d.topology_role as TopologyRole) || 'leaf' }),
@@ -324,8 +336,8 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
     {
       icon: <TrashIcon size={14} />,
       label: 'Delete',
-      onClick: (d) => {
-        if (confirm(`Delete device ${d.hostname}?`)) {
+      onClick: async (d) => {
+        if (await confirm({ title: 'Delete Device', message: `Delete device ${d.hostname}?`, confirmText: 'Delete', destructive: true })) {
           onDelete(d.id);
         }
       },
@@ -569,7 +581,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
                     <span className="label">Hostname:</span>
                     <span>{netboxModal.item.hostname}</span>
                     <span className="label">MAC:</span>
-                    <code>{netboxModal.item.mac}</code>
+                    <code>{netboxModal.item.mac || '—'}</code>
                     <span className="label">IP:</span>
                     <span>{netboxModal.item.ip}</span>
                     <span className="label">Vendor:</span>
@@ -598,6 +610,10 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
       <CommandDrawer device={commandDevice} onClose={() => setCommandDevice(null)} />
 
+      {portsDevice && (
+        <DevicePortAssignments device={portsDevice} onClose={() => setPortsDevice(null)} />
+      )}
+
       {topoAssign && (
         <FormDialog isOpen={true} onClose={() => setTopoAssign(null)} title={`Assign ${topoAssign.device.hostname} to Topology`} onSubmit={(e) => { e.preventDefault(); handleAssignTopology(); }} submitText="Assign">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -625,6 +641,8 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
           </div>
         </FormDialog>
       )}
+
+      <ConfirmDialogRenderer />
     </>
   );
 }

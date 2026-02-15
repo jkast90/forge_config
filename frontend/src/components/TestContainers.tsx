@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import type { SpawnContainerRequest } from '@core';
 import {
   useTestContainers,
-  useDevices,
   useVendors,
   useModalRoute,
   CONFIG_METHOD_OPTIONS,
@@ -38,13 +37,7 @@ export function TestContainers() {
     restart,
     remove,
   } = useTestContainers({ autoRefresh: true, refreshInterval: 5000 });
-  const { devices, refresh: refreshDevices } = useDevices();
   const { vendors } = useVendors();
-
-  const hasVirtualClos = useMemo(
-    () => devices.some(d => d.topology_id === 'dc1-virtual'),
-    [devices],
-  );
 
   const connectModal = useConnectModal();
   const modalRoute = useModalRoute();
@@ -68,7 +61,6 @@ export function TestContainers() {
   const [spawning, setSpawning] = useState(false);
   const [spawningCeos, setSpawningCeos] = useState(false);
   const [buildingClos, setBuildingClos] = useState(false);
-  const [buildingVirtualClos, setBuildingVirtualClos] = useState(false);
   const [formData, setFormData] = useState<SpawnContainerRequest>({
     hostname: '',
     mac: '',
@@ -164,31 +156,6 @@ export function TestContainers() {
     }
   };
 
-  const handleBuildVirtualClos = async () => {
-    setBuildingVirtualClos(true);
-    try {
-      const result = await getServices().testContainers.buildVirtualClos();
-      addNotification('success', `Virtual CLOS ready: ${result.devices.length} Arista switches in ${result.topology_name}`);
-      refreshDevices();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      addNotification('error', `Failed to build virtual CLOS: ${msg}`);
-    } finally {
-      setBuildingVirtualClos(false);
-    }
-  };
-
-  const handleTeardownVirtualClos = async () => {
-    try {
-      await getServices().testContainers.teardownVirtualClos();
-      addNotification('success', 'Virtual CLOS topology torn down');
-      refreshDevices();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      addNotification('error', `Failed to teardown virtual CLOS: ${msg}`);
-    }
-  };
-
   const handleOpenDialog = () => {
     // Generate initial MAC
     const mac = generateMac();
@@ -237,20 +204,10 @@ export function TestContainers() {
             <Icon name="hub" size={16} />
             {buildingClos ? 'Building...' : 'CLOS FRR'}
           </Button>
-          <Button onClick={handleBuildVirtualClos} disabled={buildingVirtualClos}>
-            <Icon name="lan" size={16} />
-            {buildingVirtualClos ? 'Building...' : 'Virtual CLOS'}
-          </Button>
           {containers.some(c => c.name.startsWith('clos-')) && (
             <Button variant="danger" onClick={handleTeardownClosLab}>
               <TrashIcon size={16} />
               Teardown CLOS
-            </Button>
-          )}
-          {hasVirtualClos && (
-            <Button variant="danger" onClick={handleTeardownVirtualClos}>
-              <TrashIcon size={16} />
-              Teardown Virtual
             </Button>
           )}
           <Button variant="secondary" onClick={refresh}>
@@ -275,7 +232,7 @@ export function TestContainers() {
             { header: 'Hostname', accessor: 'hostname' },
             { header: 'MAC Address', accessor: (c) => Cell.code(c.mac), searchValue: (c) => c.mac },
             { header: 'IP Address', accessor: (c) => Cell.dash(c.ip), searchValue: (c) => c.ip || '' },
-            { header: 'Status', accessor: (c) => Cell.status(c.status, c.status === 'running' ? 'online' : 'offline') },
+            { header: 'Status', accessor: (c) => Cell.status(c.status, c.status === 'running' ? 'online' : 'offline'), searchValue: (c) => c.status },
           ]}
           getRowKey={(c) => c.id}
           tableId="test-containers"

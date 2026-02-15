@@ -16,7 +16,7 @@ import {
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
-import { DropdownSelect } from './DropdownSelect';
+import { useConfirm } from './ConfirmDialog';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { InfoSection } from './InfoSection';
@@ -28,6 +28,7 @@ import type { TableColumn, TableAction } from './Table';
 import { PlusIcon, Icon } from './Icon';
 
 export function DhcpOptions() {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showInfo, setShowInfo] = useState(false);
   const [filterVendor, setFilterVendor] = useState('');
   const {
@@ -87,7 +88,7 @@ export function DhcpOptions() {
   }, [modalRoute.modal, options]);
 
   // Get vendor options from shared utility
-  const filterVendorOptions = useMemo(() => getVendorFilterOptions(), []);
+  const filterVendorOptions = useMemo(() => getVendorFilterOptions().map(o => ({ value: o.id, label: o.label })), []);
   const vendorSelectOptions = useMemo(() => getVendorSelectOptions(), []);
 
   // Filter options by vendor (client-side for immediate UI response)
@@ -107,7 +108,7 @@ export function DhcpOptions() {
 
   const handleDelete = async (id: string) => {
     const option = options.find((o) => o.id === id);
-    if (option && confirm(`Delete DHCP option "${option.name}"?`)) {
+    if (option && await confirm({ title: 'Delete DHCP Option', message: `Delete DHCP option "${option.name}"?`, confirmText: 'Delete', destructive: true })) {
       await deleteOption(id);
     }
   };
@@ -120,7 +121,7 @@ export function DhcpOptions() {
   };
 
   const handleReset = async () => {
-    if (confirm('Reset all DHCP options to defaults? This will remove custom options and recreate defaults.')) {
+    if (await confirm({ title: 'Reset DHCP Options', message: 'Reset all DHCP options to defaults? This will remove custom options and recreate defaults.', confirmText: 'Reset', destructive: true })) {
       await resetToDefaults();
     }
   };
@@ -200,10 +201,11 @@ export function DhcpOptions() {
         <Button variant="secondary" onClick={handleReset}>
           Reset to Defaults
         </Button>
-        <DropdownSelect
+        <SelectField
+          name="filter-vendor"
           options={filterVendorOptions}
           value={filterVendor}
-          onChange={setFilterVendor}
+          onChange={(e) => setFilterVendor(e.target.value)}
           placeholder="Filter: All Vendors"
           icon="filter_list"
           className="filter-dropdown"
@@ -337,6 +339,8 @@ export function DhcpOptions() {
           </label>
         </div>
       </FormDialog>
+
+      <ConfirmDialogRenderer />
     </LoadingState>
   );
 }

@@ -64,26 +64,28 @@ export function onTelemetryChange(listener: (events: TelemetryEvent[]) => void):
 let initialized = false;
 
 export function initTelemetry() {
-  if (initialized || typeof window === 'undefined') return;
+  if (initialized || typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
   initialized = true;
 
   // Page load
-  trackEvent('page_load', window.location.pathname, {
-    url: window.location.href,
-    referrer: document.referrer || '(direct)',
+  trackEvent('page_load', window.location?.pathname || '(unknown)', {
+    url: window.location?.href || '',
+    referrer: (typeof document !== 'undefined' && document.referrer) || '(direct)',
   });
 
   // Visibility changes
-  document.addEventListener('visibilitychange', () => {
-    trackEvent('visibility_change', document.visibilityState, {
-      hidden: String(document.hidden),
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', () => {
+      trackEvent('visibility_change', document.visibilityState, {
+        hidden: String(document.hidden),
+      });
     });
-  });
+  }
 
   // Hash changes (route changes)
   window.addEventListener('hashchange', () => {
-    trackEvent('route_change', window.location.hash || '(empty)', {
-      url: window.location.href,
+    trackEvent('route_change', window.location?.hash || '(empty)', {
+      url: window.location?.href || '',
     });
   });
 }

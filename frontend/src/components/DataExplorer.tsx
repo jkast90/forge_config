@@ -146,7 +146,7 @@ function SettingsView({ data }: { data: any }) {
   );
 }
 
-function BackupsView({ byDevice }: { byDevice: Record<string, any[]> }) {
+function BackupsView({ byDevice }: { byDevice: Record<number, any[]> }) {
   const [expandedMac, setExpandedMac] = useState<string | null>(null);
   const entries = Object.entries(byDevice);
 

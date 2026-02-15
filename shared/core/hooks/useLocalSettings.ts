@@ -62,6 +62,7 @@ export function useLocalSettings(): UseLocalSettingsReturn {
       }
     };
 
+    if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);

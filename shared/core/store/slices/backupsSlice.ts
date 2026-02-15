@@ -3,7 +3,7 @@ import type { Backup } from '../../types';
 import { getServices } from '../../services';
 
 interface BackupsState {
-  byDevice: Record<string, Backup[]>;
+  byDevice: Record<number, Backup[]>;
   loading: boolean;
   error: string | null;
 }
@@ -14,7 +14,7 @@ const initialState: BackupsState = {
   error: null,
 };
 
-export const fetchBackups = createAsyncThunk('backups/fetch', async (deviceId: string) => {
+export const fetchBackups = createAsyncThunk('backups/fetch', async (deviceId: number) => {
   const data = await getServices().devices.listBackups(deviceId);
   return { deviceId, backups: data || [] };
 });

@@ -1,8 +1,11 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import type {
   IpamRegion, IpamRegionFormData,
-  IpamLocation, IpamLocationFormData,
+  IpamCampus, IpamCampusFormData,
   IpamDatacenter, IpamDatacenterFormData,
+  IpamHall, IpamHallFormData,
+  IpamRow, IpamRowFormData,
+  IpamRack, IpamRackFormData,
   IpamRole,
   IpamVrf,
   IpamPrefix, IpamPrefixFormData,
@@ -12,8 +15,11 @@ import { getServices } from '../../services';
 
 interface IpamState {
   regions: IpamRegion[];
-  locations: IpamLocation[];
+  campuses: IpamCampus[];
   datacenters: IpamDatacenter[];
+  halls: IpamHall[];
+  rows: IpamRow[];
+  racks: IpamRack[];
   roles: IpamRole[];
   vrfs: IpamVrf[];
   prefixes: IpamPrefix[];
@@ -24,8 +30,11 @@ interface IpamState {
 
 const initialState: IpamState = {
   regions: [],
-  locations: [],
+  campuses: [],
   datacenters: [],
+  halls: [],
+  rows: [],
+  racks: [],
   roles: [],
   vrfs: [],
   prefixes: [],
@@ -52,21 +61,21 @@ export const deleteRegion = createAsyncThunk('ipam/deleteRegion', async (id: str
   return id;
 });
 
-// Locations
-export const fetchLocations = createAsyncThunk('ipam/fetchLocations', async () => {
-  return getServices().ipam.listLocations();
+// Campuses
+export const fetchCampuses = createAsyncThunk('ipam/fetchCampuses', async () => {
+  return getServices().ipam.listCampuses();
 });
 
-export const createLocation = createAsyncThunk('ipam/createLocation', async (data: IpamLocationFormData) => {
-  return getServices().ipam.createLocation(data);
+export const createCampus = createAsyncThunk('ipam/createCampus', async (data: IpamCampusFormData) => {
+  return getServices().ipam.createCampus(data);
 });
 
-export const updateLocation = createAsyncThunk('ipam/updateLocation', async ({ id, data }: { id: string; data: IpamLocationFormData }) => {
-  return getServices().ipam.updateLocation(id, data);
+export const updateCampus = createAsyncThunk('ipam/updateCampus', async ({ id, data }: { id: string; data: IpamCampusFormData }) => {
+  return getServices().ipam.updateCampus(id, data);
 });
 
-export const deleteLocation = createAsyncThunk('ipam/deleteLocation', async (id: string) => {
-  await getServices().ipam.deleteLocation(id);
+export const deleteCampus = createAsyncThunk('ipam/deleteCampus', async (id: string) => {
+  await getServices().ipam.deleteCampus(id);
   return id;
 });
 
@@ -85,6 +94,60 @@ export const updateDatacenter = createAsyncThunk('ipam/updateDatacenter', async 
 
 export const deleteDatacenter = createAsyncThunk('ipam/deleteDatacenter', async (id: string) => {
   await getServices().ipam.deleteDatacenter(id);
+  return id;
+});
+
+// Halls
+export const fetchHalls = createAsyncThunk('ipam/fetchHalls', async () => {
+  return getServices().ipam.listHalls();
+});
+
+export const createHall = createAsyncThunk('ipam/createHall', async (data: IpamHallFormData) => {
+  return getServices().ipam.createHall(data);
+});
+
+export const updateHall = createAsyncThunk('ipam/updateHall', async ({ id, data }: { id: string; data: IpamHallFormData }) => {
+  return getServices().ipam.updateHall(id, data);
+});
+
+export const deleteHall = createAsyncThunk('ipam/deleteHall', async (id: string) => {
+  await getServices().ipam.deleteHall(id);
+  return id;
+});
+
+// Rows
+export const fetchRows = createAsyncThunk('ipam/fetchRows', async () => {
+  return getServices().ipam.listRows();
+});
+
+export const createRow = createAsyncThunk('ipam/createRow', async (data: IpamRowFormData) => {
+  return getServices().ipam.createRow(data);
+});
+
+export const updateRow = createAsyncThunk('ipam/updateRow', async ({ id, data }: { id: string; data: IpamRowFormData }) => {
+  return getServices().ipam.updateRow(id, data);
+});
+
+export const deleteRow = createAsyncThunk('ipam/deleteRow', async (id: string) => {
+  await getServices().ipam.deleteRow(id);
+  return id;
+});
+
+// Racks
+export const fetchRacks = createAsyncThunk('ipam/fetchRacks', async () => {
+  return getServices().ipam.listRacks();
+});
+
+export const createRack = createAsyncThunk('ipam/createRack', async (data: IpamRackFormData) => {
+  return getServices().ipam.createRack(data);
+});
+
+export const updateRack = createAsyncThunk('ipam/updateRack', async ({ id, data }: { id: string; data: IpamRackFormData }) => {
+  return getServices().ipam.updateRack(id, data);
+});
+
+export const deleteRack = createAsyncThunk('ipam/deleteRack', async (id: string) => {
+  await getServices().ipam.deleteRack(id);
   return id;
 });
 
@@ -162,14 +225,26 @@ const ipamSlice = createSlice({
       .addCase(fetchRegions.pending, (state) => { state.loading = state.regions.length === 0; })
       .addCase(fetchRegions.fulfilled, (state, action) => { state.regions = action.payload || []; state.loading = false; state.error = null; })
       .addCase(fetchRegions.rejected, (state, action) => { state.loading = false; state.error = action.error.message ?? 'Failed to load regions'; })
-      // Locations
-      .addCase(fetchLocations.pending, (state) => { state.loading = state.locations.length === 0; })
-      .addCase(fetchLocations.fulfilled, (state, action) => { state.locations = action.payload || []; state.loading = false; state.error = null; })
-      .addCase(fetchLocations.rejected, (state, action) => { state.loading = false; state.error = action.error.message ?? 'Failed to load locations'; })
+      // Campuses
+      .addCase(fetchCampuses.pending, (state) => { state.loading = state.campuses.length === 0; })
+      .addCase(fetchCampuses.fulfilled, (state, action) => { state.campuses = action.payload || []; state.loading = false; state.error = null; })
+      .addCase(fetchCampuses.rejected, (state, action) => { state.loading = false; state.error = action.error.message ?? 'Failed to load campuses'; })
       // Datacenters
       .addCase(fetchDatacenters.pending, (state) => { state.loading = state.datacenters.length === 0; })
       .addCase(fetchDatacenters.fulfilled, (state, action) => { state.datacenters = action.payload || []; state.loading = false; state.error = null; })
       .addCase(fetchDatacenters.rejected, (state, action) => { state.loading = false; state.error = action.error.message ?? 'Failed to load datacenters'; })
+      // Halls
+      .addCase(fetchHalls.pending, (state) => { state.loading = state.halls.length === 0; })
+      .addCase(fetchHalls.fulfilled, (state, action) => { state.halls = action.payload || []; state.loading = false; state.error = null; })
+      .addCase(fetchHalls.rejected, (state, action) => { state.loading = false; state.error = action.error.message ?? 'Failed to load halls'; })
+      // Rows
+      .addCase(fetchRows.pending, (state) => { state.loading = state.rows.length === 0; })
+      .addCase(fetchRows.fulfilled, (state, action) => { state.rows = action.payload || []; state.loading = false; state.error = null; })
+      .addCase(fetchRows.rejected, (state, action) => { state.loading = false; state.error = action.error.message ?? 'Failed to load rows'; })
+      // Racks
+      .addCase(fetchRacks.pending, (state) => { state.loading = state.racks.length === 0; })
+      .addCase(fetchRacks.fulfilled, (state, action) => { state.racks = action.payload || []; state.loading = false; state.error = null; })
+      .addCase(fetchRacks.rejected, (state, action) => { state.loading = false; state.error = action.error.message ?? 'Failed to load racks'; })
       // Roles
       .addCase(fetchRoles.pending, (state) => { state.loading = state.roles.length === 0; })
       .addCase(fetchRoles.fulfilled, (state, action) => { state.roles = action.payload || []; state.loading = false; state.error = null; })

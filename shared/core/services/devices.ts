@@ -60,7 +60,7 @@ export class DeviceService extends BaseService {
     return this.get<Device[]>('/devices');
   }
 
-  async getById(id: string): Promise<Device> {
+  async getById(id: number): Promise<Device> {
     return this.get<Device>(`/devices/${encodeURIComponent(id)}`);
   }
 
@@ -68,23 +68,23 @@ export class DeviceService extends BaseService {
     return this.post<Device>('/devices', device);
   }
 
-  async update(id: string, device: Partial<Device>): Promise<Device> {
+  async update(id: number, device: Partial<Device>): Promise<Device> {
     return this.put<Device>(`/devices/${encodeURIComponent(id)}`, device);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: number): Promise<void> {
     return this.delete<void>(`/devices/${encodeURIComponent(id)}`);
   }
 
-  async triggerBackup(id: string): Promise<void> {
+  async triggerBackup(id: number): Promise<void> {
     return this.post<void>(`/devices/${encodeURIComponent(id)}/backup`);
   }
 
-  async listBackups(id: string): Promise<Backup[]> {
+  async listBackups(id: number): Promise<Backup[]> {
     return this.get<Backup[]>(`/devices/${encodeURIComponent(id)}/backups`);
   }
 
-  async connect(id: string): Promise<ConnectResult> {
+  async connect(id: number): Promise<ConnectResult> {
     return this.post<ConnectResult>(`/devices/${encodeURIComponent(id)}/connect`);
   }
 
@@ -92,7 +92,7 @@ export class DeviceService extends BaseService {
     return this.post<ConnectResult>('/connect', { ip, ...options });
   }
 
-  async getConfig(id: string): Promise<ConfigResult> {
+  async getConfig(id: number): Promise<ConfigResult> {
     return this.get<ConfigResult>(`/devices/${encodeURIComponent(id)}/config`);
   }
 
@@ -100,23 +100,25 @@ export class DeviceService extends BaseService {
     return this.get<BackupContentResult>(`/backups/${id}`);
   }
 
-  async previewConfig(id: string): Promise<ConfigPreviewResult> {
+  async previewConfig(id: number): Promise<ConfigPreviewResult> {
     return this.post<ConfigPreviewResult>(`/devices/${encodeURIComponent(id)}/preview-config`);
   }
 
-  async deployConfig(id: string): Promise<Job> {
+  async deployConfig(id: number): Promise<Job> {
     return this.post<Job>(`/devices/${encodeURIComponent(id)}/deploy-config`);
   }
 
-  async exec(id: string, command: string): Promise<Job> {
-    return this.post<Job>(`/devices/${encodeURIComponent(id)}/exec`, { command });
+  async exec(id: number, command: string, actionId?: string): Promise<Job> {
+    const body: { command: string; action_id?: string } = { command };
+    if (actionId) body.action_id = actionId;
+    return this.post<Job>(`/devices/${encodeURIComponent(id)}/exec`, body);
   }
 
   async getJob(id: string): Promise<Job> {
     return this.get<Job>(`/jobs/${encodeURIComponent(id)}`);
   }
 
-  async listJobs(deviceId?: string): Promise<Job[]> {
+  async listJobs(deviceId?: number): Promise<Job[]> {
     const params = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : '';
     return this.get<Job[]>(`/jobs${params}`);
   }

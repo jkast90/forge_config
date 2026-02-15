@@ -3,8 +3,8 @@
 import { getVendorCache } from './utils/vendor';
 
 export interface Device {
-  id: string;
-  mac: string;
+  id: number;
+  mac: string | null;
   ip: string;
   hostname: string;
   vendor?: string;
@@ -15,7 +15,12 @@ export interface Device {
   ssh_pass?: string;
   topology_id?: string;
   topology_role?: TopologyRole;
+  hall_id?: string;
+  row_id?: string;
+  rack_id?: string;
+  rack_position?: number;
   status: DeviceStatus;
+  device_type?: string;
   last_seen?: string;
   last_backup?: string;
   last_error?: string;
@@ -38,12 +43,13 @@ export interface DeviceFormData {
   ssh_pass: string;
   topology_id: string;
   topology_role: string;
+  device_type: string;
 }
 
 // Device variable types (KV pairs per device)
 export interface DeviceVariable {
   id: number;
-  device_id: string;
+  device_id: number;
   key: string;
   value: string;
   created_at: string;
@@ -60,6 +66,9 @@ export interface Topology {
   id: string;
   name: string;
   description?: string;
+  region_id?: string;
+  campus_id?: string;
+  datacenter_id?: string;
   device_count?: number;
   super_spine_count?: number;
   spine_count?: number;
@@ -72,6 +81,9 @@ export interface TopologyFormData {
   id: string;
   name: string;
   description: string;
+  region_id: string;
+  campus_id: string;
+  datacenter_id: string;
 }
 
 export interface Settings {
@@ -88,11 +100,19 @@ export interface Settings {
   opengear_enroll_url: string;
   opengear_enroll_bundle: string;
   opengear_enroll_password: string;
+  // Branding
+  app_name: string;
+  logo_url: string;
+}
+
+export interface Branding {
+  app_name: string;
+  logo_url: string | null;
 }
 
 export interface Backup {
   id: number;
-  device_id: string;
+  device_id: number;
   filename: string;
   size: number;
   created_at: string;
@@ -300,12 +320,21 @@ export interface NetworkInterface {
 }
 
 // Vendor Action types
+export type ActionType = 'ssh' | 'webhook';
+export type WebhookMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
 export interface VendorAction {
   id: string;
   vendor_id: string;
   label: string;
   command: string;
   sort_order: number;
+  action_type: ActionType;
+  webhook_url: string;
+  webhook_method: WebhookMethod;
+  webhook_headers: string;
+  webhook_body: string;
+  output_parser_id?: number;
   created_at: string;
 }
 
@@ -315,6 +344,12 @@ export interface VendorActionFormData {
   label: string;
   command: string;
   sort_order: number;
+  action_type: ActionType;
+  webhook_url: string;
+  webhook_method: WebhookMethod;
+  webhook_headers: string;
+  webhook_body: string;
+  output_parser_id: string;
 }
 
 export interface ExecCommandResult {
@@ -324,19 +359,109 @@ export interface ExecCommandResult {
 
 // Job types
 export type JobStatus = 'queued' | 'running' | 'completed' | 'failed';
-export type JobType = 'command' | 'deploy';
+export type JobType = 'command' | 'deploy' | 'webhook' | 'apply_template';
 
 export interface Job {
   id: string;
   job_type: JobType;
-  device_id: string;
+  device_id: number;
   command: string;
   status: JobStatus;
   output: string | null;
   error: string | null;
+  credential_id?: string;
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
+}
+
+// Job template types
+export interface JobTemplate {
+  id: string;
+  name: string;
+  description: string;
+  job_type: JobType;
+  command: string;
+  action_id: string;
+  credential_id?: string;
+  target_mode: 'device' | 'group';
+  target_device_ids: number[];
+  target_group_id: string;
+  schedule: string;
+  enabled: boolean;
+  last_run_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateJobTemplateRequest {
+  name: string;
+  description?: string;
+  job_type: string;
+  command?: string;
+  action_id?: string;
+  credential_id?: string;
+  target_mode: string;
+  target_device_ids?: number[];
+  target_group_id?: string;
+  schedule?: string;
+  enabled?: boolean;
+}
+
+// User types
+export interface User {
+  id: string;
+  username: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserFormData {
+  username: string;
+  password: string;
+  enabled: boolean;
+}
+
+// Credential types
+export interface Credential {
+  id: string;
+  name: string;
+  description?: string;
+  cred_type: string;
+  username: string;
+  password: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CredentialFormData {
+  id?: string;
+  name: string;
+  description: string;
+  cred_type: string;
+  username: string;
+  password: string;
+}
+
+// Output Parser types
+export interface OutputParser {
+  id: number;
+  name: string;
+  description?: string;
+  pattern: string;
+  extract_names: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutputParserFormData {
+  name: string;
+  description: string;
+  pattern: string;
+  extract_names: string;
+  enabled: boolean;
 }
 
 // Group types (Ansible-style variable inheritance)
@@ -405,7 +530,7 @@ export interface IpamRegion {
   id: string;
   name: string;
   description?: string;
-  location_count?: number;
+  campus_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -416,7 +541,7 @@ export interface IpamRegionFormData {
   description: string;
 }
 
-export interface IpamLocation {
+export interface IpamCampus {
   id: string;
   name: string;
   description?: string;
@@ -427,7 +552,7 @@ export interface IpamLocation {
   updated_at: string;
 }
 
-export interface IpamLocationFormData {
+export interface IpamCampusFormData {
   id: string;
   name: string;
   description: string;
@@ -438,9 +563,10 @@ export interface IpamDatacenter {
   id: string;
   name: string;
   description?: string;
-  location_id: string;
-  location_name?: string;
+  campus_id: string;
+  campus_name?: string;
   region_name?: string;
+  hall_count?: number;
   prefix_count?: number;
   created_at: string;
   updated_at: string;
@@ -450,7 +576,61 @@ export interface IpamDatacenterFormData {
   id: string;
   name: string;
   description: string;
-  location_id: string;
+  campus_id: string;
+}
+
+export interface IpamHall {
+  id: string;
+  name: string;
+  description?: string;
+  datacenter_id: string;
+  datacenter_name?: string;
+  row_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpamHallFormData {
+  id: string;
+  name: string;
+  description: string;
+  datacenter_id: string;
+}
+
+export interface IpamRow {
+  id: string;
+  name: string;
+  description?: string;
+  hall_id: string;
+  hall_name?: string;
+  rack_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpamRowFormData {
+  id: string;
+  name: string;
+  description: string;
+  hall_id: string;
+}
+
+export interface IpamRack {
+  id: string;
+  name: string;
+  description?: string;
+  row_id: string;
+  row_name?: string;
+  device_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IpamRackFormData {
+  id: string;
+  name: string;
+  description: string;
+  row_id: string;
 }
 
 export interface IpamRole {
@@ -518,7 +698,7 @@ export interface IpamIpAddress {
   role_ids?: string[];
   role_names?: string[];
   dns_name?: string;
-  device_id?: string;
+  device_id?: number;
   device_hostname?: string;
   interface_name?: string;
   vrf_id?: string;
@@ -535,7 +715,7 @@ export interface IpamIpAddressFormData {
   status: IpamStatus;
   role_ids: string[];
   dns_name: string;
-  device_id: string;
+  device_id: string; // kept as string for form input handling
   interface_name: string;
   vrf_id: string;
 }
@@ -569,6 +749,25 @@ export const EMPTY_IPAM_IP_FORM: IpamIpAddressFormData = {
   id: '', address: '', prefix_id: '', description: '', status: 'active',
   role_ids: [], dns_name: '', device_id: '', interface_name: '', vrf_id: '',
 };
+
+// ========== Device Role Types ==========
+
+export interface DeviceRole {
+  id: string;
+  name: string;
+  description?: string;
+  template_ids?: string[];
+  template_names?: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeviceRoleFormData {
+  id?: string;
+  name: string;
+  description: string;
+  template_ids: string[];
+}
 
 // ========== Chassis / Port Layout Types ==========
 
@@ -660,3 +859,38 @@ export const PORT_ROLE_OPTIONS = [
   { value: 'access', label: 'Access' },
   { value: 'uplink', label: 'Uplink' },
 ] as const;
+
+// ========== Port Assignment Types ==========
+
+export interface PortAssignment {
+  id: number;
+  device_id: number;
+  port_name: string;
+  remote_device_id?: number;
+  remote_port_name: string;
+  description?: string;
+  patch_panel_a_id?: number;
+  patch_panel_a_port?: string;
+  patch_panel_b_id?: number;
+  patch_panel_b_port?: string;
+  remote_device_hostname?: string;
+  remote_device_type?: string;
+  patch_panel_a_hostname?: string;
+  patch_panel_b_hostname?: string;
+  vrf_id?: string;
+  vrf_name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SetPortAssignmentRequest {
+  port_name: string;
+  remote_device_id?: number;
+  remote_port_name?: string;
+  description?: string;
+  patch_panel_a_id?: number;
+  patch_panel_a_port?: string;
+  patch_panel_b_id?: number;
+  patch_panel_b_port?: string;
+  vrf_id?: string;
+}

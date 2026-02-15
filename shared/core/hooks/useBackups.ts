@@ -14,7 +14,7 @@ export interface UseBackupsReturn {
   backups: Backup[];
   loading: boolean;
   error: string | null;
-  loadBackups: (deviceId: string) => Promise<void>;
+  loadBackups: (deviceId: number) => Promise<void>;
   clear: () => void;
 }
 
@@ -23,9 +23,9 @@ export function useBackups(): UseBackupsReturn {
   const { byDevice, loading, error } = useAppSelector((state) => state.backups);
 
   // Flatten all backups from the map
-  const backups: Backup[] = Object.values(byDevice).flat();
+  const backups = (Object.values(byDevice) as Backup[][]).flat();
 
-  const loadBackups = useCallback(async (deviceId: string) => {
+  const loadBackups = useCallback(async (deviceId: number) => {
     await dispatch(fetchBackups(deviceId));
   }, [dispatch]);
 

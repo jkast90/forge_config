@@ -104,6 +104,26 @@ setInterval(() => {
   }
 }, 10000);
 
+// Check if the API is reachable at the given URL.
+// Accepts either a base URL (e.g., "http://host:8088") or an API URL (e.g., "/api" or "http://host:8088/api").
+// Hits the /api/health endpoint.
+export async function checkApiHealth(baseUrl: string): Promise<boolean> {
+  try {
+    const clean = baseUrl.replace(/\/+$/, '');
+    const url = clean.endsWith('/api') ? `${clean}/health` : `${clean}/api/health`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 export class BaseService {
   protected config: ServiceConfig;
   protected fetchFn: typeof fetch;
@@ -145,7 +165,7 @@ export class BaseService {
       // Handle 401: clear token and notify UI
       if (response.status === 401) {
         tokenStorage.clearToken();
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
           window.dispatchEvent(new CustomEvent('auth:unauthorized'));
         }
       }

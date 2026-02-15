@@ -79,7 +79,7 @@ export function DeviceActionsModal({ device, visible, onClose, onRefresh }: Prop
     setConnectResult(null);
     try {
       const services = getServices();
-      const result = await services.devices.connect(device.mac);
+      const result = await services.devices.connect(device.id);
       setConnectResult(result);
       if (result.ping.reachable && onRefresh) {
         onRefresh();
@@ -102,11 +102,11 @@ export function DeviceActionsModal({ device, visible, onClose, onRefresh }: Prop
     setConfigResult(null);
     try {
       const services = getServices();
-      const result = await services.devices.getConfig(device.mac);
+      const result = await services.devices.getConfig(device.id);
       setConfigResult(result);
     } catch (err) {
       setConfigResult({
-        mac: device.mac,
+        mac: device.mac || '',
         hostname: device.hostname,
         filename: '',
         content: '',
@@ -122,7 +122,7 @@ export function DeviceActionsModal({ device, visible, onClose, onRefresh }: Prop
     setActiveTab('backups');
     setSelectedBackup(null);
     setBackupContent(null);
-    await loadBackups(device.mac);
+    await loadBackups(device.id);
   }, [device, loadBackups]);
 
   const handleViewBackupContent = useCallback(async (backup: Backup) => {
@@ -150,10 +150,10 @@ export function DeviceActionsModal({ device, visible, onClose, onRefresh }: Prop
     setTriggerBackupLoading(true);
     try {
       const services = getServices();
-      await services.devices.triggerBackup(device.mac);
+      await services.devices.triggerBackup(device.id);
       // Refresh backups list if we're on the backups tab
       if (activeTab === 'backups') {
-        await loadBackups(device.mac);
+        await loadBackups(device.id);
       }
       if (onRefresh) {
         onRefresh();

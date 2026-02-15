@@ -78,6 +78,7 @@ export { useModalRoute, type UseModalRouteReturn } from './useModalRoute';
 export { useTelemetry } from './useTelemetry';
 export {
   useTableFeatures,
+  type ColumnFilterDef,
   type UseTableFeaturesOptions,
   type UseTableFeaturesReturn,
 } from './useTableFeatures';
@@ -90,3 +91,9 @@ export { useGroups, type UseGroupsOptions, type UseGroupsReturn } from './useGro
 export { useResolvedVariables, type UseResolvedVariablesReturn } from './useResolvedVariables';
 export { useIpam, type UseIpamOptions, type UseIpamReturn } from './useIpam';
 export { useDeviceModels, type UseDeviceModelsOptions, type UseDeviceModelsReturn } from './useDeviceModels';
+export { usePortAssignments, type UsePortAssignmentsReturn } from './usePortAssignments';
+export { useJobTemplates, type UseJobTemplatesReturn } from './useJobTemplates';
+export { useCredentials, type UseCredentialsOptions, type UseCredentialsReturn } from './useCredentials';
+export { useOutputParsers, type UseOutputParsersReturn } from './useOutputParsers';
+export { useDeviceRoles, type UseDeviceRolesReturn } from './useDeviceRoles';
+export { useUsers, type UseUsersReturn } from './useUsers';

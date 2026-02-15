@@ -30,7 +30,7 @@ impl SettingsRepo {
 pub struct BackupRepo;
 
 impl BackupRepo {
-    pub async fn create(pool: &Pool<Sqlite>, device_id: &str, filename: &str, size: i64) -> Result<Backup> {
+    pub async fn create(pool: &Pool<Sqlite>, device_id: i64, filename: &str, size: i64) -> Result<Backup> {
         let now = chrono::Utc::now();
         let result = sqlx::query(
             "INSERT INTO backups (device_id, filename, size, created_at) VALUES (?, ?, ?, ?)",
@@ -44,14 +44,14 @@ impl BackupRepo {
 
         Ok(Backup {
             id: result.last_insert_rowid(),
-            device_id: device_id.to_string(),
+            device_id,
             filename: filename.to_string(),
             size,
             created_at: now,
         })
     }
 
-    pub async fn list(pool: &Pool<Sqlite>, device_id: &str) -> Result<Vec<Backup>> {
+    pub async fn list(pool: &Pool<Sqlite>, device_id: i64) -> Result<Vec<Backup>> {
         let rows = sqlx::query(
             r#"
             SELECT id, device_id, filename, size, created_at

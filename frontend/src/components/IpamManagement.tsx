@@ -7,9 +7,7 @@ import {
   validators,
 } from '@core';
 import type {
-  IpamRegion, IpamRegionFormData,
-  IpamLocation, IpamLocationFormData,
-  IpamDatacenter, IpamDatacenterFormData,
+  IpamDatacenter,
   IpamPrefix, IpamPrefixFormData,
   IpamIpAddress, IpamIpAddressFormData,
   IpamRole, IpamVrf, IpamTag,
@@ -28,12 +26,11 @@ import type { TableColumn, TableAction } from './Table';
 import { PlusIcon, TrashIcon, EditIcon, Icon } from './Icon';
 import { ValidatedInput } from './ValidatedInput';
 import { Toggle } from './Toggle';
+import { SideTabs } from './SideTabs';
+import type { SideTab } from './SideTabs';
+import { useConfirm } from './ConfirmDialog';
 
-type IpamTab = 'prefixes' | 'org' | 'ips' | 'roles' | 'vrfs';
-
-const EMPTY_REGION_FORM: IpamRegionFormData = { id: '', name: '', description: '' };
-const EMPTY_LOCATION_FORM: IpamLocationFormData = { id: '', name: '', description: '', region_id: '' };
-const EMPTY_DATACENTER_FORM: IpamDatacenterFormData = { id: '', name: '', description: '', location_id: '' };
+type IpamTab = 'prefixes' | 'ips' | 'roles' | 'vrfs';
 
 export function IpamManagement() {
   const [activeTab, setActiveTab] = useState<IpamTab>('prefixes');
@@ -42,7 +39,7 @@ export function IpamManagement() {
   const ipam = useIpam();
   const { devices } = useDevices();
 
-  const { regions, locations, datacenters, roles, vrfs, prefixes, ipAddresses, loading, error } = ipam;
+  const { datacenters, roles, vrfs, prefixes, ipAddresses, loading, error } = ipam;
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading IPAM data...">
@@ -57,7 +54,7 @@ export function IpamManagement() {
         <InfoSection open={showInfo}>
           <div>
             <p>
-              IPAM manages your IP address space. Organize addresses into a hierarchy: Regions &rarr; Locations &rarr; Datacenters.
+              IPAM manages your IP address space. Organize addresses into a hierarchy: Regions &rarr; Campuses &rarr; Datacenters &rarr; Halls &rarr; Rows &rarr; Racks.
               Network prefixes can be nested (supernets contain child prefixes), and individual IP addresses live within prefixes.
             </p>
             <p>
@@ -67,71 +64,45 @@ export function IpamManagement() {
           </div>
         </InfoSection>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)' }}>
-          {([
-            { id: 'prefixes' as IpamTab, label: 'Prefixes', count: prefixes.length },
-            { id: 'org' as IpamTab, label: 'Org Hierarchy', count: regions.length + locations.length + datacenters.length },
-            { id: 'ips' as IpamTab, label: 'IP Addresses', count: ipAddresses.length },
-            { id: 'vrfs' as IpamTab, label: 'VRFs', count: vrfs.length },
-            { id: 'roles' as IpamTab, label: 'Roles', count: roles.length },
-          ]).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                padding: '8px 20px',
-                background: 'none',
-                border: 'none',
-                borderBottom: activeTab === tab.id ? '2px solid var(--accent-color, #6495ed)' : '2px solid transparent',
-                color: 'inherit',
-                cursor: 'pointer',
-                fontWeight: activeTab === tab.id ? 600 : 400,
-                fontSize: '13px',
-              }}
-            >
-              {tab.label} ({tab.count})
-            </button>
-          ))}
-        </div>
+        <SideTabs
+          tabs={[
+            { id: 'prefixes', label: 'Prefixes', icon: 'lan', count: prefixes.length },
+            { id: 'ips', label: 'IP Addresses', icon: 'pin', count: ipAddresses.length },
+            { id: 'vrfs', label: 'VRFs', icon: 'route', count: vrfs.length },
+            { id: 'roles', label: 'Roles', icon: 'label', count: roles.length },
+          ] as SideTab[]}
+          activeTab={activeTab}
+          onTabChange={(id) => setActiveTab(id as IpamTab)}
+        >
+          {activeTab === 'prefixes' && (
+            <PrefixesTab
+              prefixes={prefixes}
+              datacenters={datacenters}
+              vrfs={vrfs}
+              roles={roles}
+              ipam={ipam}
+            />
+          )}
 
-        {activeTab === 'prefixes' && (
-          <PrefixesTab
-            prefixes={prefixes}
-            datacenters={datacenters}
-            vrfs={vrfs}
-            roles={roles}
-            ipam={ipam}
-          />
-        )}
+          {activeTab === 'ips' && (
+            <IpAddressesTab
+              ipAddresses={ipAddresses}
+              prefixes={prefixes}
+              roles={roles}
+              vrfs={vrfs}
+              devices={devices}
+              ipam={ipam}
+            />
+          )}
 
-        {activeTab === 'org' && (
-          <OrgHierarchyTab
-            regions={regions}
-            locations={locations}
-            datacenters={datacenters}
-            ipam={ipam}
-          />
-        )}
+          {activeTab === 'vrfs' && (
+            <VrfsTab vrfs={vrfs} ipam={ipam} />
+          )}
 
-        {activeTab === 'ips' && (
-          <IpAddressesTab
-            ipAddresses={ipAddresses}
-            prefixes={prefixes}
-            roles={roles}
-            vrfs={vrfs}
-            devices={devices}
-            ipam={ipam}
-          />
-        )}
-
-        {activeTab === 'vrfs' && (
-          <VrfsTab vrfs={vrfs} ipam={ipam} />
-        )}
-
-        {activeTab === 'roles' && (
-          <RolesTab roles={roles} ipam={ipam} />
-        )}
+          {activeTab === 'roles' && (
+            <RolesTab roles={roles} ipam={ipam} />
+          )}
+        </SideTabs>
       </Card>
     </LoadingState>
   );
@@ -148,6 +119,7 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
   roles: IpamRole[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [selectedPrefixId, setSelectedPrefixId] = useState<number | null>(null);
   const [showPrefixForm, setShowPrefixForm] = useState(false);
   const [editingPrefix, setEditingPrefix] = useState<IpamPrefix | null>(null);
@@ -298,7 +270,7 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
   }, [prefixForm, editingPrefix, ipam]);
 
   const handleDeletePrefix = useCallback(async (id: number) => {
-    if (!confirm('Delete this prefix and all child IPs?')) return;
+    if (!(await confirm({ title: 'Delete Prefix', message: 'Delete this prefix and all child IPs?', confirmText: 'Delete', destructive: true }))) return;
     const success = await ipam.deletePrefix(id);
     if (success && selectedPrefixId === id) setSelectedPrefixId(null);
   }, [ipam, selectedPrefixId]);
@@ -547,6 +519,8 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
           <FormField label="Value" name="tagValue" value={tagValue} onChange={(e) => setTagValue(e.target.value)} placeholder="e.g., production" />
         </div>
       </FormDialog>
+
+      <ConfirmDialogRenderer />
     </>
   );
 }
@@ -660,274 +634,6 @@ function PrefixDetail({ prefix, childPrefixes, tags, tagsLoading, onAllocatePref
   );
 }
 
-// ============================================================
-// Org Hierarchy Tab
-// ============================================================
-
-function OrgHierarchyTab({ regions, locations, datacenters, ipam }: {
-  regions: IpamRegion[];
-  locations: IpamLocation[];
-  datacenters: IpamDatacenter[];
-  ipam: ReturnType<typeof useIpam>;
-}) {
-  const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
-  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
-
-  // Forms
-  const [showRegionForm, setShowRegionForm] = useState(false);
-  const [editingRegion, setEditingRegion] = useState<IpamRegion | null>(null);
-  const [regionForm, setRegionForm] = useState<IpamRegionFormData>(EMPTY_REGION_FORM);
-
-  const [showLocationForm, setShowLocationForm] = useState(false);
-  const [editingLocation, setEditingLocation] = useState<IpamLocation | null>(null);
-  const [locationForm, setLocationForm] = useState<IpamLocationFormData>(EMPTY_LOCATION_FORM);
-
-  const [showDcForm, setShowDcForm] = useState(false);
-  const [editingDc, setEditingDc] = useState<IpamDatacenter | null>(null);
-  const [dcForm, setDcForm] = useState<IpamDatacenterFormData>(EMPTY_DATACENTER_FORM);
-
-  const filteredLocations = useMemo(() =>
-    selectedRegionId ? locations.filter(l => l.region_id === selectedRegionId) : locations,
-    [locations, selectedRegionId]
-  );
-
-  const filteredDatacenters = useMemo(() =>
-    selectedLocationId ? datacenters.filter(d => d.location_id === selectedLocationId) :
-      selectedRegionId ? datacenters.filter(d => {
-        const loc = locations.find(l => l.id === d.location_id);
-        return loc?.region_id === selectedRegionId;
-      }) : datacenters,
-    [datacenters, locations, selectedRegionId, selectedLocationId]
-  );
-
-  // Region handlers
-  const handleCreateRegion = useCallback(() => {
-    setEditingRegion(null);
-    setRegionForm(EMPTY_REGION_FORM);
-    setShowRegionForm(true);
-  }, []);
-
-  const handleEditRegion = useCallback((r: IpamRegion) => {
-    setEditingRegion(r);
-    setRegionForm({ id: r.id, name: r.name, description: r.description || '' });
-    setShowRegionForm(true);
-  }, []);
-
-  const handleSubmitRegion = useCallback(async () => {
-    if (!regionForm.id.trim() || !regionForm.name.trim()) {
-      addNotification('error', 'ID and Name are required');
-      return;
-    }
-    let success: boolean;
-    if (editingRegion) {
-      success = await ipam.updateRegion(editingRegion.id, regionForm);
-    } else {
-      success = await ipam.createRegion(regionForm);
-    }
-    if (success) setShowRegionForm(false);
-  }, [regionForm, editingRegion, ipam]);
-
-  const handleDeleteRegion = useCallback(async (id: string) => {
-    if (!confirm(`Delete region "${id}" and all its locations/datacenters?`)) return;
-    await ipam.deleteRegion(id);
-    if (selectedRegionId === id) { setSelectedRegionId(null); setSelectedLocationId(null); }
-  }, [ipam, selectedRegionId]);
-
-  // Location handlers
-  const handleCreateLocation = useCallback(() => {
-    setEditingLocation(null);
-    setLocationForm({ ...EMPTY_LOCATION_FORM, region_id: selectedRegionId || '' });
-    setShowLocationForm(true);
-  }, [selectedRegionId]);
-
-  const handleEditLocation = useCallback((l: IpamLocation) => {
-    setEditingLocation(l);
-    setLocationForm({ id: l.id, name: l.name, description: l.description || '', region_id: l.region_id });
-    setShowLocationForm(true);
-  }, []);
-
-  const handleSubmitLocation = useCallback(async () => {
-    if (!locationForm.id.trim() || !locationForm.name.trim() || !locationForm.region_id) {
-      addNotification('error', 'ID, Name, and Region are required');
-      return;
-    }
-    let success: boolean;
-    if (editingLocation) {
-      success = await ipam.updateLocation(editingLocation.id, locationForm);
-    } else {
-      success = await ipam.createLocation(locationForm);
-    }
-    if (success) setShowLocationForm(false);
-  }, [locationForm, editingLocation, ipam]);
-
-  const handleDeleteLocation = useCallback(async (id: string) => {
-    if (!confirm(`Delete location "${id}" and all its datacenters?`)) return;
-    await ipam.deleteLocation(id);
-    if (selectedLocationId === id) setSelectedLocationId(null);
-  }, [ipam, selectedLocationId]);
-
-  // Datacenter handlers
-  const handleCreateDc = useCallback(() => {
-    setEditingDc(null);
-    setDcForm({ ...EMPTY_DATACENTER_FORM, location_id: selectedLocationId || '' });
-    setShowDcForm(true);
-  }, [selectedLocationId]);
-
-  const handleEditDc = useCallback((d: IpamDatacenter) => {
-    setEditingDc(d);
-    setDcForm({ id: d.id, name: d.name, description: d.description || '', location_id: d.location_id });
-    setShowDcForm(true);
-  }, []);
-
-  const handleSubmitDc = useCallback(async () => {
-    if (!dcForm.id.trim() || !dcForm.name.trim() || !dcForm.location_id) {
-      addNotification('error', 'ID, Name, and Location are required');
-      return;
-    }
-    let success: boolean;
-    if (editingDc) {
-      success = await ipam.updateDatacenter(editingDc.id, dcForm);
-    } else {
-      success = await ipam.createDatacenter(dcForm);
-    }
-    if (success) setShowDcForm(false);
-  }, [dcForm, editingDc, ipam]);
-
-  const handleDeleteDc = useCallback(async (id: string) => {
-    if (!confirm(`Delete datacenter "${id}"?`)) return;
-    await ipam.deleteDatacenter(id);
-  }, [ipam]);
-
-  const regionOptions = useMemo(() => [
-    { value: '', label: 'Select a region...' },
-    ...regions.map(r => ({ value: r.id, label: r.name })),
-  ], [regions]);
-
-  const locationOptions = useMemo(() => [
-    { value: '', label: 'Select a location...' },
-    ...locations.map(l => ({ value: l.id, label: `${l.name} (${l.region_name || l.region_id})` })),
-  ], [locations]);
-
-  return (
-    <>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0', minHeight: '400px' }}>
-        {/* Regions column */}
-        <div style={{ borderRight: '1px solid var(--border-color)' }}>
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 600, fontSize: '13px', opacity: 0.7 }}>REGIONS ({regions.length})</span>
-            <Button size="sm" onClick={handleCreateRegion}><PlusIcon size={14} /> Add</Button>
-          </div>
-          {regions.map(r => (
-            <div
-              key={r.id}
-              style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '8px 12px', cursor: 'pointer',
-                background: selectedRegionId === r.id ? 'var(--selection-bg, rgba(100, 149, 237, 0.15))' : 'transparent',
-                borderLeft: selectedRegionId === r.id ? '3px solid var(--accent-color, #6495ed)' : '3px solid transparent',
-              }}
-              onClick={() => { setSelectedRegionId(r.id); setSelectedLocationId(null); }}
-            >
-              <div>
-                <div style={{ fontWeight: 500 }}>{r.name}</div>
-                <div style={{ fontSize: '11px', opacity: 0.6 }}>{r.location_count ?? 0} locations</div>
-              </div>
-              <div style={{ display: 'flex', gap: '2px' }}>
-                <IconButton size="sm" onClick={(e) => { e.stopPropagation(); handleEditRegion(r); }}><EditIcon size={14} /></IconButton>
-                <IconButton variant="danger" size="sm" onClick={(e) => { e.stopPropagation(); handleDeleteRegion(r.id); }}><TrashIcon size={14} /></IconButton>
-              </div>
-            </div>
-          ))}
-          {regions.length === 0 && <div style={{ padding: '16px', opacity: 0.5, fontSize: '13px', textAlign: 'center' }}>No regions yet</div>}
-        </div>
-
-        {/* Locations column */}
-        <div style={{ borderRight: '1px solid var(--border-color)' }}>
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 600, fontSize: '13px', opacity: 0.7 }}>LOCATIONS ({filteredLocations.length})</span>
-            <Button size="sm" onClick={handleCreateLocation} disabled={!selectedRegionId}><PlusIcon size={14} /> Add</Button>
-          </div>
-          {filteredLocations.map(l => (
-            <div
-              key={l.id}
-              style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '8px 12px', cursor: 'pointer',
-                background: selectedLocationId === l.id ? 'var(--selection-bg, rgba(100, 149, 237, 0.15))' : 'transparent',
-                borderLeft: selectedLocationId === l.id ? '3px solid var(--accent-color, #6495ed)' : '3px solid transparent',
-              }}
-              onClick={() => setSelectedLocationId(l.id)}
-            >
-              <div>
-                <div style={{ fontWeight: 500 }}>{l.name}</div>
-                <div style={{ fontSize: '11px', opacity: 0.6 }}>{l.datacenter_count ?? 0} datacenters</div>
-              </div>
-              <div style={{ display: 'flex', gap: '2px' }}>
-                <IconButton size="sm" onClick={(e) => { e.stopPropagation(); handleEditLocation(l); }}><EditIcon size={14} /></IconButton>
-                <IconButton variant="danger" size="sm" onClick={(e) => { e.stopPropagation(); handleDeleteLocation(l.id); }}><TrashIcon size={14} /></IconButton>
-              </div>
-            </div>
-          ))}
-          {filteredLocations.length === 0 && <div style={{ padding: '16px', opacity: 0.5, fontSize: '13px', textAlign: 'center' }}>{selectedRegionId ? 'No locations in this region' : 'Select a region'}</div>}
-        </div>
-
-        {/* Datacenters column */}
-        <div>
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 600, fontSize: '13px', opacity: 0.7 }}>DATACENTERS ({filteredDatacenters.length})</span>
-            <Button size="sm" onClick={handleCreateDc} disabled={!selectedLocationId}><PlusIcon size={14} /> Add</Button>
-          </div>
-          {filteredDatacenters.map(d => (
-            <div key={d.id} style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 500 }}>{d.name}</div>
-                <div style={{ fontSize: '11px', opacity: 0.6 }}>
-                  {d.location_name || d.location_id}
-                  {d.region_name && ` · ${d.region_name}`}
-                  {(d.prefix_count ?? 0) > 0 && ` · ${d.prefix_count} prefixes`}
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '2px' }}>
-                <IconButton size="sm" onClick={() => handleEditDc(d)}><EditIcon size={14} /></IconButton>
-                <IconButton variant="danger" size="sm" onClick={() => handleDeleteDc(d.id)}><TrashIcon size={14} /></IconButton>
-              </div>
-            </div>
-          ))}
-          {filteredDatacenters.length === 0 && <div style={{ padding: '16px', opacity: 0.5, fontSize: '13px', textAlign: 'center' }}>{selectedLocationId ? 'No datacenters here' : 'Select a location'}</div>}
-        </div>
-      </div>
-
-      {/* Region Form */}
-      <FormDialog isOpen={showRegionForm} onClose={() => setShowRegionForm(false)} title={editingRegion ? 'Edit Region' : 'Create Region'} onSubmit={(e) => { e.preventDefault(); handleSubmitRegion(); }} submitText={editingRegion ? 'Update' : 'Create'}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={regionForm.id} onChange={(e) => setRegionForm(f => ({ ...f, id: e.target.value }))} disabled={!!editingRegion} placeholder="e.g., us-east" />
-          <FormField label="Name" name="name" value={regionForm.name} onChange={(e) => setRegionForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., US East" />
-          <FormField label="Description" name="desc" value={regionForm.description} onChange={(e) => setRegionForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
-        </div>
-      </FormDialog>
-
-      {/* Location Form */}
-      <FormDialog isOpen={showLocationForm} onClose={() => setShowLocationForm(false)} title={editingLocation ? 'Edit Location' : 'Create Location'} onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} submitText={editingLocation ? 'Update' : 'Create'}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={locationForm.id} onChange={(e) => setLocationForm(f => ({ ...f, id: e.target.value }))} disabled={!!editingLocation} placeholder="e.g., nyc" />
-          <FormField label="Name" name="name" value={locationForm.name} onChange={(e) => setLocationForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., New York City" />
-          <FormField label="Description" name="desc" value={locationForm.description} onChange={(e) => setLocationForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
-          <SelectField label="Region" name="region_id" value={locationForm.region_id} onChange={(e) => setLocationForm(f => ({ ...f, region_id: e.target.value }))} options={regionOptions} />
-        </div>
-      </FormDialog>
-
-      {/* Datacenter Form */}
-      <FormDialog isOpen={showDcForm} onClose={() => setShowDcForm(false)} title={editingDc ? 'Edit Datacenter' : 'Create Datacenter'} onSubmit={(e) => { e.preventDefault(); handleSubmitDc(); }} submitText={editingDc ? 'Update' : 'Create'}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={dcForm.id} onChange={(e) => setDcForm(f => ({ ...f, id: e.target.value }))} disabled={!!editingDc} placeholder="e.g., dc-nyc-1" />
-          <FormField label="Name" name="name" value={dcForm.name} onChange={(e) => setDcForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., NYC DC1" />
-          <FormField label="Description" name="desc" value={dcForm.description} onChange={(e) => setDcForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
-          <SelectField label="Location" name="location_id" value={dcForm.location_id} onChange={(e) => setDcForm(f => ({ ...f, location_id: e.target.value }))} options={locationOptions} />
-        </div>
-      </FormDialog>
-    </>
-  );
-}
 
 // ============================================================
 // IP Addresses Tab
@@ -938,9 +644,10 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
   prefixes: IpamPrefix[];
   roles: IpamRole[];
   vrfs: IpamVrf[];
-  devices: { id: string; mac: string; hostname: string }[];
+  devices: { id: number; mac: string | null; hostname: string }[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [editingIp, setEditingIp] = useState<IpamIpAddress | null>(null);
   const [form, setForm] = useState<IpamIpAddressFormData>({ id: '', address: '', prefix_id: '', description: '', status: 'active', role_ids: [], dns_name: '', device_id: '', interface_name: '', vrf_id: '' });
@@ -956,7 +663,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
 
   const deviceOptions = useMemo(() => [
     { value: '', label: '(none)' },
-    ...devices.map(d => ({ value: d.id, label: `${d.hostname || d.mac}` })),
+    ...devices.map(d => ({ value: String(d.id), label: `${d.hostname || d.mac || String(d.id)}` })),
   ], [devices]);
 
   const vrfOptions = useMemo(() => [
@@ -980,7 +687,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
       status: ip.status,
       role_ids: ip.role_ids || [],
       dns_name: ip.dns_name || '',
-      device_id: ip.device_id || '',
+      device_id: ip.device_id != null ? String(ip.device_id) : '',
       interface_name: ip.interface_name || '',
       vrf_id: ip.vrf_id || '',
     });
@@ -1005,7 +712,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
   }, [form, editingIp, ipam]);
 
   const handleDelete = useCallback(async (ip: IpamIpAddress) => {
-    if (!confirm(`Delete IP ${ip.address}?`)) return;
+    if (!(await confirm({ title: 'Delete IP Address', message: `Delete IP ${ip.address}?`, confirmText: 'Delete', destructive: true }))) return;
     await ipam.deleteIpAddress(ip.id);
   }, [ipam]);
 
@@ -1028,20 +735,27 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
 
   return (
     <>
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={handleOpenCreate}><PlusIcon size={14} /> Add IP Address</Button>
-      </div>
-      <Table
-        data={ipAddresses}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="ipam-ip-addresses"
-        emptyMessage="No IP addresses allocated yet."
-        emptyDescription="Allocate IPs from a prefix or add one manually."
-        searchable
-        searchPlaceholder="Search IP addresses..."
-      />
+      <Card
+        title="IP Addresses"
+        headerAction={
+          <Button variant="primary" onClick={handleOpenCreate}>
+            <PlusIcon size={14} />
+            Add IP Address
+          </Button>
+        }
+      >
+        <Table
+          data={ipAddresses}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="ipam-ip-addresses"
+          emptyMessage="No IP addresses allocated yet."
+          emptyDescription="Allocate IPs from a prefix or add one manually."
+          searchable
+          searchPlaceholder="Search IP addresses..."
+        />
+      </Card>
 
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editingIp ? 'Edit IP Address' : 'Create IP Address'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editingIp ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1079,6 +793,8 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
           <SelectField label="VRF" name="vrf_id" value={form.vrf_id} onChange={(e) => setForm(f => ({ ...f, vrf_id: e.target.value }))} options={vrfOptions} />
         </div>
       </FormDialog>
+
+      <ConfirmDialogRenderer />
     </>
   );
 }
@@ -1091,6 +807,7 @@ function VrfsTab({ vrfs, ipam }: {
   vrfs: IpamVrf[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [vrfId, setVrfId] = useState('');
   const [vrfName, setVrfName] = useState('');
@@ -1118,7 +835,7 @@ function VrfsTab({ vrfs, ipam }: {
   }, [vrfId, vrfName, vrfRd, vrfDesc, ipam]);
 
   const handleDelete = useCallback(async (vrf: IpamVrf) => {
-    if (!confirm(`Delete VRF "${vrf.name}"? Prefixes in this VRF will become global.`)) return;
+    if (!(await confirm({ title: 'Delete VRF', message: `Delete VRF "${vrf.name}"? Prefixes in this VRF will become global.`, confirmText: 'Delete', destructive: true }))) return;
     await ipam.deleteVrf(vrf.id);
   }, [ipam]);
 
@@ -1136,20 +853,27 @@ function VrfsTab({ vrfs, ipam }: {
 
   return (
     <>
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={() => setShowForm(true)}><PlusIcon size={14} /> Add VRF</Button>
-      </div>
-      <Table
-        data={vrfs}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="ipam-vrfs"
-        emptyMessage="No VRFs defined."
-        emptyDescription="All prefixes are in the global routing table."
-        searchable
-        searchPlaceholder="Search VRFs..."
-      />
+      <Card
+        title="VRFs"
+        headerAction={
+          <Button variant="primary" onClick={() => setShowForm(true)}>
+            <PlusIcon size={14} />
+            Add VRF
+          </Button>
+        }
+      >
+        <Table
+          data={vrfs}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="ipam-vrfs"
+          emptyMessage="No VRFs defined."
+          emptyDescription="All prefixes are in the global routing table."
+          searchable
+          searchPlaceholder="Search VRFs..."
+        />
+      </Card>
 
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title="Create VRF" onSubmit={(e) => { e.preventDefault(); handleCreate(); }} submitText="Create">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1159,6 +883,8 @@ function VrfsTab({ vrfs, ipam }: {
           <FormField label="Description" name="vrfDesc" value={vrfDesc} onChange={(e) => setVrfDesc(e.target.value)} placeholder="Optional description" />
         </div>
       </FormDialog>
+
+      <ConfirmDialogRenderer />
     </>
   );
 }
@@ -1171,6 +897,7 @@ function RolesTab({ roles, ipam }: {
   roles: IpamRole[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [roleId, setRoleId] = useState('');
   const [roleName, setRoleName] = useState('');
@@ -1191,7 +918,7 @@ function RolesTab({ roles, ipam }: {
   }, [roleId, roleName, roleDesc, ipam]);
 
   const handleDelete = useCallback(async (role: IpamRole) => {
-    if (!confirm(`Delete role "${role.name}"?`)) return;
+    if (!(await confirm({ title: 'Delete Role', message: `Delete role "${role.name}"?`, confirmText: 'Delete', destructive: true }))) return;
     await ipam.deleteRole(role.id);
   }, [ipam]);
 
@@ -1207,20 +934,27 @@ function RolesTab({ roles, ipam }: {
 
   return (
     <>
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={() => setShowForm(true)}><PlusIcon size={14} /> Add Role</Button>
-      </div>
-      <Table
-        data={roles}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="ipam-roles"
-        emptyMessage="No roles defined."
-        emptyDescription="Add roles to categorize IP address assignments."
-        searchable
-        searchPlaceholder="Search roles..."
-      />
+      <Card
+        title="Roles"
+        headerAction={
+          <Button variant="primary" onClick={() => setShowForm(true)}>
+            <PlusIcon size={14} />
+            Add Role
+          </Button>
+        }
+      >
+        <Table
+          data={roles}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="ipam-roles"
+          emptyMessage="No roles defined."
+          emptyDescription="Add roles to categorize IP address assignments."
+          searchable
+          searchPlaceholder="Search roles..."
+        />
+      </Card>
 
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title="Create Role" onSubmit={(e) => { e.preventDefault(); handleCreate(); }} submitText="Create">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1229,6 +963,8 @@ function RolesTab({ roles, ipam }: {
           <FormField label="Description" name="roleDesc" value={roleDesc} onChange={(e) => setRoleDesc(e.target.value)} placeholder="Optional description" />
         </div>
       </FormDialog>
+
+      <ConfirmDialogRenderer />
     </>
   );
 }

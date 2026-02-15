@@ -4,8 +4,6 @@ use sqlx::{Pool, Row, Sqlite, sqlite::SqliteRow};
 
 use crate::models::*;
 
-use super::row_helpers::none_if_empty;
-
 const SELECT_DEVICE_MODEL: &str = r#"
     SELECT dm.id, dm.vendor_id, dm.model, dm.display_name, dm.rack_units, dm.layout,
            dm.created_at, dm.updated_at,

@@ -28,11 +28,11 @@ pub async fn list_devices(
 pub async fn get_device(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Device>, ApiError> {
     let device = state
         .store
-        .get_device(&id)
+        .get_device(id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
     Ok(Json(device))
@@ -44,12 +44,16 @@ pub async fn create_device(
     State(state): State<Arc<AppState>>,
     Json(mut req): Json<CreateDeviceRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Device>), ApiError> {
-    req.mac = normalize_mac(&req.mac);
-
-    if req.mac.is_empty() || req.ip.is_empty() || req.hostname.is_empty() {
-        return Err(ApiError::bad_request("mac, ip, and hostname are required"));
+    // Normalize MAC if provided and non-empty
+    if !req.mac.is_empty() {
+        req.mac = normalize_mac(&req.mac);
     }
-    if !is_valid_ipv4(&req.ip) {
+
+    if req.hostname.is_empty() {
+        return Err(ApiError::bad_request("hostname is required"));
+    }
+    // Validate IP only if non-empty (patch panels may have no IP)
+    if !req.ip.is_empty() && !is_valid_ipv4(&req.ip) {
         return Err(ApiError::bad_request("invalid IPv4 address"));
     }
     if !is_valid_hostname(&req.hostname) {
@@ -76,7 +80,7 @@ pub async fn create_device(
 pub async fn update_device(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<UpdateDeviceRequest>,
 ) -> Result<Json<Device>, ApiError> {
     // Validate topology_role if provided
@@ -86,7 +90,7 @@ pub async fn update_device(
         }
     }
 
-    let device = state.store.update_device(&id, &req).await?;
+    let device = state.store.update_device(id, &req).await?;
     trigger_reload(&state).await;
     Ok(Json(device))
 }
@@ -95,9 +99,9 @@ pub async fn update_device(
 pub async fn delete_device(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    state.store.delete_device(&id).await?;
+    state.store.delete_device(id).await?;
     trigger_reload(&state).await;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -106,26 +110,17 @@ pub async fn delete_device(
 pub async fn connect_device(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<ConnectResult>, ApiError> {
     let device = state
         .store
-        .get_device(&id)
+        .get_device(id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
-    // Resolve SSH credentials: device -> vendor -> global defaults
-    let settings = state.store.get_settings().await?;
-    let vendor = match device.vendor.as_deref() {
-        Some(v) if !v.is_empty() => state.store.get_vendor(v).await.ok().flatten(),
-        _ => None,
-    };
-    let ssh_user = device.ssh_user.clone().filter(|s| !s.is_empty())
-        .or_else(|| vendor.as_ref().and_then(|v| v.ssh_user.clone()))
-        .unwrap_or(settings.default_ssh_user.clone());
-    let ssh_pass = device.ssh_pass.clone().filter(|s| !s.is_empty())
-        .or_else(|| vendor.as_ref().and_then(|v| v.ssh_pass.clone()))
-        .unwrap_or(settings.default_ssh_pass.clone());
+    let (ssh_user, ssh_pass) = crate::utils::resolve_ssh_credentials(
+        &state.store, device.ssh_user.clone(), device.ssh_pass.clone(), device.vendor.as_deref(),
+    ).await;
 
     // Ping check
     let ping_result = ping_device(&device.ip).await;
@@ -148,7 +143,7 @@ pub async fn connect_device(
 
     // Update device status based on connectivity
     if ping_result.reachable {
-        let _ = state.store.update_device_status(&device.id, crate::models::device_status::ONLINE).await;
+        let _ = state.store.update_device_status(device.id, crate::models::device_status::ONLINE).await;
     }
 
     Ok(Json(ConnectResult {
@@ -162,16 +157,17 @@ pub async fn connect_device(
 pub async fn get_device_config(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<DeviceConfigResponse>, ApiError> {
     let device = state
         .store
-        .get_device(&id)
+        .get_device(id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
-    // Build config file path
-    let filename = format!("{}.cfg", device.mac.replace(':', "_"));
+    // Build config file path using MAC address
+    let mac = device.mac.clone().unwrap_or_default();
+    let filename = format!("{}.cfg", mac.replace(':', "_"));
     let config_path = std::path::Path::new(&state.config.tftp_dir).join(&filename);
 
     let (content, exists) = match tokio::fs::read_to_string(&config_path).await {
@@ -180,7 +176,7 @@ pub async fn get_device_config(
     };
 
     Ok(Json(DeviceConfigResponse {
-        mac: device.mac,
+        mac,
         hostname: device.hostname,
         filename,
         content,
@@ -256,20 +252,9 @@ pub async fn connect_ip(
         return Err(ApiError::bad_request("Invalid IP address"));
     }
 
-    // Resolve SSH credentials: request -> vendor -> global defaults
-    let settings = state.store.get_settings().await?;
-    let vendor = match body.vendor.as_deref() {
-        Some(v) if !v.is_empty() => state.store.get_vendor(v).await.ok().flatten(),
-        _ => None,
-    };
-    let ssh_user = body.ssh_user
-        .filter(|s| !s.is_empty())
-        .or_else(|| vendor.as_ref().and_then(|v| v.ssh_user.clone()))
-        .unwrap_or(settings.default_ssh_user.clone());
-    let ssh_pass = body.ssh_pass
-        .filter(|s| !s.is_empty())
-        .or_else(|| vendor.as_ref().and_then(|v| v.ssh_pass.clone()))
-        .unwrap_or(settings.default_ssh_pass.clone());
+    let (ssh_user, ssh_pass) = crate::utils::resolve_ssh_credentials(
+        &state.store, body.ssh_user, body.ssh_pass, body.vendor.as_deref(),
+    ).await;
 
     let ping_result = ping_device(&body.ip).await;
 
@@ -295,28 +280,45 @@ pub async fn connect_ip(
     }))
 }
 
-/// Execute a command on a device via SSH — creates a job and returns 202 Accepted
+/// Execute a command on a device via SSH or webhook — creates a job and returns 202 Accepted
 pub async fn exec_command(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(body): Json<ExecRequest>,
 ) -> Result<(StatusCode, Json<Job>), ApiError> {
     let _device = state
         .store
-        .get_device(&id)
+        .get_device(id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
-    if body.command.is_empty() {
-        return Err(ApiError::bad_request("command is required"));
-    }
+    // Determine job type: if action_id is provided and the action is a webhook, create a webhook job
+    let (jt, command) = if let Some(ref action_id) = body.action_id {
+        let action = state.store.get_vendor_action(action_id).await
+            .map_err(|e| ApiError::internal(e.to_string()))?
+            .ok_or_else(|| ApiError::not_found("vendor action"))?;
+
+        if action.action_type == "webhook" {
+            // For webhook jobs, store the action_id in the command field
+            (job_type::WEBHOOK.to_string(), action.id.clone())
+        } else {
+            // SSH action — use its command
+            (job_type::COMMAND.to_string(), action.command.clone())
+        }
+    } else {
+        if body.command.is_empty() {
+            return Err(ApiError::bad_request("command or action_id is required"));
+        }
+        (job_type::COMMAND.to_string(), body.command.clone())
+    };
 
     let job_id = uuid::Uuid::new_v4().to_string();
     let req = CreateJobRequest {
         device_id: id,
-        job_type: job_type::COMMAND.to_string(),
-        command: body.command,
+        job_type: jt,
+        command,
+        credential_id: String::new(),
     };
 
     let job = state.store.create_job(&job_id, &req).await?;
@@ -361,7 +363,7 @@ fn render_device_config(
 
     let mut context = Context::new();
     context.insert("Hostname", &device.hostname);
-    context.insert("MAC", &device.mac);
+    context.insert("MAC", &device.mac.clone().unwrap_or_default());
     context.insert("IP", &device.ip);
     context.insert("Vendor", &device.vendor.clone().unwrap_or_default());
     context.insert("Model", &device.model.clone().unwrap_or_default());
@@ -380,11 +382,11 @@ fn render_device_config(
 pub async fn preview_device_config(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<DeviceConfigPreviewResponse>, ApiError> {
     let device = state
         .store
-        .get_device(&id)
+        .get_device(id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
@@ -421,14 +423,14 @@ pub async fn preview_device_config(
     // Load resolved variables (group + host inheritance) for template rendering
     let vars = state
         .store
-        .resolve_device_variables_flat(&device.id)
+        .resolve_device_variables_flat(device.id)
         .await
         .unwrap_or_default();
 
     let content = render_device_config(&device, &template, &settings, role_template.as_ref(), &vars)?;
 
     Ok(Json(DeviceConfigPreviewResponse {
-        mac: device.mac,
+        mac: device.mac.unwrap_or_default(),
         hostname: device.hostname,
         template_id: template.id,
         template_name: template.name,
@@ -440,11 +442,11 @@ pub async fn preview_device_config(
 pub async fn deploy_device_config(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<(StatusCode, Json<Job>), ApiError> {
     let _device = state
         .store
-        .get_device(&id)
+        .get_device(id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
@@ -453,6 +455,7 @@ pub async fn deploy_device_config(
         device_id: id,
         job_type: job_type::DEPLOY.to_string(),
         command: String::new(),
+        credential_id: String::new(),
     };
 
     let job = state.store.create_job(&job_id, &req).await?;

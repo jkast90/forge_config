@@ -157,17 +157,17 @@ impl GroupRepo {
 
     // ========== Membership ==========
 
-    pub async fn list_group_members(pool: &Pool<Sqlite>, group_id: &str) -> Result<Vec<String>> {
+    pub async fn list_group_members(pool: &Pool<Sqlite>, group_id: &str) -> Result<Vec<i64>> {
         let rows = sqlx::query(
             "SELECT device_id FROM device_group_members WHERE group_id = ? ORDER BY device_id",
         )
         .bind(group_id)
         .fetch_all(pool)
         .await?;
-        Ok(rows.iter().map(|r| r.get::<String, _>("device_id")).collect())
+        Ok(rows.iter().map(|r| r.get::<i64, _>("device_id")).collect())
     }
 
-    pub async fn list_device_groups(pool: &Pool<Sqlite>, device_id: &str) -> Result<Vec<Group>> {
+    pub async fn list_device_groups(pool: &Pool<Sqlite>, device_id: i64) -> Result<Vec<Group>> {
         let rows = sqlx::query(&format!(
             "{} WHERE g.id IN (SELECT group_id FROM device_group_members WHERE device_id = ?) ORDER BY g.precedence ASC",
             SELECT_GROUP
@@ -178,7 +178,7 @@ impl GroupRepo {
         Ok(rows.iter().map(map_group_row).collect())
     }
 
-    pub async fn add_device_to_group(pool: &Pool<Sqlite>, device_id: &str, group_id: &str) -> Result<()> {
+    pub async fn add_device_to_group(pool: &Pool<Sqlite>, device_id: i64, group_id: &str) -> Result<()> {
         let now = Utc::now();
         sqlx::query(
             "INSERT OR IGNORE INTO device_group_members (device_id, group_id, created_at) VALUES (?, ?, ?)",
@@ -191,7 +191,7 @@ impl GroupRepo {
         Ok(())
     }
 
-    pub async fn remove_device_from_group(pool: &Pool<Sqlite>, device_id: &str, group_id: &str) -> Result<()> {
+    pub async fn remove_device_from_group(pool: &Pool<Sqlite>, device_id: i64, group_id: &str) -> Result<()> {
         sqlx::query("DELETE FROM device_group_members WHERE device_id = ? AND group_id = ?")
             .bind(device_id)
             .bind(group_id)
@@ -200,7 +200,7 @@ impl GroupRepo {
         Ok(())
     }
 
-    pub async fn set_group_members(pool: &Pool<Sqlite>, group_id: &str, device_ids: &[String]) -> Result<()> {
+    pub async fn set_group_members(pool: &Pool<Sqlite>, group_id: &str, device_ids: &[i64]) -> Result<()> {
         // Remove all existing members
         sqlx::query("DELETE FROM device_group_members WHERE group_id = ?")
             .bind(group_id)
@@ -222,7 +222,7 @@ impl GroupRepo {
         Ok(())
     }
 
-    pub async fn set_device_groups(pool: &Pool<Sqlite>, device_id: &str, group_ids: &[String]) -> Result<()> {
+    pub async fn set_device_groups(pool: &Pool<Sqlite>, device_id: i64, group_ids: &[String]) -> Result<()> {
         // Remove all existing memberships for this device
         sqlx::query("DELETE FROM device_group_members WHERE device_id = ?")
             .bind(device_id)

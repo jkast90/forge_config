@@ -9,7 +9,7 @@ import { getServices } from '../services';
 export interface UseResolvedVariablesReturn {
   result: ResolvedVariablesResponse | null;
   loading: boolean;
-  fetch: (deviceId: string) => Promise<void>;
+  fetch: (deviceId: number) => Promise<void>;
   clear: () => void;
 }
 
@@ -17,7 +17,7 @@ export function useResolvedVariables(): UseResolvedVariablesReturn {
   const [result, setResult] = useState<ResolvedVariablesResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const fetch = useCallback(async (deviceId: string) => {
+  const fetch = useCallback(async (deviceId: number) => {
     setLoading(true);
     try {
       const data = await getServices().groups.getResolvedVariables(deviceId);

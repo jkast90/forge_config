@@ -37,7 +37,7 @@ pub async fn list_undiscovered(
 ) -> Result<Json<Vec<Lease>>, ApiError> {
     // Get all known devices (already configured)
     let devices = state.store.list_devices().await?;
-    let known_macs: std::collections::HashSet<_> = devices.iter().map(|d| d.mac.to_lowercase()).collect();
+    let known_macs: std::collections::HashSet<_> = devices.iter().filter_map(|d| d.mac.as_ref().map(|m| m.to_lowercase())).collect();
 
     // Start with persisted discovered devices from DB (excludes configured devices)
     let db_discovered = state.store.list_discovered_devices().await?;

@@ -1,8 +1,11 @@
 import { BaseService } from './base';
 import type {
   IpamRegion, IpamRegionFormData,
-  IpamLocation, IpamLocationFormData,
+  IpamCampus, IpamCampusFormData,
   IpamDatacenter, IpamDatacenterFormData,
+  IpamHall, IpamHallFormData,
+  IpamRow, IpamRowFormData,
+  IpamRack, IpamRackFormData,
   IpamRole,
   IpamVrf,
   IpamPrefix, IpamPrefixFormData,
@@ -34,7 +37,7 @@ function cleanIpData(data: IpamIpAddressFormData): Record<string, unknown> {
     status: data.status,
     role_ids: data.role_ids.filter(id => id !== ''),
     dns_name: data.dns_name || undefined,
-    device_id: data.device_id || undefined,
+    device_id: data.device_id ? parseInt(data.device_id, 10) || undefined : undefined,
     interface_name: data.interface_name || undefined,
     vrf_id: data.vrf_id || undefined,
   };
@@ -58,21 +61,21 @@ export class IpamService extends BaseService {
     return this.delete<void>(`/ipam/regions/${encodeURIComponent(id)}`);
   }
 
-  // ========== Locations ==========
-  async listLocations(): Promise<IpamLocation[]> {
-    return this.get<IpamLocation[]>('/ipam/locations');
+  // ========== Campuses ==========
+  async listCampuses(): Promise<IpamCampus[]> {
+    return this.get<IpamCampus[]>('/ipam/campuses');
   }
 
-  async createLocation(data: IpamLocationFormData): Promise<IpamLocation> {
-    return this.post<IpamLocation>('/ipam/locations', data);
+  async createCampus(data: IpamCampusFormData): Promise<IpamCampus> {
+    return this.post<IpamCampus>('/ipam/campuses', data);
   }
 
-  async updateLocation(id: string, data: IpamLocationFormData): Promise<IpamLocation> {
-    return this.put<IpamLocation>(`/ipam/locations/${encodeURIComponent(id)}`, data);
+  async updateCampus(id: string, data: IpamCampusFormData): Promise<IpamCampus> {
+    return this.put<IpamCampus>(`/ipam/campuses/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteLocation(id: string): Promise<void> {
-    return this.delete<void>(`/ipam/locations/${encodeURIComponent(id)}`);
+  async deleteCampus(id: string): Promise<void> {
+    return this.delete<void>(`/ipam/campuses/${encodeURIComponent(id)}`);
   }
 
   // ========== Datacenters ==========
@@ -90,6 +93,57 @@ export class IpamService extends BaseService {
 
   async deleteDatacenter(id: string): Promise<void> {
     return this.delete<void>(`/ipam/datacenters/${encodeURIComponent(id)}`);
+  }
+
+  // ========== Halls ==========
+  async listHalls(): Promise<IpamHall[]> {
+    return this.get<IpamHall[]>('/ipam/halls');
+  }
+
+  async createHall(data: IpamHallFormData): Promise<IpamHall> {
+    return this.post<IpamHall>('/ipam/halls', data);
+  }
+
+  async updateHall(id: string, data: IpamHallFormData): Promise<IpamHall> {
+    return this.put<IpamHall>(`/ipam/halls/${encodeURIComponent(id)}`, data);
+  }
+
+  async deleteHall(id: string): Promise<void> {
+    return this.delete<void>(`/ipam/halls/${encodeURIComponent(id)}`);
+  }
+
+  // ========== Rows ==========
+  async listRows(): Promise<IpamRow[]> {
+    return this.get<IpamRow[]>('/ipam/rows');
+  }
+
+  async createRow(data: IpamRowFormData): Promise<IpamRow> {
+    return this.post<IpamRow>('/ipam/rows', data);
+  }
+
+  async updateRow(id: string, data: IpamRowFormData): Promise<IpamRow> {
+    return this.put<IpamRow>(`/ipam/rows/${encodeURIComponent(id)}`, data);
+  }
+
+  async deleteRow(id: string): Promise<void> {
+    return this.delete<void>(`/ipam/rows/${encodeURIComponent(id)}`);
+  }
+
+  // ========== Racks ==========
+  async listRacks(): Promise<IpamRack[]> {
+    return this.get<IpamRack[]>('/ipam/racks');
+  }
+
+  async createRack(data: IpamRackFormData): Promise<IpamRack> {
+    return this.post<IpamRack>('/ipam/racks', data);
+  }
+
+  async updateRack(id: string, data: IpamRackFormData): Promise<IpamRack> {
+    return this.put<IpamRack>(`/ipam/racks/${encodeURIComponent(id)}`, data);
+  }
+
+  async deleteRack(id: string): Promise<void> {
+    return this.delete<void>(`/ipam/racks/${encodeURIComponent(id)}`);
   }
 
   // ========== Roles ==========
@@ -134,7 +188,7 @@ export class IpamService extends BaseService {
     return this.post<IpamPrefix>(`/ipam/prefixes/${parentId}/available-prefixes`, data);
   }
 
-  async nextAvailableIp(prefixId: number, data: { description?: string; status?: string; role_ids?: string[]; dns_name?: string; device_id?: string; interface_name?: string }): Promise<IpamIpAddress> {
+  async nextAvailableIp(prefixId: number, data: { description?: string; status?: string; role_ids?: string[]; dns_name?: string; device_id?: number; interface_name?: string }): Promise<IpamIpAddress> {
     return this.post<IpamIpAddress>(`/ipam/prefixes/${prefixId}/available-ips`, data);
   }
 

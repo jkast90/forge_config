@@ -15,6 +15,17 @@ export type ConfigStackParamList = {
   ConfigMenu: undefined;
   Vendors: undefined;
   DhcpOptions: undefined;
+  SettingsConfig: undefined;
+  DeviceModels: undefined;
+  Groups: undefined;
+  Variables: undefined;
+  Inspector: undefined;
+  Topologies: undefined;
+  Actions: undefined;
+  Jobs: undefined;
+  Ipam: undefined;
+  Locations: undefined;
+  DataExplorer: undefined;
 };
 
 // Stack navigator params (screens within tabs and modals)

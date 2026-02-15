@@ -64,61 +64,61 @@ pub async fn delete_region(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// ========== Locations ==========
+// ========== Campuses ==========
 
-pub async fn list_locations(
+pub async fn list_campuses(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-) -> Result<Json<Vec<IpamLocation>>, ApiError> {
-    let locations = state.store.list_ipam_locations().await?;
-    Ok(Json(locations))
+) -> Result<Json<Vec<IpamCampus>>, ApiError> {
+    let campuses = state.store.list_ipam_campuses().await?;
+    Ok(Json(campuses))
 }
 
-pub async fn get_location(
+pub async fn get_campus(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<Json<IpamLocation>, ApiError> {
-    let location = state.store.get_ipam_location(&id).await?
-        .ok_or_else(|| ApiError::not_found("Location"))?;
-    Ok(Json(location))
+) -> Result<Json<IpamCampus>, ApiError> {
+    let campus = state.store.get_ipam_campus(&id).await?
+        .ok_or_else(|| ApiError::not_found("Campus"))?;
+    Ok(Json(campus))
 }
 
-pub async fn create_location(
+pub async fn create_campus(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Json(req): Json<CreateIpamLocationRequest>,
-) -> Result<(StatusCode, Json<IpamLocation>), ApiError> {
+    Json(req): Json<CreateIpamCampusRequest>,
+) -> Result<(StatusCode, Json<IpamCampus>), ApiError> {
     if req.id.is_empty() || req.name.is_empty() || req.region_id.is_empty() {
         return Err(ApiError::bad_request("id, name, and region_id are required"));
     }
-    if state.store.get_ipam_location(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("Location with this ID already exists"));
+    if state.store.get_ipam_campus(&req.id).await?.is_some() {
+        return Err(ApiError::conflict("Campus with this ID already exists"));
     }
     if state.store.get_ipam_region(&req.region_id).await?.is_none() {
         return Err(ApiError::bad_request("Region not found"));
     }
-    let location = state.store.create_ipam_location(&req).await?;
-    Ok(created(location))
+    let campus = state.store.create_ipam_campus(&req).await?;
+    Ok(created(campus))
 }
 
-pub async fn update_location(
+pub async fn update_campus(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-    Json(mut req): Json<CreateIpamLocationRequest>,
-) -> Result<Json<IpamLocation>, ApiError> {
+    Json(mut req): Json<CreateIpamCampusRequest>,
+) -> Result<Json<IpamCampus>, ApiError> {
     req.id = id.clone();
-    let location = state.store.update_ipam_location(&id, &req).await?;
-    Ok(Json(location))
+    let campus = state.store.update_ipam_campus(&id, &req).await?;
+    Ok(Json(campus))
 }
 
-pub async fn delete_location(
+pub async fn delete_campus(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_location(&id).await?;
+    state.store.delete_ipam_campus(&id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -147,14 +147,14 @@ pub async fn create_datacenter(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamDatacenterRequest>,
 ) -> Result<(StatusCode, Json<IpamDatacenter>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() || req.location_id.is_empty() {
-        return Err(ApiError::bad_request("id, name, and location_id are required"));
+    if req.id.is_empty() || req.name.is_empty() || req.campus_id.is_empty() {
+        return Err(ApiError::bad_request("id, name, and campus_id are required"));
     }
     if state.store.get_ipam_datacenter(&req.id).await?.is_some() {
         return Err(ApiError::conflict("Datacenter with this ID already exists"));
     }
-    if state.store.get_ipam_location(&req.location_id).await?.is_none() {
-        return Err(ApiError::bad_request("Location not found"));
+    if state.store.get_ipam_campus(&req.campus_id).await?.is_none() {
+        return Err(ApiError::bad_request("Campus not found"));
     }
     let datacenter = state.store.create_ipam_datacenter(&req).await?;
     Ok(created(datacenter))
@@ -177,6 +177,180 @@ pub async fn delete_datacenter(
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     state.store.delete_ipam_datacenter(&id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ========== Halls ==========
+
+pub async fn list_halls(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<IpamHall>>, ApiError> {
+    let halls = state.store.list_ipam_halls().await?;
+    Ok(Json(halls))
+}
+
+pub async fn get_hall(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<IpamHall>, ApiError> {
+    let hall = state.store.get_ipam_hall(&id).await?
+        .ok_or_else(|| ApiError::not_found("Hall"))?;
+    Ok(Json(hall))
+}
+
+pub async fn create_hall(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CreateIpamHallRequest>,
+) -> Result<(StatusCode, Json<IpamHall>), ApiError> {
+    if req.id.is_empty() || req.name.is_empty() || req.datacenter_id.is_empty() {
+        return Err(ApiError::bad_request("id, name, and datacenter_id are required"));
+    }
+    if state.store.get_ipam_hall(&req.id).await?.is_some() {
+        return Err(ApiError::conflict("Hall with this ID already exists"));
+    }
+    if state.store.get_ipam_datacenter(&req.datacenter_id).await?.is_none() {
+        return Err(ApiError::bad_request("Datacenter not found"));
+    }
+    let hall = state.store.create_ipam_hall(&req).await?;
+    Ok(created(hall))
+}
+
+pub async fn update_hall(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(mut req): Json<CreateIpamHallRequest>,
+) -> Result<Json<IpamHall>, ApiError> {
+    req.id = id.clone();
+    let hall = state.store.update_ipam_hall(&id, &req).await?;
+    Ok(Json(hall))
+}
+
+pub async fn delete_hall(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    state.store.delete_ipam_hall(&id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ========== Rows ==========
+
+pub async fn list_rows(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<IpamRow>>, ApiError> {
+    let rows = state.store.list_ipam_rows().await?;
+    Ok(Json(rows))
+}
+
+pub async fn get_row(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<IpamRow>, ApiError> {
+    let row = state.store.get_ipam_row(&id).await?
+        .ok_or_else(|| ApiError::not_found("Row"))?;
+    Ok(Json(row))
+}
+
+pub async fn create_row(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CreateIpamRowRequest>,
+) -> Result<(StatusCode, Json<IpamRow>), ApiError> {
+    if req.id.is_empty() || req.name.is_empty() || req.hall_id.is_empty() {
+        return Err(ApiError::bad_request("id, name, and hall_id are required"));
+    }
+    if state.store.get_ipam_row(&req.id).await?.is_some() {
+        return Err(ApiError::conflict("Row with this ID already exists"));
+    }
+    if state.store.get_ipam_hall(&req.hall_id).await?.is_none() {
+        return Err(ApiError::bad_request("Hall not found"));
+    }
+    let row = state.store.create_ipam_row(&req).await?;
+    Ok(created(row))
+}
+
+pub async fn update_row(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(mut req): Json<CreateIpamRowRequest>,
+) -> Result<Json<IpamRow>, ApiError> {
+    req.id = id.clone();
+    let row = state.store.update_ipam_row(&id, &req).await?;
+    Ok(Json(row))
+}
+
+pub async fn delete_row(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    state.store.delete_ipam_row(&id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ========== Racks ==========
+
+pub async fn list_racks(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<IpamRack>>, ApiError> {
+    let racks = state.store.list_ipam_racks().await?;
+    Ok(Json(racks))
+}
+
+pub async fn get_rack(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<IpamRack>, ApiError> {
+    let rack = state.store.get_ipam_rack(&id).await?
+        .ok_or_else(|| ApiError::not_found("Rack"))?;
+    Ok(Json(rack))
+}
+
+pub async fn create_rack(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<CreateIpamRackRequest>,
+) -> Result<(StatusCode, Json<IpamRack>), ApiError> {
+    if req.id.is_empty() || req.name.is_empty() || req.row_id.is_empty() {
+        return Err(ApiError::bad_request("id, name, and row_id are required"));
+    }
+    if state.store.get_ipam_rack(&req.id).await?.is_some() {
+        return Err(ApiError::conflict("Rack with this ID already exists"));
+    }
+    if state.store.get_ipam_row(&req.row_id).await?.is_none() {
+        return Err(ApiError::bad_request("Row not found"));
+    }
+    let rack = state.store.create_ipam_rack(&req).await?;
+    Ok(created(rack))
+}
+
+pub async fn update_rack(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(mut req): Json<CreateIpamRackRequest>,
+) -> Result<Json<IpamRack>, ApiError> {
+    req.id = id.clone();
+    let rack = state.store.update_ipam_rack(&id, &req).await?;
+    Ok(Json(rack))
+}
+
+pub async fn delete_rack(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    state.store.delete_ipam_rack(&id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

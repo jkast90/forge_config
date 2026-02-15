@@ -17,6 +17,7 @@ import { SelectField } from './SelectField';
 import { Table } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { PlusIcon, TrashIcon, EditIcon, Icon } from './Icon';
+import { useConfirm } from './ConfirmDialog';
 
 const EMPTY_GROUP_FORM: GroupFormData = {
   id: '',
@@ -27,6 +28,7 @@ const EMPTY_GROUP_FORM: GroupFormData = {
 };
 
 export function GroupManagement() {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showInfo, setShowInfo] = useState(false);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [showGroupForm, setShowGroupForm] = useState(false);
@@ -120,8 +122,8 @@ export function GroupManagement() {
 
   // Device lookup
   const deviceMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    devices.forEach(d => { map[d.id] = d.hostname || d.mac; });
+    const map: Record<number, string> = {};
+    devices.forEach(d => { map[d.id] = d.hostname || d.mac || String(d.id); });
     return map;
   }, [devices]);
 
@@ -196,7 +198,7 @@ export function GroupManagement() {
       addNotification('error', 'Cannot delete the "all" group');
       return;
     }
-    if (!confirm(`Delete group "${id}"? Variables will be lost and child groups will become root-level.`)) return;
+    if (!(await confirm({ title: 'Delete Group', message: `Delete group "${id}"? Variables will be lost and child groups will become root-level.`, confirmText: 'Delete', destructive: true }))) return;
     const success = await deleteGroup(id);
     if (success && selectedGroupId === id) {
       setSelectedGroupId(null);
@@ -229,14 +231,14 @@ export function GroupManagement() {
 
   const handleAddMember = useCallback(async () => {
     if (!selectedGroupId || !selectedDeviceId) return;
-    const success = await addMember(selectedGroupId, selectedDeviceId);
+    const success = await addMember(selectedGroupId, Number(selectedDeviceId));
     if (success) {
       setShowAddMember(false);
       setSelectedDeviceId('');
     }
   }, [selectedGroupId, selectedDeviceId, addMember]);
 
-  const handleRemoveMember = useCallback(async (deviceId: string) => {
+  const handleRemoveMember = useCallback(async (deviceId: number) => {
     if (!selectedGroupId) return;
     await removeMember(selectedGroupId, deviceId);
   }, [selectedGroupId, removeMember]);
@@ -298,9 +300,9 @@ export function GroupManagement() {
   ], [handleStartEditVar, selectedGroupId, deleteGroupVariable]);
 
   // Member table columns
-  interface MemberRow { id: string; hostname: string }
+  interface MemberRow { id: number; hostname: string }
   const memberData: MemberRow[] = useMemo(() =>
-    members.map(id => ({ id, hostname: deviceMap[id] || id })),
+    members.map(id => ({ id, hostname: deviceMap[id] || String(id) })),
     [members, deviceMap]
   );
 
@@ -575,12 +577,14 @@ export function GroupManagement() {
           options={[
             { value: '', label: 'Select a device...' },
             ...availableDevices.map(d => ({
-              value: d.id,
-              label: `${d.hostname || d.mac} (${d.mac})`,
+              value: String(d.id),
+              label: `${d.hostname || d.mac || String(d.id)} (${d.mac || 'no MAC'})`,
             })),
           ]}
         />
       </FormDialog>
+
+      <ConfirmDialogRenderer />
     </LoadingState>
   );
 }

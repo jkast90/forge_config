@@ -117,7 +117,7 @@ pub async fn sync_push(store: &Store, nb: &NetBoxClient, config: &NetBoxConfig) 
                 match nb.create_device(&nb_device).await {
                     Ok(nb_dev) => {
                         // Create management interface with MAC
-                        if let Err(e) = nb.create_interface(nb_dev.id, "Management0", Some(&device.mac)).await {
+                        if let Err(e) = nb.create_interface(nb_dev.id, "Management0", device.mac.as_deref()).await {
                             tracing::warn!("Failed to create interface for {}: {}", device.hostname, e);
                         }
                         created += 1;
@@ -206,7 +206,6 @@ pub async fn sync_pull(store: &Store, nb: &NetBoxClient) -> Result<SyncResult> {
             }
             Ok(None) => {
                 let req = CreateDeviceRequest {
-                    id: None,
                     mac: mac.clone(),
                     ip,
                     hostname: name,
@@ -218,6 +217,11 @@ pub async fn sync_pull(store: &Store, nb: &NetBoxClient) -> Result<SyncResult> {
                     ssh_pass: None,
                     topology_id: None,
                     topology_role: None,
+                    device_type: None,
+                    hall_id: None,
+                    row_id: None,
+                    rack_id: None,
+                    rack_position: None,
                 };
 
                 match store.create_device(&req).await {

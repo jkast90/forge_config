@@ -1,6 +1,19 @@
 import { useMemo } from 'react';
-import { useDevices, useDiscovery, useTemplates, useVendors, formatRelativeTime } from '@core';
-import type { DeviceStatus } from '@core';
+import {
+  useDevices,
+  useDiscovery,
+  useTemplates,
+  useVendors,
+  useGroups,
+  useDeviceModels,
+  useTopologies,
+  useIpam,
+  useJobs,
+  formatRelativeTime,
+  countDevicesByStatus,
+  countRecentBackups,
+  getRecentJobs,
+} from '@core';
 import { Card } from './Card';
 import { Button } from './Button';
 import { Icon } from './Icon';
@@ -38,31 +51,42 @@ function MetricCard({ title, value, icon, color, subtitle, onClick }: MetricCard
   );
 }
 
+interface FeatureLinkProps {
+  icon: string;
+  title: string;
+  description: string;
+  count?: number;
+  onClick?: () => void;
+}
+
+function FeatureLink({ icon, title, description, count, onClick }: FeatureLinkProps) {
+  return (
+    <button className="dashboard-feature-link" onClick={onClick} type="button">
+      <Icon name={icon} size={20} />
+      <div className="feature-link-content">
+        <span className="feature-link-title">{title}</span>
+        <span className="feature-link-desc">{description}</span>
+      </div>
+      {count != null && <span className="feature-link-count">{count}</span>}
+      <Icon name="chevron_right" size={16} />
+    </button>
+  );
+}
+
 export function Dashboard({ onNavigate }: DashboardProps) {
   const { devices } = useDevices({ autoRefresh: true, refreshInterval: 10000 });
   const { discovered, logs, logsLoading } = useDiscovery({ autoRefresh: true, refreshInterval: 10000 });
   const { templates } = useTemplates({ vendorFilter: 'all' });
   const { vendors } = useVendors();
+  const { groups } = useGroups();
+  const { deviceModels } = useDeviceModels();
+  const { topologies } = useTopologies();
+  const { prefixes, ipAddresses, vrfs } = useIpam();
+  const { jobs } = useJobs();
 
-  // Calculate device status counts
-  const statusCounts = useMemo(() => {
-    const counts: Record<DeviceStatus, number> = {
-      online: 0,
-      offline: 0,
-      provisioning: 0,
-      unknown: 0,
-    };
-    devices.forEach((d) => {
-      counts[d.status] = (counts[d.status] || 0) + 1;
-    });
-    return counts;
-  }, [devices]);
-
-  // Calculate devices with recent backups (last 24 hours)
-  const recentBackups = useMemo(() => {
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    return devices.filter((d) => d.last_backup && new Date(d.last_backup).getTime() > oneDayAgo).length;
-  }, [devices]);
+  const statusCounts = useMemo(() => countDevicesByStatus(devices), [devices]);
+  const recentBackups = useMemo(() => countRecentBackups(devices), [devices]);
+  const recentJobs = useMemo(() => getRecentJobs(jobs), [jobs]);
 
   // Get event type icon and color
   const getEventStyle = (eventType: string) => {
@@ -98,21 +122,22 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           icon="radar"
           color="var(--gradient-accent)"
           subtitle="Waiting to be added"
-          onClick={() => onNavigate?.('discovery')}
+          onClick={() => onNavigate?.('devices')}
         />
         <MetricCard
-          title="Templates"
-          value={templates.length}
-          icon="description"
-          color="var(--gradient-purple)"
-          onClick={() => onNavigate?.('templates')}
+          title="Topologies"
+          value={topologies.length}
+          icon="hub"
+          color="linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)"
+          onClick={() => onNavigate?.('topologies')}
         />
         <MetricCard
-          title="Vendors"
-          value={vendors.length}
-          icon="business"
-          color="linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)"
-          onClick={() => onNavigate?.('vendors')}
+          title="IP Prefixes"
+          value={prefixes.length}
+          icon="lan"
+          color="linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)"
+          subtitle={`${ipAddresses.length} addresses`}
+          onClick={() => onNavigate?.('ipam')}
         />
       </div>
 
@@ -175,7 +200,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
         {/* Recent Activity */}
         <Card title="Recent Activity" headerAction={
-          <Button variant="secondary" size="sm" onClick={() => onNavigate?.('discovery')}>
+          <Button variant="secondary" size="sm" onClick={() => onNavigate?.('devices')}>
             View All
           </Button>
         }>
@@ -214,6 +239,74 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         </Card>
       </div>
 
+      {/* Feature Overview */}
+      <div className="dashboard-grid">
+        <Card title="Configuration">
+          <div className="dashboard-feature-links">
+            <FeatureLink
+              icon="description"
+              title="Templates"
+              description="Config templates with Go template syntax"
+              count={templates.length}
+              onClick={() => onNavigate?.('config')}
+            />
+            <FeatureLink
+              icon="account_tree"
+              title="Groups"
+              description="Device groups with variable inheritance"
+              count={groups.length}
+              onClick={() => onNavigate?.('config')}
+            />
+            <FeatureLink
+              icon="business"
+              title="Vendors"
+              description="Equipment manufacturers and MAC prefixes"
+              count={vendors.length}
+              onClick={() => onNavigate?.('vendors-models')}
+            />
+            <FeatureLink
+              icon="memory"
+              title="Device Models"
+              description="Chassis layouts and port definitions"
+              count={deviceModels.length}
+              onClick={() => onNavigate?.('vendors-models')}
+            />
+          </div>
+        </Card>
+
+        <Card title="Infrastructure">
+          <div className="dashboard-feature-links">
+            <FeatureLink
+              icon="hub"
+              title="Topologies"
+              description="CLOS fabric topology management"
+              count={topologies.length}
+              onClick={() => onNavigate?.('topologies')}
+            />
+            <FeatureLink
+              icon="lan"
+              title="IPAM"
+              description={`${prefixes.length} prefixes, ${vrfs.length} VRFs`}
+              count={ipAddresses.length}
+              onClick={() => onNavigate?.('ipam')}
+            />
+            <FeatureLink
+              icon="schedule"
+              title="Jobs"
+              description={`${recentJobs.length} in last 24h`}
+              count={jobs.length}
+              onClick={() => onNavigate?.('jobs')}
+            />
+            <FeatureLink
+              icon="terminal"
+              title="Actions"
+              description="Vendor-specific quick commands"
+              onClick={() => onNavigate?.('jobs')}
+            />
+          </div>
+        </Card>
+      </div>
+
       {/* Quick Actions */}
       <Card title="Quick Actions">
         <div className="quick-actions">
@@ -221,17 +314,25 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             <Icon name="add" size={16} />
             Add Device
           </Button>
-          <Button variant="secondary" onClick={() => onNavigate?.('discovery')}>
+          <Button variant="secondary" onClick={() => onNavigate?.('devices')}>
             <Icon name="search" size={16} />
             Check Discovery
           </Button>
-          <Button variant="secondary" onClick={() => onNavigate?.('templates')}>
+          <Button variant="secondary" onClick={() => onNavigate?.('config')}>
             <Icon name="description" size={16} />
             Manage Templates
           </Button>
-          <Button variant="secondary" onClick={() => onNavigate?.('vendors')}>
+          <Button variant="secondary" onClick={() => onNavigate?.('vendors-models')}>
             <Icon name="business" size={16} />
             Configure Vendors
+          </Button>
+          <Button variant="secondary" onClick={() => onNavigate?.('topologies')}>
+            <Icon name="hub" size={16} />
+            Build Topology
+          </Button>
+          <Button variant="secondary" onClick={() => onNavigate?.('ipam')}>
+            <Icon name="lan" size={16} />
+            Manage IPs
           </Button>
         </div>
       </Card>

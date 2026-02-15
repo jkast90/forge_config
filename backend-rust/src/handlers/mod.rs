@@ -1,10 +1,13 @@
 pub mod auth;
 pub mod benchmarks;
+pub mod credentials;
 pub mod device_models;
+pub mod device_roles;
 pub mod devices;
 pub mod device_variables;
 pub mod groups;
 pub mod ipam;
+pub mod job_templates;
 pub mod jobs;
 pub mod settings;
 pub mod vendors;
@@ -15,7 +18,10 @@ pub mod discovery;
 pub mod configs;
 pub mod docker;
 pub mod netbox;
+pub mod port_assignments;
+pub mod output_parsers;
 pub mod topologies;
+pub mod users;
 
 use axum::{
     http::StatusCode,
@@ -139,6 +145,15 @@ impl MessageResponse {
 /// Response helper: return 201 Created with JSON body
 pub fn created<T: Serialize>(item: T) -> (StatusCode, Json<T>) {
     (StatusCode::CREATED, Json(item))
+}
+
+/// Healthcheck endpoint — returns 200 OK with status
+pub async fn healthcheck() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "status": "ok",
+        "service": "ztp-server",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    }))
 }
 
 /// Helper to trigger config reload with error logging

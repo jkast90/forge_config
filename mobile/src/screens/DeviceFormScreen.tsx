@@ -4,7 +4,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RouteProp } from '@react-navigation/native';
 import { useDevices, useTemplates, useVendors, useSettings, getDefaultTemplateForVendor, setVendorCache } from '../core';
-import type { DeviceFormData } from '../core';
+import type { Device, DeviceFormData, TopologyRole } from '../core';
 import type { RootStackParamList, ScanField } from '../navigation/types';
 import {
   ActionButtons,
@@ -29,6 +29,9 @@ const emptyFormData: DeviceFormData = {
   config_template: '',
   ssh_user: '',
   ssh_pass: '',
+  topology_id: '',
+  topology_role: '',
+  device_type: 'internal',
 };
 
 export function DeviceFormScreen() {
@@ -44,6 +47,7 @@ export function DeviceFormScreen() {
   const { vendors } = useVendors();
   const { settings, load: loadSettings } = useSettings();
   const device = isEditMode ? devices.find((d) => d.mac === mac) : null;
+  const deviceId = device?.id;
 
   // Load settings on mount to get DHCP range for IP prefix
   useEffect(() => {
@@ -74,7 +78,7 @@ export function DeviceFormScreen() {
     // For edit mode, use device data
     if (isEditMode && device) {
       return {
-        mac: device.mac,
+        mac: device.mac || '',
         ip: device.ip,
         hostname: device.hostname,
         vendor: device.vendor || '',
@@ -83,6 +87,9 @@ export function DeviceFormScreen() {
         config_template: device.config_template,
         ssh_user: device.ssh_user || '',
         ssh_pass: device.ssh_pass || '',
+        topology_id: device.topology_id || '',
+        topology_role: device.topology_role || '',
+        device_type: device.device_type || 'internal',
       };
     }
     // For add mode, use params to pre-fill (e.g., from discovery)
@@ -108,13 +115,17 @@ export function DeviceFormScreen() {
 
   const handleFormSubmit = useCallback(
     async (data: DeviceFormData) => {
-      if (isEditMode && mac) {
-        await updateDevice(mac, data);
+      const deviceData: Partial<Device> = {
+        ...data,
+        topology_role: (data.topology_role || undefined) as TopologyRole | undefined,
+      };
+      if (isEditMode && deviceId != null) {
+        await updateDevice(deviceId, deviceData);
       } else {
-        await createDevice(data);
+        await createDevice(deviceData);
       }
     },
-    [isEditMode, mac, updateDevice, createDevice]
+    [isEditMode, deviceId, updateDevice, createDevice]
   );
 
   const {
@@ -137,7 +148,7 @@ export function DeviceFormScreen() {
   useEffect(() => {
     if (isEditMode && device) {
       resetForm({
-        mac: device.mac,
+        mac: device.mac || '',
         ip: device.ip,
         hostname: device.hostname,
         vendor: device.vendor || '',
@@ -146,6 +157,9 @@ export function DeviceFormScreen() {
         config_template: device.config_template,
         ssh_user: device.ssh_user || '',
         ssh_pass: device.ssh_pass || '',
+        topology_id: device.topology_id || '',
+        topology_role: device.topology_role || '',
+        device_type: device.device_type || 'internal',
       });
     }
   }, [device, isEditMode, resetForm]);
@@ -203,7 +217,7 @@ export function DeviceFormScreen() {
         errors={errors}
         onChange={handleChange}
         mac={mac}
-        macEditable={!isEditMode}
+        macEditable
         templates={templates}
         vendors={vendors}
       />

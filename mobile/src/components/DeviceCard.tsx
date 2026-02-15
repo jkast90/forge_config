@@ -31,7 +31,7 @@ export function DeviceCard({ device, onPress, onDelete, onActions }: Props) {
         <StatusBadge status={device.status} />
       </View>
 
-      <InfoRow label="MAC" value={device.mac} monospace />
+      <InfoRow label="MAC" value={device.mac || '—'} monospace />
       <InfoRow label="IP" value={device.ip} />
       {device.serial_number && (
         <InfoRow label="Serial" value={device.serial_number} monospace />

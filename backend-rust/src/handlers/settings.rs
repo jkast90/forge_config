@@ -1,7 +1,11 @@
 use axum::{
+    body::Bytes,
     extract::State,
+    http::{header, StatusCode},
+    response::IntoResponse,
     Json,
 };
+use serde::Serialize;
 use std::sync::Arc;
 
 use crate::models::*;
@@ -50,162 +54,185 @@ pub async fn get_local_addresses(
     Ok(Json(interfaces))
 }
 
+/// Public branding info (no auth required)
+#[derive(Serialize)]
+pub struct BrandingResponse {
+    pub app_name: String,
+    pub logo_url: Option<String>,
+}
+
+pub async fn get_branding(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<BrandingResponse>, ApiError> {
+    let settings = state.store.get_settings().await?;
+    Ok(Json(BrandingResponse {
+        app_name: settings.app_name.unwrap_or_else(|| "ZTP Manager".to_string()),
+        logo_url: settings.logo_url.clone(),
+    }))
+}
+
+/// Upload a custom logo image
+pub async fn upload_logo(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    body: Bytes,
+) -> Result<Json<MessageResponse>, ApiError> {
+    if body.is_empty() {
+        return Err(ApiError::bad_request("No file data received"));
+    }
+
+    // Limit to 2MB
+    if body.len() > 2 * 1024 * 1024 {
+        return Err(ApiError::bad_request("Logo file must be under 2MB"));
+    }
+
+    // Detect image type from magic bytes
+    let ext = if body.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+        "png"
+    } else if body.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        "jpg"
+    } else if body.starts_with(b"GIF") {
+        "gif"
+    } else if body.len() >= 4 && &body[..4] == b"RIFF" && body.len() >= 12 && &body[8..12] == b"WEBP" {
+        "webp"
+    } else if body.starts_with(b"<svg") || body.starts_with(b"<?xml") {
+        "svg"
+    } else {
+        return Err(ApiError::bad_request(
+            "Unsupported image format. Use PNG, JPG, GIF, WebP, or SVG",
+        ));
+    };
+
+    let filename = format!("custom-logo.{}", ext);
+    let path = format!("/data/{}", filename);
+
+    // Remove any old logo files
+    for old_ext in &["png", "jpg", "gif", "webp", "svg"] {
+        let old_path = format!("/data/custom-logo.{}", old_ext);
+        let _ = tokio::fs::remove_file(&old_path).await;
+    }
+
+    tokio::fs::write(&path, &body)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to save logo: {}", e)))?;
+
+    // Update settings with logo URL
+    let mut settings = state.store.get_settings().await?;
+    settings.logo_url = Some(format!("/api/branding/logo?v={}", chrono::Utc::now().timestamp()));
+    state.store.update_settings(&settings).await?;
+
+    Ok(MessageResponse::new("Logo uploaded successfully"))
+}
+
+/// Delete the custom logo
+pub async fn delete_logo(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<MessageResponse>, ApiError> {
+    // Remove any logo files
+    for ext in &["png", "jpg", "gif", "webp", "svg"] {
+        let path = format!("/data/custom-logo.{}", ext);
+        let _ = tokio::fs::remove_file(&path).await;
+    }
+
+    // Clear logo URL from settings
+    let mut settings = state.store.get_settings().await?;
+    settings.logo_url = None;
+    state.store.update_settings(&settings).await?;
+
+    Ok(MessageResponse::new("Logo removed"))
+}
+
+/// Serve the custom logo file
+pub async fn get_logo(
+    State(_state): State<Arc<AppState>>,
+) -> Result<impl IntoResponse, ApiError> {
+    // Try each supported extension
+    for (ext, content_type) in &[
+        ("png", "image/png"),
+        ("jpg", "image/jpeg"),
+        ("gif", "image/gif"),
+        ("webp", "image/webp"),
+        ("svg", "image/svg+xml"),
+    ] {
+        let path = format!("/data/custom-logo.{}", ext);
+        if let Ok(data) = tokio::fs::read(&path).await {
+            return Ok((
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, *content_type),
+                 (header::CACHE_CONTROL, "public, max-age=86400")],
+                data,
+            ));
+        }
+    }
+
+    Err(ApiError::not_found("Logo"))
+}
+
 async fn get_network_interfaces() -> anyhow::Result<Vec<NetworkInterface>> {
-    let mut result = Vec::new();
+    use std::collections::HashMap;
 
-    // Use pnet or similar crate for cross-platform network interface enumeration
-    // For now, we'll use a simple approach that works on Linux/macOS
+    let if_addrs = if_addrs::get_if_addrs()
+        .map_err(|e| anyhow::anyhow!("Failed to enumerate network interfaces: {}", e))?;
 
-    #[cfg(unix)]
-    {
-        use tokio::process::Command;
+    // Group addresses by interface name
+    let mut iface_map: HashMap<String, NetworkInterface> = HashMap::new();
 
-        // Try ip command first (Linux)
-        let output = Command::new("ip")
-            .args(["addr", "show"])
-            .output()
-            .await;
+    for iface in &if_addrs {
+        let entry = iface_map.entry(iface.name.clone()).or_insert_with(|| NetworkInterface {
+            name: iface.name.clone(),
+            addresses: Vec::new(),
+            is_up: true, // if-addrs only returns active interfaces
+            is_loopback: iface.is_loopback(),
+        });
 
-        if let Ok(output) = output {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                result = parse_ip_addr_output(&stdout);
-                if !result.is_empty() {
-                    return Ok(result);
-                }
+        let addr = iface.ip().to_string();
+        if !entry.addresses.contains(&addr) {
+            entry.addresses.push(addr);
+        }
+    }
+
+    // Sort by name for consistent ordering
+    let mut result: Vec<NetworkInterface> = iface_map.into_values()
+        .filter(|iface| !iface.addresses.is_empty())
+        .collect();
+    result.sort_by(|a, b| a.name.cmp(&b.name));
+
+    // If running in Docker, try to resolve host.docker.internal
+    if std::path::Path::new("/.dockerenv").exists() {
+        if let Ok(host_addrs) = tokio::net::lookup_host("host.docker.internal:0").await {
+            let host_ips: Vec<String> = host_addrs
+                .filter_map(|a| {
+                    let ip = a.ip();
+                    if ip.is_loopback() { None } else { Some(ip.to_string()) }
+                })
+                .collect();
+            if !host_ips.is_empty() {
+                result.push(NetworkInterface {
+                    name: "docker-host".to_string(),
+                    addresses: host_ips,
+                    is_up: true,
+                    is_loopback: false,
+                });
             }
         }
+    }
 
-        // Fallback to ifconfig (macOS/BSD)
-        let output = Command::new("ifconfig")
-            .output()
-            .await;
-
-        if let Ok(output) = output {
-            if output.status.success() {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                result = parse_ifconfig_output(&stdout);
-            }
+    // Also check EXTERNAL_IP env var for user-configured addresses
+    if let Ok(external) = std::env::var("EXTERNAL_IP") {
+        let ext_addrs: Vec<String> = external.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !ext_addrs.is_empty() {
+            result.push(NetworkInterface {
+                name: "external".to_string(),
+                addresses: ext_addrs,
+                is_up: true,
+                is_loopback: false,
+            });
         }
     }
 
     Ok(result)
-}
-
-fn parse_ip_addr_output(output: &str) -> Vec<NetworkInterface> {
-    let mut interfaces = Vec::new();
-    let mut current_interface: Option<NetworkInterface> = None;
-
-    for line in output.lines() {
-        // New interface starts with a number
-        if let Some(idx) = line.find(':') {
-            if line.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
-                // Save previous interface
-                if let Some(iface) = current_interface.take() {
-                    if iface.is_up && !iface.addresses.is_empty() {
-                        interfaces.push(iface);
-                    }
-                }
-
-                // Parse new interface name
-                let after_colon = &line[idx + 1..];
-                let name = after_colon
-                    .split_whitespace()
-                    .next()
-                    .unwrap_or("")
-                    .trim_end_matches(':');
-
-                let is_up = line.contains("UP");
-                let is_loopback = line.contains("LOOPBACK");
-
-                current_interface = Some(NetworkInterface {
-                    name: name.to_string(),
-                    addresses: Vec::new(),
-                    is_up,
-                    is_loopback,
-                });
-            }
-        }
-
-        // Parse inet/inet6 addresses
-        let trimmed = line.trim();
-        if let Some(iface) = current_interface.as_mut() {
-            if trimmed.starts_with("inet ") || trimmed.starts_with("inet6 ") {
-                let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    iface.addresses.push(parts[1].to_string());
-                }
-            }
-        }
-    }
-
-    // Don't forget the last interface
-    if let Some(iface) = current_interface {
-        if iface.is_up && !iface.addresses.is_empty() {
-            interfaces.push(iface);
-        }
-    }
-
-    interfaces
-}
-
-fn parse_ifconfig_output(output: &str) -> Vec<NetworkInterface> {
-    let mut interfaces = Vec::new();
-    let mut current_interface: Option<NetworkInterface> = None;
-
-    for line in output.lines() {
-        // New interface starts without whitespace
-        if !line.starts_with('\t') && !line.starts_with(' ') && !line.is_empty() {
-            // Save previous interface
-            if let Some(iface) = current_interface.take() {
-                if iface.is_up && !iface.addresses.is_empty() {
-                    interfaces.push(iface);
-                }
-            }
-
-            // Parse interface name (first word before colon or space)
-            let name = line
-                .split(&[':', ' '][..])
-                .next()
-                .unwrap_or("")
-                .to_string();
-
-            let is_up = line.contains("UP");
-            let is_loopback = line.contains("LOOPBACK");
-
-            current_interface = Some(NetworkInterface {
-                name,
-                addresses: Vec::new(),
-                is_up,
-                is_loopback,
-            });
-        }
-
-        // Parse inet/inet6 addresses
-        let trimmed = line.trim();
-        if let Some(iface) = current_interface.as_mut() {
-            if trimmed.starts_with("inet ") {
-                let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    iface.addresses.push(parts[1].to_string());
-                }
-            } else if trimmed.starts_with("inet6 ") {
-                let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    // Remove scope id if present
-                    let addr = parts[1].split('%').next().unwrap_or(parts[1]);
-                    iface.addresses.push(addr.to_string());
-                }
-            }
-        }
-    }
-
-    // Don't forget the last interface
-    if let Some(iface) = current_interface {
-        if iface.is_up && !iface.addresses.is_empty() {
-            interfaces.push(iface);
-        }
-    }
-
-    interfaces
 }

@@ -4,7 +4,8 @@ import {
   useDiscovery,
   useModalRoute,
   lookupVendorByMac,
-  getDefaultTemplateForVendor,
+  createDeviceFromDiscovery,
+  getDhcpInfoItems,
   formatDate,
   formatExpiry,
   formatEventType,
@@ -22,8 +23,6 @@ import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { VendorBadge } from './VendorBadge';
 import { Icon, PlusIcon, RefreshIcon, SpinnerIcon, TrashIcon, loadingIcon } from './Icon';
-import { TestContainers } from './TestContainers';
-
 interface Props {
   onAddDevice: (device: Partial<DeviceFormData>) => void;
 }
@@ -62,24 +61,7 @@ export function Discovery({ onAddDevice }: Props) {
   const [showInfo, setShowInfo] = useState(false);
 
   const handleAddDevice = (device: DiscoveredDevice) => {
-    // Prefer server-side vendor detection, fall back to client-side MAC lookup
-    const serverVendor = device.vendor;
-    const clientVendor = lookupVendorByMac(device.mac);
-    const vendor = serverVendor || (clientVendor && clientVendor !== 'local' ? clientVendor : '');
-    // Auto-select default template for this vendor
-    const config_template = vendor ? getDefaultTemplateForVendor(vendor) : '';
-
-    onAddDevice({
-      mac: device.mac,
-      ip: device.ip,
-      hostname: device.hostname || '',
-      vendor,
-      model: device.model || '',
-      serial_number: device.serial_number || device.dhcp_client_id || '',
-      config_template,
-      ssh_user: '',
-      ssh_pass: '',
-    });
+    onAddDevice(createDeviceFromDiscovery(device));
   };
 
   // Check if any discovered device has a given DHCP field populated
@@ -88,14 +70,7 @@ export function Discovery({ onAddDevice }: Props) {
 
   // Render DHCP request metadata as compact badges (used in "All Leases" table)
   const renderDhcpInfo = (d: DiscoveredDevice) => {
-    const items: string[] = [];
-    if (d.vendor_class) items.push(`VC: ${d.vendor_class}`);
-    if (d.user_class) items.push(`UC: ${d.user_class}`);
-    if (d.dhcp_client_id) items.push(`CID: ${d.dhcp_client_id}`);
-    if (d.circuit_id) items.push(`Port: ${d.circuit_id}`);
-    if (d.remote_id) items.push(`Switch: ${d.remote_id}`);
-    if (d.relay_address) items.push(`Relay: ${d.relay_address}`);
-    if (d.requested_options) items.push(`Opts: ${d.requested_options}`);
+    const items = getDhcpInfoItems(d);
     if (items.length === 0) return '—';
     return (
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -320,8 +295,6 @@ export function Discovery({ onAddDevice }: Props) {
           )}
         </Card>
       )}
-
-      <TestContainers />
 
       <ConnectModal modal={{ ...connectModal, close: () => { connectModal.close(); modalRoute.closeModal(); } }} />
     </LoadingState>

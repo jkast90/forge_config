@@ -30,8 +30,6 @@ export function TestContainersScreen() {
     containers,
     loading,
     error,
-    message,
-    clearMessage,
     refresh,
     spawn,
     remove,
@@ -50,15 +48,6 @@ export function TestContainersScreen() {
 
   // Get vendor prefix options from shared utility
   const vendorPrefixOptions = useMemo(() => getVendorPrefixOptions(), []);
-
-  // Show messages
-  if (message) {
-    Alert.alert(
-      message.type === 'error' ? 'Error' : 'Success',
-      message.text
-    );
-    clearMessage();
-  }
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);

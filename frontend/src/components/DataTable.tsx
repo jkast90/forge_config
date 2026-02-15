@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { IconButton } from './IconButton';
 import { EditIcon, TrashIcon } from './Icon';
+import { useConfirm } from './ConfirmDialog';
 
 /**
  * Column definition for DataTable
@@ -86,6 +87,8 @@ export function DataTable<T>({
   rowClassName,
   emptyMessage = 'No data available',
 }: DataTableProps<T>) {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
+
   // Build actions array from shortcuts + custom actions
   const allActions: RowAction<T>[] = [];
 
@@ -105,9 +108,9 @@ export function DataTable<T>({
     allActions.push({
       icon: <TrashIcon size={14} />,
       label: 'Delete',
-      onClick: (row) => {
+      onClick: async (row) => {
         if (deleteConfirmMessage) {
-          if (confirm(deleteConfirmMessage(row))) {
+          if (await confirm({ title: 'Confirm Delete', message: deleteConfirmMessage(row), confirmText: 'Delete', destructive: true })) {
             onDelete(row);
           }
         } else {
@@ -131,60 +134,63 @@ export function DataTable<T>({
   }
 
   return (
-    <table>
-      <thead>
-        <tr>
-          {columns.map((col, idx) => (
-            <th key={idx} style={col.width ? { width: col.width } : undefined}>
-              {col.header}
-            </th>
-          ))}
-          {hasActions && <th>Actions</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {data.map((row) => {
-          const key = getRowKey(row);
-          const className = rowClassName?.(row);
+    <>
+      <table>
+        <thead>
+          <tr>
+            {columns.map((col, idx) => (
+              <th key={idx} style={col.width ? { width: col.width } : undefined}>
+                {col.header}
+              </th>
+            ))}
+            {hasActions && <th>Actions</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row) => {
+            const key = getRowKey(row);
+            const className = rowClassName?.(row);
 
-          return (
-            <tr key={key} className={className}>
-              {columns.map((col, idx) => {
-                const content = typeof col.accessor === 'function'
-                  ? col.accessor(row)
-                  : row[col.accessor as keyof T] as ReactNode;
+            return (
+              <tr key={key} className={className}>
+                {columns.map((col, idx) => {
+                  const content = typeof col.accessor === 'function'
+                    ? col.accessor(row)
+                    : row[col.accessor as keyof T] as ReactNode;
 
-                return (
-                  <td key={idx} className={col.className}>
-                    {content}
+                  return (
+                    <td key={idx} className={col.className}>
+                      {content}
+                    </td>
+                  );
+                })}
+                {hasActions && (
+                  <td>
+                    <div className="actions">
+                      {allActions.map((action, idx) => {
+                        const isDisabled = action.disabled?.(row) ?? false;
+                        return (
+                          <IconButton
+                            key={idx}
+                            variant={action.variant || 'secondary'}
+                            onClick={() => action.onClick(row)}
+                            disabled={isDisabled}
+                            title={action.tooltip || action.label}
+                          >
+                            {action.icon}
+                          </IconButton>
+                        );
+                      })}
+                    </div>
                   </td>
-                );
-              })}
-              {hasActions && (
-                <td>
-                  <div className="actions">
-                    {allActions.map((action, idx) => {
-                      const isDisabled = action.disabled?.(row) ?? false;
-                      return (
-                        <IconButton
-                          key={idx}
-                          variant={action.variant || 'secondary'}
-                          onClick={() => action.onClick(row)}
-                          disabled={isDisabled}
-                          title={action.tooltip || action.label}
-                        >
-                          {action.icon}
-                        </IconButton>
-                      );
-                    })}
-                  </div>
-                </td>
-              )}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <ConfirmDialogRenderer />
+    </>
   );
 }
 

@@ -68,7 +68,7 @@ export function DevicesScreen() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => deleteDevice(device.mac),
+          onPress: () => deleteDevice(device.id),
         },
       ]
     );
@@ -77,7 +77,7 @@ export function DevicesScreen() {
   const renderDevice = ({ item }: { item: Device }) => (
     <DeviceCard
       device={item}
-      onPress={() => navigation.navigate('DeviceForm', { mac: item.mac, editMode: true })}
+      onPress={() => navigation.navigate('DeviceForm', { mac: item.mac ?? undefined, editMode: true })}
       onDelete={() => handleDelete(item)}
     />
   );
@@ -106,7 +106,7 @@ export function DevicesScreen() {
     <View style={styles.container}>
       <FlatList
         data={devices}
-        keyExtractor={(item) => item.mac}
+        keyExtractor={(item) => item.mac || String(item.id)}
         renderItem={renderDevice}
         refreshControl={
           <RefreshControl

@@ -20,6 +20,8 @@ export interface FormDialogProps {
   cancelText?: string;
   /** Whether form is currently submitting */
   saving?: boolean;
+  /** Disable the submit button (e.g. validation) */
+  submitDisabled?: boolean;
   /** Dialog variant */
   variant?: 'default' | 'wide' | 'extra-wide';
 }
@@ -44,6 +46,7 @@ export function FormDialog({
   submitText = 'Save',
   cancelText = 'Cancel',
   saving = false,
+  submitDisabled = false,
   variant,
 }: FormDialogProps) {
   const footer = (
@@ -51,7 +54,7 @@ export function FormDialog({
       <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
         {cancelText}
       </Button>
-      <Button type="submit" disabled={saving}>
+      <Button type="submit" disabled={saving || submitDisabled}>
         {saving ? 'Saving...' : submitText}
       </Button>
     </DialogActions>

@@ -17,14 +17,16 @@ import { Toggle } from './Toggle';
 import { Table } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { PlusIcon, TrashIcon, EditIcon, Icon } from './Icon';
+import { useConfirm } from './ConfirmDialog';
 
 export function VariableManager() {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showInfo, setShowInfo] = useState(false);
   const [showAddKey, setShowAddKey] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyDefault, setNewKeyDefault] = useState('');
   const [addToAll, setAddToAll] = useState(true);
-  const [editingCell, setEditingCell] = useState<{ device_id: string; key: string } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ device_id: number; key: string } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [showBulkSet, setShowBulkSet] = useState(false);
   const [bulkValue, setBulkValue] = useState('');
@@ -48,9 +50,9 @@ export function VariableManager() {
 
   // Build an id -> hostname lookup
   const deviceMap = useMemo(() => {
-    const map: Record<string, string> = {};
+    const map: Record<number, string> = {};
     devices.forEach(d => {
-      map[d.id] = d.hostname || d.mac;
+      map[d.id] = d.hostname || d.mac || String(d.id);
     });
     return map;
   }, [devices]);
@@ -102,7 +104,7 @@ export function VariableManager() {
   }, [selectedKey, bulkValue, devices, bulkSet]);
 
   const handleDeleteKey = useCallback(async (key: string) => {
-    if (!confirm(`Delete key "${key}" from all devices?`)) return;
+    if (!(await confirm({ title: 'Delete Variable', message: `Delete key "${key}" from all devices?`, confirmText: 'Delete', destructive: true }))) return;
     await deleteKey(key);
   }, [deleteKey]);
 
@@ -110,7 +112,7 @@ export function VariableManager() {
   const valueColumns: TableColumn<DeviceVariable>[] = useMemo(() => [
     {
       header: 'Device',
-      accessor: (row: DeviceVariable) => deviceMap[row.device_id] || row.device_id,
+      accessor: (row: DeviceVariable) => deviceMap[row.device_id] || String(row.device_id),
       searchValue: (row: DeviceVariable) => `${deviceMap[row.device_id] || ''} ${row.device_id}`,
     },
     {

@@ -53,6 +53,9 @@ tera = "1"
 # Process management
 nix = { version = "0.28", features = ["signal", "process"] }
 
+# Network interface enumeration
+if-addrs = "0.13"
+
 # Regex for template conversion
 regex-lite = "0.1"
 
@@ -70,6 +73,9 @@ jsonwebtoken = "9"
 
 # Password hashing
 bcrypt = "0.15"
+
+# Cron expression parsing (for job template scheduling)
+croner = "2"
 
 [dev-dependencies]
 tokio-test = "0.4"

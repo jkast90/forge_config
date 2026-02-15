@@ -110,3 +110,40 @@ export function getStatusLabel(status: DeviceStatus): string {
       return 'Unknown';
   }
 }
+
+/**
+ * Badge variant type for semantic labels
+ */
+export type BadgeVariant = 'success' | 'error' | 'warning' | 'info' | 'default';
+
+/** Map job type to badge variant */
+export function getJobTypeBadgeVariant(jobType: string): BadgeVariant {
+  switch (jobType) {
+    case 'deploy':
+    case 'apply_template':
+      return 'info';
+    case 'webhook':
+      return 'warning';
+    default:
+      return 'default';
+  }
+}
+
+/** Map credential type to badge variant */
+export function getCredTypeBadgeVariant(credType: string): BadgeVariant {
+  return credType === 'ssh' ? 'info' : 'warning';
+}
+
+/** Map HTTP method to badge variant */
+export function getHttpMethodBadgeVariant(method: string): BadgeVariant {
+  switch (method) {
+    case 'GET': return 'info';
+    case 'DELETE': return 'error';
+    default: return 'warning';
+  }
+}
+
+/** Map action type to badge variant */
+export function getActionTypeBadgeVariant(actionType: string): BadgeVariant {
+  return actionType === 'webhook' ? 'info' : 'default';
+}

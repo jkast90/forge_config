@@ -49,6 +49,7 @@ const DEFAULT_VENDORS: Omit<Vendor, 'created_at' | 'updated_at'>[] = getVendorSe
     id: v.value,
     name: v.label,
     backup_command: getDefaultBackupCommand(v.value),
+    deploy_command: '',
     ssh_port: 22,
     mac_prefixes: [],
   }));
@@ -93,7 +94,10 @@ export function VendorsScreen() {
       id: vendor.id,
       name: vendor.name,
       backup_command: vendor.backup_command,
+      deploy_command: vendor.deploy_command || '',
       ssh_port: vendor.ssh_port,
+      ssh_user: vendor.ssh_user || '',
+      ssh_pass: vendor.ssh_pass || '',
       mac_prefixes: vendor.mac_prefixes || [],
       vendor_class: vendor.vendor_class || '',
       default_template: vendor.default_template || '',

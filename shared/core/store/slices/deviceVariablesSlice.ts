@@ -29,7 +29,7 @@ export const fetchByKey = createAsyncThunk('deviceVariables/fetchByKey', async (
 
 export const bulkSetVariables = createAsyncThunk(
   'deviceVariables/bulkSet',
-  async (entries: { device_id: string; key: string; value: string }[]) => {
+  async (entries: { device_id: number; key: string; value: string }[]) => {
     await getServices().deviceVariables.bulkSet(entries);
     return entries;
   }

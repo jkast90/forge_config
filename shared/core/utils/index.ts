@@ -67,6 +67,38 @@ export {
   getVariableTypeColor,
   getStatusIcon,
   getStatusLabel,
+  getJobTypeBadgeVariant,
+  getCredTypeBadgeVariant,
+  getHttpMethodBadgeVariant,
+  getActionTypeBadgeVariant,
+  type BadgeVariant,
   type VariableTypeIcon,
   type StatusIcon,
 } from './styles';
+
+export {
+  countDevicesByStatus,
+  countRecentBackups,
+  getRecentJobs,
+} from './device-stats';
+
+export {
+  resolveVendor,
+  createDeviceFromDiscovery,
+  autoDetectVendorFromMac,
+  autoSelectTemplateForVendor,
+  getDhcpInfoItems,
+  getDhcpDetailFields,
+} from './device-creation';
+
+export {
+  isPatchPanel,
+  buildPortAssignmentMap,
+  buildDeviceOptions,
+  buildPortOptionsFromModel,
+  buildPatchPanelOptions,
+  findDeviceModel,
+  countModelPorts,
+  countAssignedPorts,
+  type SelectOption,
+} from './port-management';

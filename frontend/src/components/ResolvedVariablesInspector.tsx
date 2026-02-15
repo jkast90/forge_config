@@ -53,14 +53,14 @@ export function ResolvedVariablesInspector() {
   const deviceOptions = useMemo(() => [
     { value: '', label: 'Select a device...' },
     ...devices.map(d => ({
-      value: d.id,
-      label: `${d.hostname || d.mac} (${d.mac})`,
+      value: String(d.id),
+      label: `${d.hostname || d.mac || String(d.id)} (${d.mac || 'no MAC'})`,
     })),
   ], [devices]);
 
   const handleSelectDevice = useCallback((deviceId: string) => {
     setSelectedDeviceId(deviceId);
-    if (deviceId) fetch(deviceId);
+    if (deviceId) fetch(Number(deviceId));
   }, [fetch]);
 
   // Resolved variables table

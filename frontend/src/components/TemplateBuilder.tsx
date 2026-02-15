@@ -19,9 +19,7 @@ import { Card } from './Card';
 import { DialogActions } from './DialogActions';
 import { InfoSection } from './InfoSection';
 import { Modal } from './Modal';
-import { DropdownSelect } from './DropdownSelect';
 import { FormField } from './FormField';
-
 import { SelectField } from './SelectField';
 import { Table, SimpleTable, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
@@ -31,8 +29,10 @@ import { LoadingState } from './LoadingState';
 import { PlusIcon, Icon } from './Icon';
 import { Templatizer } from './Templatizer';
 import { ConfigViewer } from './ConfigViewer';
+import { useConfirm } from './ConfirmDialog';
 
 export function TemplateBuilder() {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showInfo, setShowInfo] = useState(false);
   const [showVarsInfo, setShowVarsInfo] = useState(false);
   const [filterVendor, setFilterVendor] = useState('');
@@ -117,19 +117,19 @@ export function TemplateBuilder() {
   const { devices } = useDevices();
 
   // Get vendor options from shared utility
-  const filterVendorOptions = useMemo(() => getVendorFilterOptions(), []);
+  const filterVendorOptions = useMemo(() => getVendorFilterOptions().map(o => ({ value: o.id, label: o.label })), []);
   const vendorSelectOptions = useMemo(() => getVendorSelectOptions(), []);
 
   // Build device options for preview selection
   const deviceOptions = useMemo(() => [
     { value: '', label: 'Sample Device' },
-    ...devices.map((d) => ({ value: d.id, label: `${d.hostname} (${d.ip})` })),
+    ...devices.map((d) => ({ value: String(d.id), label: `${d.hostname} (${d.ip})` })),
   ], [devices]);
 
   // Get selected device for preview
   const previewDevice = useMemo(() => {
     if (!previewDeviceMAC) return null;
-    return devices.find((d) => d.id === previewDeviceMAC) || null;
+    return devices.find((d) => d.id === Number(previewDeviceMAC)) || null;
   }, [devices, previewDeviceMAC]);
 
   // Filter templates by vendor (client-side for immediate UI response)
@@ -145,7 +145,7 @@ export function TemplateBuilder() {
 
   const handleDelete = async (id: string) => {
     const template = templates.find((t) => t.id === id);
-    if (template && confirm(`Delete template "${template.name}"?`)) {
+    if (template && await confirm({ title: 'Delete Template', message: `Delete template "${template.name}"?`, confirmText: 'Delete', destructive: true })) {
       await deleteTemplate(id);
     }
   };
@@ -296,10 +296,11 @@ export function TemplateBuilder() {
             Templatize Config
           </Button>
         </Tooltip>
-        <DropdownSelect
+        <SelectField
+          name="filter-vendor"
           options={filterVendorOptions}
           value={filterVendor}
-          onChange={setFilterVendor}
+          onChange={(e) => setFilterVendor(e.target.value)}
           placeholder="Filter: All Vendors"
           icon="filter_list"
           className="filter-dropdown"
@@ -461,25 +462,20 @@ end`}
         title="Template Preview"
         variant="extra-wide"
       >
-        <div className="form-group mb-16">
-          <label htmlFor="previewDevice">Device</label>
-          <div className="flex-row">
-            <select
-              id="previewDevice"
+        <div className="flex-row mb-16" style={{ alignItems: 'flex-end', gap: '12px' }}>
+          <div style={{ flex: 1 }}>
+            <SelectField
+              label="Device"
               name="previewDevice"
               value={previewDeviceMAC}
               onChange={(e) => setPreviewDeviceMAC(e.target.value)}
-              style={{ flex: 1 }}
-            >
-              {deviceOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <Button onClick={handleGeneratePreview} disabled={previewLoading}>
-              <Icon name={previewLoading ? 'hourglass_empty' : 'visibility'} size={14} />
-              {previewLoading ? 'Generating...' : 'Generate'}
-            </Button>
+              options={deviceOptions}
+            />
           </div>
+          <Button onClick={handleGeneratePreview} disabled={previewLoading} style={{ marginBottom: '20px' }}>
+            <Icon name={previewLoading ? 'hourglass_empty' : 'visibility'} size={14} />
+            {previewLoading ? 'Generating...' : 'Generate'}
+          </Button>
         </div>
 
         {previewDevice ? (
@@ -538,6 +534,8 @@ end`}
           onCancel={() => { setShowTemplatizer(false); modalRoute.closeModal(); }}
         />
       </Modal>
+
+      <ConfirmDialogRenderer />
     </LoadingState>
   );
 }

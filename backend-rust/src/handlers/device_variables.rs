@@ -13,9 +13,9 @@ use super::ApiError;
 pub async fn list_device_variables(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Vec<crate::models::DeviceVariable>>, ApiError> {
-    let vars = state.store.list_device_variables(&id).await?;
+    let vars = state.store.list_device_variables(id).await?;
     Ok(Json(vars))
 }
 
@@ -28,16 +28,16 @@ pub struct SetVariablesRequest {
 pub async fn set_device_variables(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<SetVariablesRequest>,
 ) -> Result<Json<Vec<crate::models::DeviceVariable>>, ApiError> {
     // Delete existing, then insert new
-    state.store.delete_all_device_variables(&id).await?;
+    state.store.delete_all_device_variables(id).await?;
     for (key, value) in &req.variables {
-        state.store.set_device_variable(&id, key, value).await?;
+        state.store.set_device_variable(id, key, value).await?;
     }
 
-    let vars = state.store.list_device_variables(&id).await?;
+    let vars = state.store.list_device_variables(id).await?;
     Ok(Json(vars))
 }
 
@@ -50,10 +50,10 @@ pub struct SetVariableRequest {
 pub async fn set_device_variable(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path((id, key)): Path<(String, String)>,
+    Path((id, key)): Path<(i64, String)>,
     Json(req): Json<SetVariableRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.set_device_variable(&id, &key, &req.value).await?;
+    state.store.set_device_variable(id, &key, &req.value).await?;
     Ok(Json(serde_json::json!({"message": "variable set"})))
 }
 
@@ -61,9 +61,9 @@ pub async fn set_device_variable(
 pub async fn delete_device_variable(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path((id, key)): Path<(String, String)>,
+    Path((id, key)): Path<(i64, String)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.delete_device_variable(&id, &key).await?;
+    state.store.delete_device_variable(id, &key).await?;
     Ok(Json(serde_json::json!({"message": "variable deleted"})))
 }
 
@@ -98,7 +98,7 @@ pub async fn list_by_key(
 
 #[derive(Deserialize)]
 pub struct BulkSetEntry {
-    pub device_id: String,
+    pub device_id: i64,
     pub key: String,
     pub value: String,
 }
@@ -114,7 +114,7 @@ pub async fn bulk_set_variables(
     State(state): State<Arc<AppState>>,
     Json(req): Json<BulkSetRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let entries: Vec<(String, String, String)> = req
+    let entries: Vec<(i64, String, String)> = req
         .entries
         .into_iter()
         .map(|e| (e.device_id, e.key, e.value))

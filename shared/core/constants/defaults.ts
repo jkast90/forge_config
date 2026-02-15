@@ -119,6 +119,12 @@ export const EMPTY_VENDOR_ACTION_FORM = {
   label: '',
   command: '',
   sort_order: 0,
+  action_type: 'ssh' as const,
+  webhook_url: '',
+  webhook_method: 'POST' as const,
+  webhook_headers: '{}',
+  webhook_body: '',
+  output_parser_id: '',
 };
 
 export const EMPTY_DHCP_OPTION_FORM = {
@@ -144,6 +150,9 @@ export const EMPTY_TOPOLOGY_FORM = {
   id: '',
   name: '',
   description: '',
+  region_id: '',
+  campus_id: '',
+  datacenter_id: '',
 };
 
 export const TOPOLOGY_ROLE_OPTIONS = [

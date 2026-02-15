@@ -1,5 +1,6 @@
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     Json,
 };
 use std::sync::Arc;
@@ -109,8 +110,15 @@ pub async fn create_vendor_action(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateVendorActionRequest>,
 ) -> Result<(axum::http::StatusCode, Json<VendorAction>), ApiError> {
-    if req.id.is_empty() || req.vendor_id.is_empty() || req.label.is_empty() || req.command.is_empty() {
-        return Err(ApiError::bad_request("id, vendor_id, label, and command are required"));
+    if req.id.is_empty() || req.vendor_id.is_empty() || req.label.is_empty() {
+        return Err(ApiError::bad_request("id, vendor_id, and label are required"));
+    }
+    if req.action_type == "webhook" {
+        if req.webhook_url.is_empty() {
+            return Err(ApiError::bad_request("webhook_url is required for webhook actions"));
+        }
+    } else if req.command.is_empty() {
+        return Err(ApiError::bad_request("command is required for SSH actions"));
     }
     let action = state.store.create_vendor_action(&req).await?;
     Ok(created(action))
@@ -133,7 +141,43 @@ pub async fn delete_vendor_action(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
-) -> Result<axum::http::StatusCode, ApiError> {
+) -> Result<StatusCode, ApiError> {
     state.store.delete_vendor_action(&id).await?;
-    Ok(axum::http::StatusCode::NO_CONTENT)
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Run a webhook action without a specific device target
+pub async fn run_vendor_action(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<(StatusCode, Json<Job>), ApiError> {
+    let action = state.store.get_vendor_action(&id).await
+        .map_err(|e| ApiError::internal(e.to_string()))?
+        .ok_or_else(|| ApiError::not_found("vendor action"))?;
+
+    if action.action_type != "webhook" {
+        return Err(ApiError::bad_request("only webhook actions can run without a device"));
+    }
+
+    let job_id = uuid::Uuid::new_v4().to_string();
+    let req = CreateJobRequest {
+        device_id: 0,
+        job_type: job_type::WEBHOOK.to_string(),
+        command: action.id.clone(),
+        credential_id: String::new(),
+    };
+
+    let job = state.store.create_job(&job_id, &req).await
+        .map_err(|e| ApiError::internal(e.to_string()))?;
+
+    if let Some(ref hub) = state.ws_hub {
+        hub.broadcast_job_update(crate::ws::EventType::JobQueued, &job).await;
+    }
+
+    if let Some(ref job_service) = state.job_service {
+        job_service.submit(job_id).await;
+    }
+
+    Ok((StatusCode::ACCEPTED, Json(job)))
 }

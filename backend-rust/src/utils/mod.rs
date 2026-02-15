@@ -18,24 +18,26 @@ impl ssh2::KeyboardInteractivePrompt for PasswordPrompt {
     }
 }
 
-/// Resolve SSH credentials for a device using the fallback chain:
-/// device -> vendor -> global settings
+/// Resolve SSH credentials using the fallback chain:
+/// explicit user/pass -> vendor defaults -> global settings
 pub async fn resolve_ssh_credentials(
     store: &crate::db::Store,
-    device: &crate::models::Device,
+    ssh_user: Option<String>,
+    ssh_pass: Option<String>,
+    vendor_id: Option<&str>,
 ) -> (String, String) {
     let settings = store.get_settings().await.unwrap_or_default();
-    let vendor = match device.vendor.as_deref() {
+    let vendor = match vendor_id {
         Some(v) if !v.is_empty() => store.get_vendor(v).await.ok().flatten(),
         _ => None,
     };
-    let ssh_user = device.ssh_user.clone().filter(|s| !s.is_empty())
+    let user = ssh_user.filter(|s| !s.is_empty())
         .or_else(|| vendor.as_ref().and_then(|v| v.ssh_user.clone()))
         .unwrap_or(settings.default_ssh_user);
-    let ssh_pass = device.ssh_pass.clone().filter(|s| !s.is_empty())
+    let pass = ssh_pass.filter(|s| !s.is_empty())
         .or_else(|| vendor.as_ref().and_then(|v| v.ssh_pass.clone()))
         .unwrap_or(settings.default_ssh_pass);
-    (ssh_user, ssh_pass)
+    (user, pass)
 }
 
 /// Normalize MAC address to lowercase with colons

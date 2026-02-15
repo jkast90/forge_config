@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import type { Device } from '@core';
-import { useForm, useTemplates, useVendors, useTopologies, validateDeviceForm, lookupVendorByMac, getDefaultTemplateForVendor, TOPOLOGY_ROLE_OPTIONS } from '@core';
+import { useForm, useTemplates, useVendors, useTopologies, validateDeviceForm, autoDetectVendorFromMac, autoSelectTemplateForVendor, TOPOLOGY_ROLE_OPTIONS } from '@core';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { SelectField } from './SelectField';
@@ -27,6 +27,7 @@ type DeviceFormData = {
   ssh_pass: string;
   topology_id: string;
   topology_role: string;
+  device_type: string;
 };
 
 const emptyFormData: DeviceFormData = {
@@ -41,6 +42,7 @@ const emptyFormData: DeviceFormData = {
   ssh_pass: '',
   topology_id: '',
   topology_role: '',
+  device_type: 'internal',
 };
 
 export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: Props) {
@@ -98,7 +100,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
     if (isOpen) {
       if (device) {
         resetForm({
-          mac: device.mac,
+          mac: device.mac || '',
           ip: device.ip,
           hostname: device.hostname,
           vendor: device.vendor || '',
@@ -109,6 +111,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
           ssh_pass: device.ssh_pass || '',
           topology_id: device.topology_id || '',
           topology_role: device.topology_role || '',
+          device_type: device.device_type || 'internal',
         });
       } else if (initialData) {
         // Pre-fill with initial data from discovery
@@ -130,16 +133,11 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
   // Auto-select vendor and template when MAC changes
   const handleMacChange = useCallback((mac: string) => {
     handleChange('mac', mac);
-    // Only auto-select if vendor is empty and MAC looks complete (17 chars with separators)
-    if (!formData.vendor && mac.replace(/[^a-fA-F0-9]/g, '').length >= 6) {
-      const detectedVendor = lookupVendorByMac(mac);
-      if (detectedVendor && detectedVendor !== 'Local') {
-        handleChange('vendor', detectedVendor);
-        // Also auto-select default template for this vendor
-        if (!formData.config_template) {
-          const defaultTemplate = getDefaultTemplateForVendor(detectedVendor);
-          handleChange('config_template', defaultTemplate);
-        }
+    const detected = autoDetectVendorFromMac(mac, formData.vendor, formData.config_template);
+    if (detected) {
+      handleChange('vendor', detected.vendor);
+      if (detected.config_template) {
+        handleChange('config_template', detected.config_template);
       }
     }
   }, [formData.vendor, formData.config_template, handleChange]);
@@ -147,10 +145,9 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
   // Auto-select template when vendor changes
   const handleVendorChange = useCallback((vendor: string) => {
     handleChange('vendor', vendor);
-    // Auto-select default template for this vendor if template is empty
-    if (vendor && !formData.config_template) {
-      const defaultTemplate = getDefaultTemplateForVendor(vendor);
-      handleChange('config_template', defaultTemplate);
+    const template = autoSelectTemplateForVendor(vendor, formData.config_template);
+    if (template) {
+      handleChange('config_template', template);
     }
   }, [formData.config_template, handleChange]);
 
@@ -228,6 +225,17 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
         </div>
 
         <div className="form-column">
+          <SelectField
+            label="Device Type"
+            name="device_type"
+            value={formData.device_type}
+            onChange={onInputChange}
+            options={[
+              { value: 'internal', label: 'Internal (managed)' },
+              { value: 'external', label: 'External (unmanaged)' },
+              { value: 'host', label: 'Host (server/endpoint)' },
+            ]}
+          />
           <FormField
             label="Model"
             name="model"

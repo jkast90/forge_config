@@ -18,7 +18,7 @@ pub struct DeviceVariableRepo;
 
 impl DeviceVariableRepo {
     /// List all variables for a device
-    pub async fn list_by_device(pool: &Pool<Sqlite>, device_id: &str) -> Result<Vec<DeviceVariable>> {
+    pub async fn list_by_device(pool: &Pool<Sqlite>, device_id: i64) -> Result<Vec<DeviceVariable>> {
         let rows = sqlx::query(
             "SELECT id, device_id, key, value, created_at, updated_at FROM device_variables WHERE device_id = ? ORDER BY key",
         )
@@ -42,7 +42,7 @@ impl DeviceVariableRepo {
     }
 
     /// Get a single variable
-    pub async fn get(pool: &Pool<Sqlite>, device_id: &str, key: &str) -> Result<Option<DeviceVariable>> {
+    pub async fn get(pool: &Pool<Sqlite>, device_id: i64, key: &str) -> Result<Option<DeviceVariable>> {
         let row = sqlx::query(
             "SELECT id, device_id, key, value, created_at, updated_at FROM device_variables WHERE device_id = ? AND key = ?",
         )
@@ -55,7 +55,7 @@ impl DeviceVariableRepo {
     }
 
     /// Upsert a single variable
-    pub async fn set(pool: &Pool<Sqlite>, device_id: &str, key: &str, value: &str) -> Result<()> {
+    pub async fn set(pool: &Pool<Sqlite>, device_id: i64, key: &str, value: &str) -> Result<()> {
         let now = chrono::Utc::now();
         sqlx::query(
             r#"
@@ -76,7 +76,7 @@ impl DeviceVariableRepo {
     }
 
     /// Delete a single variable
-    pub async fn delete(pool: &Pool<Sqlite>, device_id: &str, key: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, device_id: i64, key: &str) -> Result<()> {
         sqlx::query("DELETE FROM device_variables WHERE device_id = ? AND key = ?")
             .bind(device_id)
             .bind(key)
@@ -86,7 +86,7 @@ impl DeviceVariableRepo {
     }
 
     /// Delete all variables for a device
-    pub async fn delete_all_for_device(pool: &Pool<Sqlite>, device_id: &str) -> Result<()> {
+    pub async fn delete_all_for_device(pool: &Pool<Sqlite>, device_id: i64) -> Result<()> {
         sqlx::query("DELETE FROM device_variables WHERE device_id = ?")
             .bind(device_id)
             .execute(pool)
@@ -106,7 +106,7 @@ impl DeviceVariableRepo {
     }
 
     /// Bulk upsert variables
-    pub async fn bulk_set(pool: &Pool<Sqlite>, entries: &[(String, String, String)]) -> Result<()> {
+    pub async fn bulk_set(pool: &Pool<Sqlite>, entries: &[(i64, String, String)]) -> Result<()> {
         let now = chrono::Utc::now();
         for (device_id, key, value) in entries {
             sqlx::query(
