@@ -2,15 +2,15 @@
 # backend-rust/BUILD.bazel
 #
 # Targets:
-#   bazel build //backend-rust:ztp-server        Build the binary
-#   bazel test  //backend-rust:ztp-server_test   Run unit tests
-#   bazel build //backend-rust:image             Build OCI image
-#   bazel build //backend-rust:image_tarball     Export for docker load
-#   bazel run   //backend-rust:image_push        Push to registry
+#   bazel build //backend-rust:forge-config        Build the binary
+#   bazel test  //backend-rust:forge-config_test   Run unit tests
+#   bazel build //backend-rust:image               Build OCI image
+#   bazel run   //backend-rust:image_load          Load into docker
+#   bazel run   //backend-rust:image_push          Push to registry
 # =============================================================
 
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_tarball")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@crates//:defs.bzl", "all_crate_deps")
 
@@ -33,7 +33,7 @@ filegroup(
 # ---- Main Binary ----
 
 rust_binary(
-    name = "ztp-server",
+    name = "forge-config",
     srcs = glob(["src/**/*.rs"]),
     edition = "2021",
     deps = all_crate_deps(normal = True),
@@ -50,8 +50,8 @@ rust_binary(
 # ---- Tests ----
 
 rust_test(
-    name = "ztp-server_test",
-    crate = ":ztp-server",
+    name = "forge-config_test",
+    crate = ":forge-config",
     deps = all_crate_deps(
         normal = True,
         normal_dev = True,
@@ -84,7 +84,7 @@ rust_test(
 # Layer: compiled binary
 pkg_tar(
     name = "binary_layer",
-    srcs = [":ztp-server"],
+    srcs = [":forge-config"],
     package_dir = "/app",
 )
 
@@ -136,7 +136,7 @@ pkg_tar(
 # 3. Keep using the Dockerfile for the base and layer the binary on top
 #
 # For now this builds a functional image minus the system packages.
-# The recommended production path is option 1: maintain a "ztp-base"
+# The recommended production path is option 1: maintain a base
 # image in your registry with the runtime deps baked in.
 
 oci_image(
@@ -149,14 +149,14 @@ oci_image(
         ":dirs_layer",
         ":frontend_layer",
     ],
-    entrypoint = ["/app/ztp-server"],
+    entrypoint = ["/app/forge-config"],
     exposed_ports = [
         "8080/tcp",
         "67/udp",
         "69/udp",
     ],
     env = {
-        "DB_PATH": "/data/ztp.db",
+        "DB_PATH": "/data/forge-config.db",
         "DNSMASQ_CONFIG": "/dnsmasq/dnsmasq.conf",
         "TFTP_DIR": "/tftp",
         "TEMPLATES_DIR": "/configs/templates",
@@ -169,17 +169,17 @@ oci_image(
         "RUST_LOG": "info",
     },
     labels = {
-        "org.opencontainers.image.source": "https://github.com/your-org/ztp-app",
-        "org.opencontainers.image.description": "ZTP Server",
+        "org.opencontainers.image.source": "https://github.com/your-org/forge-config",
+        "org.opencontainers.image.description": "ForgeConfig Server",
     },
     visibility = ["//visibility:public"],
 )
 
-# Export as a tarball for `docker load`
-oci_tarball(
-    name = "image_tarball",
+# Load into Docker daemon
+oci_load(
+    name = "image_load",
     image = ":image",
-    repo_tags = ["ztp-app-backend-rust:latest"],
+    repo_tags = ["forge-config-backend:latest"],
 )
 
 # Push to container registry
@@ -187,7 +187,7 @@ oci_push(
     name = "image_push",
     image = ":image",
     # Update for your registry:
-    repository = "ghcr.io/your-org/ztp-backend-rust",
+    repository = "ghcr.io/your-org/forge-config-backend",
     # Optionally stamp with git SHA:
     # remote_tags = ["latest", "{STABLE_GIT_SHA}"],
 )

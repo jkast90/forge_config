@@ -42,6 +42,7 @@ export function VendorManagement() {
       name: vendor.name,
       backup_command: vendor.backup_command,
       deploy_command: vendor.deploy_command || '',
+      diff_command: vendor.diff_command || '',
       ssh_port: vendor.ssh_port,
       ssh_user: vendor.ssh_user || '',
       ssh_pass: vendor.ssh_pass || '',
@@ -222,6 +223,15 @@ export function VendorManagement() {
                 Use {'{CONFIG}'} as placeholder for rendered config. Leave blank to send as-is.
               </small>
             </div>
+            <FormField
+              label="Diff Command"
+              name="diff_command"
+              type="textarea"
+              value={form.formData.diff_command}
+              onChange={form.handleChange}
+              placeholder="configure session ztp-diff\n{CONFIG}\nshow session-config diffs\nabort"
+              rows={3}
+            />
             <FormField
               label="Vendor Class (DHCP Option 60)"
               name="vendor_class"

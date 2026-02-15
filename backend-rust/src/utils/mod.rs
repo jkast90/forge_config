@@ -28,7 +28,13 @@ pub async fn resolve_ssh_credentials(
 ) -> (String, String) {
     let settings = store.get_settings().await.unwrap_or_default();
     let vendor = match vendor_id {
-        Some(v) if !v.is_empty() => store.get_vendor(v).await.ok().flatten(),
+        Some(v) if !v.is_empty() => {
+            if let Ok(id) = v.parse::<i64>() {
+                store.get_vendor(id).await.ok().flatten()
+            } else {
+                None
+            }
+        }
         _ => None,
     };
     let user = ssh_user.filter(|s| !s.is_empty())
@@ -180,35 +186,68 @@ pub fn ssh_run_interactive(host: &str, user: &str, pass: &str, commands: &str) -
     channel.shell()
         .map_err(|e| format!("Failed to start shell: {}", e))?;
 
-    // Wait for the initial prompt
-    std::thread::sleep(Duration::from_secs(2));
+    // Helper: drain any available output from the channel (non-blocking)
+    let drain = |ch: &mut ssh2::Channel, buf: &mut String| {
+        let mut tmp = [0u8; 8192];
+        loop {
+            match ch.read(&mut tmp) {
+                Ok(0) => break,
+                Ok(n) => { buf.push_str(&String::from_utf8_lossy(&tmp[..n])); }
+                Err(_) => break,
+            }
+        }
+    };
 
-    // Send each line with a small delay between them
+    let mut output = String::new();
+
+    // Wait for the initial prompt then drain it
+    std::thread::sleep(Duration::from_secs(2));
+    session.set_blocking(false);
+    drain(&mut channel, &mut output);
+
+    // Disable pager so show commands don't paginate with --More--
+    session.set_blocking(true);
+    channel.write_all(b"terminal length 0\n").ok();
+    channel.flush().ok();
+    std::thread::sleep(Duration::from_millis(500));
+    session.set_blocking(false);
+    drain(&mut channel, &mut output);
+
+    // Send each line, draining output between commands
     for line in commands.lines() {
         let line = line.trim();
         if line.is_empty() || line.starts_with('!') {
             continue; // Skip empty lines and EOS comments
         }
+        session.set_blocking(true);
         channel.write_all(format!("{}\n", line).as_bytes())
             .map_err(|e| format!("Failed to write command: {}", e))?;
         channel.flush()
             .map_err(|e| format!("Failed to flush: {}", e))?;
-        // Small delay between commands so the device can process
-        std::thread::sleep(Duration::from_millis(100));
+        // Give the device time to process and produce output
+        std::thread::sleep(Duration::from_millis(500));
+        session.set_blocking(false);
+        drain(&mut channel, &mut output);
+    }
+
+    // Wait longer for any final output (show commands may take time)
+    for _ in 0..10 {
+        std::thread::sleep(Duration::from_millis(500));
+        let before = output.len();
+        drain(&mut channel, &mut output);
+        // If no new output appeared, we're likely done
+        if output.len() == before {
+            break;
+        }
     }
 
     // Send exit to close the session cleanly
-    channel.write_all(b"exit\n")
-        .map_err(|e| format!("Failed to write exit: {}", e))?;
+    session.set_blocking(true);
+    channel.write_all(b"exit\n").ok();
     channel.flush().ok();
-
-    // Wait for output
-    std::thread::sleep(Duration::from_secs(2));
-
-    // Read all available output
+    std::thread::sleep(Duration::from_millis(500));
     session.set_blocking(false);
-    let mut output = String::new();
-    let _ = channel.read_to_string(&mut output);
+    drain(&mut channel, &mut output);
 
     session.set_blocking(true);
     channel.wait_close().ok();
@@ -246,6 +285,7 @@ pub async fn ssh_run_command_async(host: &str, user: &str, pass: &str, command: 
 
 /// Async wrapper for ssh_connect - runs in a blocking thread pool.
 /// Tests SSH connectivity and tries to run uptime commands.
+#[allow(dead_code)]
 pub async fn ssh_test_connection(host: &str, user: &str, pass: &str) -> (bool, Option<String>, Option<String>) {
     let host = host.to_string();
     let user = user.to_string();
@@ -441,7 +481,7 @@ pub fn lookup_vendor_by_mac(mac: &str, vendors: &[crate::models::Vendor]) -> Opt
     for vendor in vendors {
         for prefix in &vendor.mac_prefixes {
             if prefix.to_uppercase() == oui {
-                return Some(vendor.id.clone());
+                return Some(vendor.id.to_string());
             }
         }
     }
@@ -532,7 +572,7 @@ pub fn match_vendor_class(vendor_class: &str, vendors: &[crate::models::Vendor])
         if !vendor.vendor_class.is_empty()
             && lower.contains(&vendor.vendor_class.to_lowercase())
         {
-            return Some(vendor.id.clone());
+            return Some(vendor.id.to_string());
         }
     }
     None

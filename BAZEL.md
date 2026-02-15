@@ -4,14 +4,14 @@
 
 | What | Current | Bazel |
 |------|---------|-------|
-| Build backend | `docker compose build backend-rust` | `bazel build //backend-rust:ztp-server` |
+| Build backend | `docker compose build backend-rust` | `bazel build //backend-rust:forge-config` |
 | Build frontend | `cd frontend && npx vite build` | `bazel build //frontend:bundle` |
 | Type-check frontend | `cd frontend && npx tsc --noEmit` | `bazel test //frontend:typecheck` |
 | Type-check mobile | `cd mobile && npx tsc --noEmit` | `bazel test //mobile:typecheck` |
 | Build everything | `docker compose build` | `bazel build //...` |
 | Test everything | (manual) | `bazel test //...` |
-| Build Docker image | `docker compose build backend-rust` | `bazel build //backend-rust:image_tarball` |
-| Load image into Docker | (automatic) | `docker load < bazel-bin/backend-rust/image_tarball/tarball.tar` |
+| Build Docker image | `docker compose build backend-rust` | `bazel build //backend-rust:image` |
+| Load image into Docker | (automatic) | `bazel run //backend-rust:image_load` |
 
 ## Key Differences
 
@@ -38,7 +38,7 @@
 
 ```bash
 # Build a specific target
-bazel build //backend-rust:ztp-server
+bazel build //backend-rust:forge-config
 
 # Build everything in a directory
 bazel build //backend-rust/...
@@ -47,13 +47,13 @@ bazel build //backend-rust/...
 bazel build //...
 
 # Run tests
-bazel test //backend-rust:ztp-server-test
+bazel test //backend-rust:forge-config-test
 
 # Run a binary
-bazel run //backend-rust:ztp-server
+bazel run //backend-rust:forge-config
 
 # See what a target depends on
-bazel query 'deps(//backend-rust:ztp-server)' --output=graph
+bazel query 'deps(//backend-rust:forge-config)' --output=graph
 
 # See what targets exist in a package
 bazel query '//frontend/...'
@@ -111,5 +111,5 @@ Think of Bazel as a **DAG (directed acyclic graph)** of build steps:
 ```
 
 Change `shared/core/types.ts` → Bazel knows to rebuild `core`, `frontend:app`,
-`frontend:bundle`, and `backend-rust:image`, but NOT `backend-rust:ztp-server`
+`frontend:bundle`, and `backend-rust:image`, but NOT `backend-rust:forge-config`
 (because the Rust binary doesn't depend on TypeScript).

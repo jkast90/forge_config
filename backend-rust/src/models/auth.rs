@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// User represents an authenticated user
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    pub id: String,
+    pub id: i64,
     pub username: String,
     #[serde(skip_serializing)]
     pub password_hash: String,

@@ -35,22 +35,7 @@ impl IpamIpAddressRepo {
         Ok(rows.iter().map(map_ip_address_row).collect())
     }
 
-    pub async fn list_by_role(pool: &Pool<Sqlite>, role_id: &str) -> Result<Vec<IpamIpAddress>> {
-        let rows = sqlx::query(&format!(
-            "{} WHERE ip.id IN (SELECT ip_address_id FROM ipam_ip_address_roles WHERE role_id = ?) ORDER BY ip.address_int",
-            SELECT_IP_ADDRESS
-        ))
-            .bind(role_id).fetch_all(pool).await?;
-        Ok(rows.iter().map(map_ip_address_row).collect())
-    }
-
-    pub async fn list_by_device(pool: &Pool<Sqlite>, device_id: i64) -> Result<Vec<IpamIpAddress>> {
-        let rows = sqlx::query(&format!("{} WHERE ip.device_id = ? ORDER BY ip.address_int", SELECT_IP_ADDRESS))
-            .bind(device_id).fetch_all(pool).await?;
-        Ok(rows.iter().map(map_ip_address_row).collect())
-    }
-
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<IpamIpAddress>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<IpamIpAddress>> {
         let row = sqlx::query(&format!("{} WHERE ip.id = ?", SELECT_IP_ADDRESS))
             .bind(id).fetch_optional(pool).await?;
         Ok(row.as_ref().map(map_ip_address_row))
@@ -74,38 +59,37 @@ impl IpamIpAddressRepo {
         }
 
         let now = Utc::now();
-        sqlx::query(
-            r#"INSERT INTO ipam_ip_addresses (id, address, address_int, prefix_id, description,
+        let result = sqlx::query(
+            r#"INSERT INTO ipam_ip_addresses (address, address_int, prefix_id, description,
                status, dns_name, device_id, interface_name, vrf_id, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#
         )
-        .bind(&req.id)
         .bind(addr_str)
         .bind(addr_int as i64)
-        .bind(&req.prefix_id)
+        .bind(req.prefix_id)
         .bind(req.description.as_deref().unwrap_or(""))
         .bind(&req.status)
         .bind(req.dns_name.as_deref().unwrap_or(""))
-        .bind(&req.device_id)
+        .bind(req.device_id)
         .bind(req.interface_name.as_deref().unwrap_or(""))
-        .bind(&req.vrf_id)
+        .bind(req.vrf_id)
         .bind(now)
         .bind(now)
         .execute(pool).await?;
 
+        let new_id = result.last_insert_rowid();
+
         // Insert role associations
         for role_id in &req.role_ids {
-            if !role_id.is_empty() {
-                sqlx::query("INSERT OR IGNORE INTO ipam_ip_address_roles (ip_address_id, role_id) VALUES (?, ?)")
-                    .bind(&req.id).bind(role_id)
-                    .execute(pool).await?;
-            }
+            sqlx::query("INSERT OR IGNORE INTO ipam_ip_address_roles (ip_address_id, role_id) VALUES (?, ?)")
+                .bind(new_id).bind(role_id)
+                .execute(pool).await?;
         }
 
-        Self::get(pool, &req.id).await?.context("IP address not found after creation")
+        Self::get(pool, new_id).await?.context("IP address not found after creation")
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateIpamIpAddressRequest) -> Result<IpamIpAddress> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateIpamIpAddressRequest) -> Result<IpamIpAddress> {
         let addr_str = req.address.trim_end_matches("/32");
         let addr_int = utils::parse_ipv4_to_u32(addr_str)
             .map_err(|e| anyhow::anyhow!("{}", e))?;
@@ -117,38 +101,36 @@ impl IpamIpAddressRepo {
         )
         .bind(addr_str)
         .bind(addr_int as i64)
-        .bind(&req.prefix_id)
+        .bind(req.prefix_id)
         .bind(req.description.as_deref().unwrap_or(""))
         .bind(&req.status)
         .bind(req.dns_name.as_deref().unwrap_or(""))
-        .bind(&req.device_id)
+        .bind(req.device_id)
         .bind(req.interface_name.as_deref().unwrap_or(""))
-        .bind(&req.vrf_id)
+        .bind(req.vrf_id)
         .bind(now)
         .bind(id)
         .execute(pool).await?;
         if result.rows_affected() == 0 {
-            return Err(crate::db::NotFoundError::new("IP Address", id).into());
+            return Err(crate::db::NotFoundError::new("IP Address", &id.to_string()).into());
         }
 
         // Replace role associations
         sqlx::query("DELETE FROM ipam_ip_address_roles WHERE ip_address_id = ?")
             .bind(id).execute(pool).await?;
         for role_id in &req.role_ids {
-            if !role_id.is_empty() {
-                sqlx::query("INSERT OR IGNORE INTO ipam_ip_address_roles (ip_address_id, role_id) VALUES (?, ?)")
-                    .bind(id).bind(role_id)
-                    .execute(pool).await?;
-            }
+            sqlx::query("INSERT OR IGNORE INTO ipam_ip_address_roles (ip_address_id, role_id) VALUES (?, ?)")
+                .bind(id).bind(role_id)
+                .execute(pool).await?;
         }
 
         Self::get(pool, id).await?.context("IP address not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM ipam_ip_addresses WHERE id = ?").bind(id).execute(pool).await?;
         if result.rows_affected() == 0 {
-            return Err(crate::db::NotFoundError::new("IP Address", id).into());
+            return Err(crate::db::NotFoundError::new("IP Address", &id.to_string()).into());
         }
         Ok(())
     }
@@ -177,20 +159,18 @@ impl IpamIpAddressRepo {
             .ok_or_else(|| anyhow::anyhow!("No available IP addresses in {}", prefix.prefix))?;
 
         let addr_str = utils::u32_to_ipv4(addr_int);
-        let new_id = format!("ip-{}", addr_str.replace('.', "-"));
 
         // Inherit VRF from prefix
         let create_req = CreateIpamIpAddressRequest {
-            id: new_id,
             address: addr_str,
             prefix_id,
             description: req.description.clone(),
             status: req.status.clone(),
             role_ids: req.role_ids.clone(),
             dns_name: req.dns_name.clone(),
-            device_id: req.device_id.clone(),
+            device_id: req.device_id,
             interface_name: req.interface_name.clone(),
-            vrf_id: prefix.vrf_id.clone(),
+            vrf_id: prefix.vrf_id,
         };
 
         Self::create(pool, &create_req).await

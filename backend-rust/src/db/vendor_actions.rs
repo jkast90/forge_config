@@ -40,7 +40,7 @@ impl VendorActionRepo {
         Ok(rows.iter().map(map_vendor_action_row).collect())
     }
 
-    pub async fn list_by_vendor(pool: &Pool<Sqlite>, vendor_id: &str) -> Result<Vec<VendorAction>> {
+    pub async fn list_by_vendor(pool: &Pool<Sqlite>, vendor_id: i64) -> Result<Vec<VendorAction>> {
         let rows = sqlx::query(&format!("{} WHERE vendor_id = ? ORDER BY sort_order, label", SELECT_VENDOR_ACTION))
             .bind(vendor_id)
             .fetch_all(pool)
@@ -50,16 +50,15 @@ impl VendorActionRepo {
 
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateVendorActionRequest) -> Result<VendorAction> {
         let now = Utc::now();
-        sqlx::query(
+        let result = sqlx::query(
             r#"
-            INSERT INTO vendor_actions (id, vendor_id, label, command, sort_order,
+            INSERT INTO vendor_actions (vendor_id, label, command, sort_order,
                                         action_type, webhook_url, webhook_method, webhook_headers, webhook_body,
                                         output_parser_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
-        .bind(&req.id)
-        .bind(&req.vendor_id)
+        .bind(req.vendor_id)
         .bind(&req.label)
         .bind(&req.command)
         .bind(req.sort_order)
@@ -73,12 +72,13 @@ impl VendorActionRepo {
         .execute(pool)
         .await?;
 
-        Self::get(pool, &req.id)
+        let new_id = result.last_insert_rowid();
+        Self::get(pool, new_id)
             .await?
             .context("Vendor action not found after creation")
     }
 
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<VendorAction>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<VendorAction>> {
         let row = sqlx::query(&format!("{} WHERE id = ?", SELECT_VENDOR_ACTION))
             .bind(id)
             .fetch_optional(pool)
@@ -86,7 +86,7 @@ impl VendorActionRepo {
         Ok(row.as_ref().map(map_vendor_action_row))
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateVendorActionRequest) -> Result<VendorAction> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateVendorActionRequest) -> Result<VendorAction> {
         let result = sqlx::query(
             r#"
             UPDATE vendor_actions SET vendor_id = ?, label = ?, command = ?, sort_order = ?,
@@ -95,7 +95,7 @@ impl VendorActionRepo {
             WHERE id = ?
             "#,
         )
-        .bind(&req.vendor_id)
+        .bind(req.vendor_id)
         .bind(&req.label)
         .bind(&req.command)
         .bind(req.sort_order)
@@ -110,7 +110,7 @@ impl VendorActionRepo {
         .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("vendor action", id).into());
+            return Err(super::NotFoundError::new("vendor action", &id.to_string()).into());
         }
 
         Self::get(pool, id)
@@ -118,14 +118,14 @@ impl VendorActionRepo {
             .context("Vendor action not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM vendor_actions WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("vendor action", id).into());
+            return Err(super::NotFoundError::new("vendor action", &id.to_string()).into());
         }
         Ok(())
     }

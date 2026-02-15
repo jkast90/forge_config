@@ -15,9 +15,9 @@ pub async fn list_credentials(
 
 pub async fn get_credential(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Credential>, ApiError> {
-    let credential = state.store.get_credential(&id).await?
+    let credential = state.store.get_credential(id).await?
         .ok_or_else(|| ApiError::not_found("Credential"))?;
     Ok(Json(credential))
 }
@@ -27,11 +27,8 @@ pub async fn create_credential(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateCredentialRequest>,
 ) -> Result<(StatusCode, Json<Credential>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() {
-        return Err(ApiError::bad_request("id and name are required"));
-    }
-    if state.store.get_credential(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("Credential with this ID already exists"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
     let credential = state.store.create_credential(&req).await?;
     Ok(created(credential))
@@ -40,18 +37,18 @@ pub async fn create_credential(
 pub async fn update_credential(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<CreateCredentialRequest>,
 ) -> Result<Json<Credential>, ApiError> {
-    let credential = state.store.update_credential(&id, &req).await?;
+    let credential = state.store.update_credential(id, &req).await?;
     Ok(Json(credential))
 }
 
 pub async fn delete_credential(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_credential(&id).await?;
+    state.store.delete_credential(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

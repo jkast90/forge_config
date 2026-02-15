@@ -64,6 +64,7 @@ export { Tooltip } from './Tooltip';
 export { Table, SimpleTable, Cell } from './Table';
 export type { TableColumn, TableAction, TableProps, SimpleTableProps } from './Table';
 export { EmptyState } from './EmptyState';
+export { ErrorBoundary } from './ErrorBoundary';
 export { VendorBadge } from './VendorBadge';
 export { LoadingState, InlineLoading, ModalLoading } from './LoadingState';
 export * from './Icon';

@@ -23,11 +23,11 @@ pub async fn list_templates(
 pub async fn get_template(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Template>, ApiError> {
     let template = state
         .store
-        .get_template(&id)
+        .get_template(id)
         .await?
         .ok_or_else(|| ApiError::not_found("template"))?;
     Ok(Json(template))
@@ -39,13 +39,8 @@ pub async fn create_template(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateTemplateRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Template>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() || req.content.is_empty() {
-        return Err(ApiError::bad_request("id, name, and content are required"));
-    }
-
-    // Check for duplicate
-    if state.store.get_template(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("template with this ID already exists"));
+    if req.name.is_empty() || req.content.is_empty() {
+        return Err(ApiError::bad_request("name and content are required"));
     }
 
     let template = state.store.create_template(&req).await?;
@@ -57,11 +52,10 @@ pub async fn create_template(
 pub async fn update_template(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateTemplateRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateTemplateRequest>,
 ) -> Result<Json<Template>, ApiError> {
-    req.id = id.clone();
-    let template = state.store.update_template(&id, &req).await?;
+    let template = state.store.update_template(id, &req).await?;
     trigger_reload(&state).await;
     Ok(Json(template))
 }
@@ -70,9 +64,9 @@ pub async fn update_template(
 pub async fn delete_template(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    state.store.delete_template(&id).await?;
+    state.store.delete_template(id).await?;
     trigger_reload(&state).await;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
@@ -81,13 +75,13 @@ pub async fn delete_template(
 pub async fn preview_template(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<TemplatePreviewRequest>,
 ) -> Result<Json<TemplatePreviewResponse>, ApiError> {
     // Get the template
     let template = state
         .store
-        .get_template(&id)
+        .get_template(id)
         .await?
         .ok_or_else(|| ApiError::not_found("template"))?;
 
@@ -100,10 +94,16 @@ pub async fn preview_template(
         .map_err(|e| ApiError::bad_request(format!("Invalid template: {}", e)))?;
 
     // Look up role-specific template for {% include "role" %} support
+    // Role templates follow naming: "Arista EOS Spine" for base "Arista EOS Default" + role "spine"
     let role = req.device.topology_role.as_deref().unwrap_or("");
     if !role.is_empty() {
-        let role_id = format!("{}-{}", id, role);
-        if let Ok(Some(role_tmpl)) = state.store.get_template(&role_id).await {
+        let capitalized_role = format!("{}{}", &role[..1].to_uppercase(), &role[1..]);
+        let role_name = if template.name.ends_with(" Default") {
+            format!("{} {}", template.name.trim_end_matches(" Default"), capitalized_role)
+        } else {
+            format!("{} {}", template.name, capitalized_role)
+        };
+        if let Ok(Some(role_tmpl)) = state.store.get_template_by_name(&role_name).await {
             let role_content = convert_go_template_to_tera(&role_tmpl.content);
             let _ = tera.add_raw_template("role", &role_content);
         }

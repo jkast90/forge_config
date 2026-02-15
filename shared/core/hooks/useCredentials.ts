@@ -10,6 +10,7 @@ import {
   deleteCredential as deleteCredentialThunk,
 } from '../store/slices/credentialsSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseCredentialsOptions {
@@ -52,7 +53,7 @@ export function useCredentials(options: UseCredentialsOptions = {}): UseCredenti
     try {
       const payload = data.id ? data : { ...data, id: String(Date.now()) };
       await dispatch(createCredentialThunk(payload)).unwrap();
-      addNotification('success', 'Credential created successfully');
+      addNotification('success', 'Credential created successfully', navigateAction('View Credentials', 'config', 'credentials'));
       dispatch(fetchCredentials());
       return true;
     } catch (err) {
@@ -64,7 +65,7 @@ export function useCredentials(options: UseCredentialsOptions = {}): UseCredenti
   const updateCredential = useCallback(async (id: string, data: CredentialFormData): Promise<boolean> => {
     try {
       await dispatch(updateCredentialThunk({ id, data })).unwrap();
-      addNotification('success', 'Credential updated successfully');
+      addNotification('success', 'Credential updated successfully', navigateAction('View Credentials', 'config', 'credentials'));
       dispatch(fetchCredentials());
       return true;
     } catch (err) {
@@ -76,7 +77,7 @@ export function useCredentials(options: UseCredentialsOptions = {}): UseCredenti
   const deleteCredential = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteCredentialThunk(id)).unwrap();
-      addNotification('success', 'Credential deleted');
+      addNotification('success', 'Credential deleted', navigateAction('View Credentials', 'config', 'credentials'));
       dispatch(fetchCredentials());
       return true;
     } catch (err) {

@@ -26,6 +26,7 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         // Device routes
         .route("/api/devices", get(handlers::devices::list_devices))
         .route("/api/devices", post(handlers::devices::create_device))
+        .route("/api/devices/next-hostname", get(handlers::devices::next_hostname))
         .route("/api/devices/:id", get(handlers::devices::get_device))
         .route("/api/devices/:id", put(handlers::devices::update_device))
         .route("/api/devices/:id", delete(handlers::devices::delete_device))
@@ -33,6 +34,7 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/devices/:id/config", get(handlers::devices::get_device_config))
         .route("/api/devices/:id/preview-config", post(handlers::devices::preview_device_config))
         .route("/api/devices/:id/deploy-config", post(handlers::devices::deploy_device_config))
+        .route("/api/devices/:id/diff-config", post(handlers::devices::diff_device_config))
         .route("/api/devices/:id/exec", post(handlers::devices::exec_command))
         // Job routes
         .route("/api/jobs", get(handlers::jobs::list_jobs))

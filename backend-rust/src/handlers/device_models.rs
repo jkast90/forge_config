@@ -22,11 +22,11 @@ pub async fn list_device_models(
 pub async fn get_device_model(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<DeviceModel>, ApiError> {
     let model = state
         .store
-        .get_device_model(&id)
+        .get_device_model(id)
         .await?
         .ok_or_else(|| ApiError::not_found("device model"))?;
     Ok(Json(model))
@@ -38,13 +38,8 @@ pub async fn create_device_model(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateDeviceModelRequest>,
 ) -> Result<(axum::http::StatusCode, Json<DeviceModel>), ApiError> {
-    if req.id.is_empty() || req.vendor_id.is_empty() || req.model.is_empty() || req.display_name.is_empty() {
-        return Err(ApiError::bad_request("id, vendor_id, model, and display_name are required"));
-    }
-
-    // Check for duplicate
-    if state.store.get_device_model(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("device model with this ID already exists"));
+    if req.vendor_id == 0 || req.model.is_empty() || req.display_name.is_empty() {
+        return Err(ApiError::bad_request("vendor_id, model, and display_name are required"));
     }
 
     let model = state.store.create_device_model(&req).await?;
@@ -55,11 +50,10 @@ pub async fn create_device_model(
 pub async fn update_device_model(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateDeviceModelRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateDeviceModelRequest>,
 ) -> Result<Json<DeviceModel>, ApiError> {
-    req.id = id.clone();
-    let model = state.store.update_device_model(&id, &req).await?;
+    let model = state.store.update_device_model(id, &req).await?;
     Ok(Json(model))
 }
 
@@ -67,8 +61,8 @@ pub async fn update_device_model(
 pub async fn delete_device_model(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    state.store.delete_device_model(&id).await?;
+    state.store.delete_device_model(id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

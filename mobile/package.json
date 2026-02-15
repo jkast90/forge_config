@@ -1,7 +1,7 @@
 {
-  "name": "ztp-manager",
+  "name": "forge-config",
   "version": "1.0.0",
-  "description": "Mobile app for ZTP Server device management",
+  "description": "Mobile app for ForgeConfig device management",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",

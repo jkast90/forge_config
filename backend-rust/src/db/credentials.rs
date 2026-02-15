@@ -31,7 +31,7 @@ impl CredentialRepo {
         Ok(rows.iter().map(map_credential_row).collect())
     }
 
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<Credential>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<Credential>> {
         let row = sqlx::query("SELECT * FROM credentials WHERE id = ?")
             .bind(id).fetch_optional(pool).await?;
         Ok(row.as_ref().map(map_credential_row))
@@ -39,10 +39,9 @@ impl CredentialRepo {
 
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateCredentialRequest) -> Result<Credential> {
         let now = Utc::now();
-        sqlx::query(
-            "INSERT INTO credentials (id, name, description, cred_type, username, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+        let result = sqlx::query(
+            "INSERT INTO credentials (name, description, cred_type, username, password, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
         )
-        .bind(&req.id)
         .bind(&req.name)
         .bind(&req.description)
         .bind(&req.cred_type)
@@ -51,10 +50,11 @@ impl CredentialRepo {
         .bind(now)
         .bind(now)
         .execute(pool).await?;
-        Self::get(pool, &req.id).await?.context("Credential not found after creation")
+        let new_id = result.last_insert_rowid();
+        Self::get(pool, new_id).await?.context("Credential not found after creation")
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateCredentialRequest) -> Result<Credential> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateCredentialRequest) -> Result<Credential> {
         let now = Utc::now();
         let result = sqlx::query(
             "UPDATE credentials SET name = ?, description = ?, cred_type = ?, username = ?, password = ?, updated_at = ? WHERE id = ?"
@@ -68,16 +68,16 @@ impl CredentialRepo {
         .bind(id)
         .execute(pool).await?;
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Credential", id).into());
+            return Err(super::NotFoundError::new("Credential", &id.to_string()).into());
         }
         Self::get(pool, id).await?.context("Credential not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM credentials WHERE id = ?")
             .bind(id).execute(pool).await?;
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Credential", id).into());
+            return Err(super::NotFoundError::new("Credential", &id.to_string()).into());
         }
         Ok(())
     }

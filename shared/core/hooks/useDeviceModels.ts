@@ -8,6 +8,7 @@ import {
   deleteDeviceModel as deleteThunk,
 } from '../store/slices/deviceModelsSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseDeviceModelsOptions {
@@ -47,7 +48,7 @@ export function useDeviceModels(options: UseDeviceModelsOptions = {}): UseDevice
   const createDeviceModel = useCallback(async (data: Partial<DeviceModel>): Promise<boolean> => {
     try {
       await dispatch(createThunk(data)).unwrap();
-      addNotification('success', 'Device model created');
+      addNotification('success', 'Device model created', navigateAction('View Models', 'vendors-models', 'models'));
       dispatch(fetchDeviceModels());
       return true;
     } catch (err) {
@@ -59,7 +60,7 @@ export function useDeviceModels(options: UseDeviceModelsOptions = {}): UseDevice
   const updateDeviceModel = useCallback(async (id: string, data: Partial<DeviceModel>): Promise<boolean> => {
     try {
       await dispatch(updateThunk({ id, data })).unwrap();
-      addNotification('success', 'Device model updated');
+      addNotification('success', 'Device model updated', navigateAction('View Models', 'vendors-models', 'models'));
       dispatch(fetchDeviceModels());
       return true;
     } catch (err) {
@@ -71,7 +72,7 @@ export function useDeviceModels(options: UseDeviceModelsOptions = {}): UseDevice
   const deleteDeviceModel = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteThunk(id)).unwrap();
-      addNotification('success', 'Device model deleted');
+      addNotification('success', 'Device model deleted', navigateAction('View Models', 'vendors-models', 'models'));
       dispatch(fetchDeviceModels());
       return true;
     } catch (err) {

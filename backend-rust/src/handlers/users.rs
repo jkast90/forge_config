@@ -13,9 +13,9 @@ pub async fn list_users(
 pub async fn get_user(
     _auth: AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<User>, ApiError> {
-    let user = state.store.get_user(&id).await?
+    let user = state.store.get_user(id).await?
         .ok_or_else(|| ApiError::not_found("User"))?;
     Ok(Json(user))
 }
@@ -31,15 +31,14 @@ pub async fn create_user(
     if state.store.get_user_by_username(&req.username).await?.is_some() {
         return Err(ApiError::conflict("A user with this username already exists"));
     }
-    let id = uuid::Uuid::new_v4().to_string();
-    let user = state.store.create_user_full(&id, &req).await?;
+    let user = state.store.create_user_full(&req).await?;
     Ok(created(user))
 }
 
 pub async fn update_user(
     _auth: AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<UpdateUserRequest>,
 ) -> Result<Json<User>, ApiError> {
     if req.username.is_empty() {
@@ -51,19 +50,19 @@ pub async fn update_user(
             return Err(ApiError::conflict("A user with this username already exists"));
         }
     }
-    let user = state.store.update_user(&id, &req).await?;
+    let user = state.store.update_user(id, &req).await?;
     Ok(Json(user))
 }
 
 pub async fn delete_user(
     auth: AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
     // Prevent self-deletion
-    if auth.claims.sub == id {
+    if auth.claims.sub == id.to_string() {
         return Err(ApiError::bad_request("Cannot delete your own account"));
     }
-    state.store.delete_user(&id).await?;
+    state.store.delete_user(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

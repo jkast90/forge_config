@@ -20,12 +20,12 @@ COPY scripts /scripts
 RUN chmod +x /scripts/*.sh && \
     touch src/main.rs && \
     cargo build --release && \
-    cp target/release/ztp-server /usr/local/bin/ztp-server
+    cp target/release/forge-config /usr/local/bin/forge-config
 
 # Create required directories
 RUN mkdir -p /data /tftp /backups /dnsmasq /configs/templates /var/lib/misc
 
-ENV DB_PATH=/data/ztp.db
+ENV DB_PATH=/data/forge-config.db
 ENV DNSMASQ_CONFIG=/dnsmasq/dnsmasq.conf
 ENV TFTP_DIR=/tftp
 ENV TEMPLATES_DIR=/configs/templates
@@ -39,4 +39,4 @@ ENV RUST_LOG=debug
 
 EXPOSE 8080 67/udp 69/udp
 
-CMD ["/usr/local/bin/ztp-server"]
+CMD ["/usr/local/bin/forge-config"]

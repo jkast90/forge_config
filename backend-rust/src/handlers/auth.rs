@@ -33,7 +33,7 @@ pub async fn login(
     let exp = now + chrono::TimeDelta::hours(24);
 
     let claims = Claims {
-        sub: user.id.clone(),
+        sub: user.id.to_string(),
         username: user.username.clone(),
         exp: exp.timestamp() as usize,
         iat: now.timestamp() as usize,

@@ -31,11 +31,11 @@ pub struct Device {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub topology_role: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hall_id: Option<String>,
+    pub hall_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub row_id: Option<String>,
+    pub row_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rack_id: Option<String>,
+    pub rack_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rack_position: Option<i32>,
     pub status: String, // online, offline, provisioning
@@ -75,11 +75,11 @@ pub struct CreateDeviceRequest {
     #[serde(default)]
     pub topology_role: Option<String>,
     #[serde(default)]
-    pub hall_id: Option<String>,
+    pub hall_id: Option<i64>,
     #[serde(default)]
-    pub row_id: Option<String>,
+    pub row_id: Option<i64>,
     #[serde(default)]
-    pub rack_id: Option<String>,
+    pub rack_id: Option<i64>,
     #[serde(default)]
     pub rack_position: Option<i32>,
     #[serde(default)]
@@ -108,11 +108,11 @@ pub struct UpdateDeviceRequest {
     #[serde(default)]
     pub topology_role: Option<String>,
     #[serde(default)]
-    pub hall_id: Option<String>,
+    pub hall_id: Option<i64>,
     #[serde(default)]
-    pub row_id: Option<String>,
+    pub row_id: Option<i64>,
     #[serde(default)]
-    pub rack_id: Option<String>,
+    pub rack_id: Option<i64>,
     #[serde(default)]
     pub rack_position: Option<i32>,
     #[serde(default)]
@@ -190,7 +190,7 @@ pub struct DeviceConfigResponse {
 pub struct DeviceConfigPreviewResponse {
     pub mac: String,
     pub hostname: String,
-    pub template_id: String,
+    pub template_id: i64,
     pub template_name: String,
     pub content: String,
 }

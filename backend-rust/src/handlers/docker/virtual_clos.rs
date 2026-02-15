@@ -15,9 +15,9 @@ struct VNode {
     asn: u32,
     model: String,
     mgmt_ip: String,
-    hall_id: Option<String>,
-    row_id: Option<String>,
-    rack_id: Option<String>,
+    hall_id: Option<i64>,
+    row_id: Option<i64>,
+    rack_id: Option<i64>,
     rack_position: Option<i32>,
     device_type: Option<String>,
 }
@@ -32,6 +32,22 @@ const VIRTUAL_CLOS_TOPOLOGY_NAME: &str = "DC1 Virtual Fabric";
 const VIRTUAL_CLOS_P2P_CIDR: &str = "10.1.0.0/16";
 const VIRTUAL_CLOS_LOOPBACK_CIDR: &str = "10.255.0.0/16";
 const VIRTUAL_CLOS_P2P_PARENT_CIDR: &str = "10.0.0.0/8";
+
+/// Resolve a hostname from the pattern, substituting variables.
+fn resolve_hostname(pattern: &str, datacenter: &str, region: &str, hall: &str, role: &str, index: usize) -> String {
+    let result = pattern
+        .replace("$region", region)
+        .replace("$datacenter", datacenter)
+        .replace("$hall", hall)
+        .replace("$role", role)
+        .replace('#', &index.to_string());
+    // Clean leading/trailing hyphens and collapse double hyphens from empty variables
+    let mut cleaned = result.trim_matches('-').to_string();
+    while cleaned.contains("--") {
+        cleaned = cleaned.replace("--", "-");
+    }
+    cleaned
+}
 
 /// Build a 4-spine / 16-leaf virtual CLOS topology (device records only)
 pub async fn build_virtual_clos(
@@ -50,7 +66,17 @@ pub async fn build_virtual_clos(
     let leaves_per_rack = req.leaves_per_rack;
     let external_count = req.external_devices;
     let uplinks_per_spine = req.uplinks_per_spine;
-    let datacenter_id = req.datacenter_id.clone();
+    let links_per_leaf = req.links_per_leaf;
+    let datacenter_id = req.datacenter_id;
+    let dc = datacenter_id.map(|id| id.to_string()).unwrap_or_default();
+    let dc = dc.as_str();
+    let region = req.region_id.map(|id| id.to_string()).unwrap_or_default();
+    let region = region.as_str();
+
+    // Load hostname pattern from settings
+    let settings = state.store.get_settings().await.unwrap_or_default();
+    let hostname_pattern = &settings.hostname_pattern;
+
     let spawn_containers = req.spawn_containers;
     let ceos_image = if req.ceos_image.is_empty() {
         std::env::var("CEOS_IMAGE").unwrap_or_else(|_| "ceosimage:latest".to_string())
@@ -66,10 +92,10 @@ pub async fn build_virtual_clos(
     let mut role_templates: HashMap<String, String> = HashMap::new();
     let mut role_group_names: HashMap<String, Vec<String>> = HashMap::new();
     for role_name in ["spine", "leaf", "external"] {
-        let role_id = format!("{}-{}", vendor_id, role_name);
-        if let Ok(Some(role)) = state.store.get_device_role(&role_id).await {
-            if let Some(tids) = &role.template_ids {
-                if let Some(first) = tids.first() {
+        let device_role_name = format!("{}-{}", vendor_id, role_name);
+        if let Ok(Some(role)) = state.store.find_device_role_by_name(&device_role_name).await {
+            if let Some(tnames) = &role.template_names {
+                if let Some(first) = tnames.first() {
                     // Derive base template: "arista-eos-leaf" → "arista-eos"
                     let base = first.strip_suffix(&format!("-{}", role_name))
                         .unwrap_or(first);
@@ -84,7 +110,6 @@ pub async fn build_virtual_clos(
 
     // Create topology
     let topo_req = crate::models::CreateTopologyRequest {
-        id: VIRTUAL_CLOS_TOPOLOGY_ID.to_string(),
         name: VIRTUAL_CLOS_TOPOLOGY_NAME.to_string(),
         description: Some(if external_count > 0 {
             format!("{}-spine / {}-leaf / {}-external Arista virtual fabric", spine_count, leaf_count, external_count)
@@ -95,72 +120,84 @@ pub async fn build_virtual_clos(
         campus_id: req.campus_id,
         datacenter_id: req.datacenter_id,
     };
-    if let Err(e) = state.store.create_topology(&topo_req).await {
-        tracing::warn!("Failed to create virtual topology: {}", e);
-    }
+    let topo_id_str = match state.store.create_topology(&topo_req).await {
+        Ok(t) => t.id.to_string(),
+        Err(e) => {
+            tracing::warn!("Failed to create virtual topology: {}", e);
+            String::new()
+        }
+    };
 
     // Auto-create org hierarchy (halls/rows/racks) when datacenter is provided
     // Each rack entry: (hall_id, row_id, rack_id)
-    let mut rack_placements: Vec<(String, String, String)> = Vec::new();
+    let mut rack_placements: Vec<(i64, i64, i64)> = Vec::new();
     // Spine racks: one per row, spines distributed round-robin across rows
-    let mut spine_racks: Vec<(String, String, String)> = Vec::new();
+    let mut spine_racks: Vec<(i64, i64, i64)> = Vec::new();
     // Map row_id -> patch panel device ID for port assignment wiring
-    let mut patch_panels: HashMap<String, i64> = HashMap::new();
+    let mut patch_panels: HashMap<i64, i64> = HashMap::new();
 
-    if let Some(ref dc_id) = datacenter_id {
+    if let Some(dc_id) = datacenter_id {
         for h in 1..=hall_count {
-            let hall_id = format!("vclos-hall-{}", h);
             let hall_req = crate::models::CreateIpamHallRequest {
-                id: hall_id.clone(),
                 name: format!("Hall {}", h),
                 description: Some("Auto-created by Virtual CLOS".to_string()),
-                datacenter_id: dc_id.clone(),
+                datacenter_id: dc_id,
             };
-            if let Err(e) = state.store.create_ipam_hall(&hall_req).await {
-                tracing::warn!("Failed to create hall {}: {}", hall_id, e);
-            }
+            let hall_id = match state.store.create_ipam_hall(&hall_req).await {
+                Ok(hall) => hall.id,
+                Err(e) => {
+                    tracing::warn!("Failed to create hall {}: {}", h, e);
+                    continue;
+                }
+            };
 
             for r in 1..=rows_per_hall {
-                let row_id = format!("vclos-hall-{}-row-{}", h, r);
                 let row_req = crate::models::CreateIpamRowRequest {
-                    id: row_id.clone(),
                     name: format!("Hall {} Row {}", h, r),
                     description: Some("Auto-created by Virtual CLOS".to_string()),
-                    hall_id: hall_id.clone(),
+                    hall_id,
                 };
-                if let Err(e) = state.store.create_ipam_row(&row_req).await {
-                    tracing::warn!("Failed to create row {}: {}", row_id, e);
-                }
+                let row_id = match state.store.create_ipam_row(&row_req).await {
+                    Ok(row) => row.id,
+                    Err(e) => {
+                        tracing::warn!("Failed to create row hall-{}-row-{}: {}", h, r, e);
+                        continue;
+                    }
+                };
 
                 // Create leaf racks with spine rack in the middle of the row
                 let mid = racks_per_row / 2; // e.g., 8 racks → spine after rack 4
                 for k in 1..=racks_per_row {
                     // Insert spine rack at the midpoint
                     if k == mid + 1 {
-                        let spine_rack_id = format!("vclos-hall-{}-row-{}-spine-rack", h, r);
                         let spine_rack_req = crate::models::CreateIpamRackRequest {
-                            id: spine_rack_id.clone(),
                             name: format!("Hall {} Row {} Spine Rack", h, r),
                             description: Some("Auto-created by Virtual CLOS — spine switches".to_string()),
-                            row_id: row_id.clone(),
+                            row_id,
                         };
-                        if let Err(e) = state.store.create_ipam_rack(&spine_rack_req).await {
-                            tracing::warn!("Failed to create spine rack: {}", e);
+                        match state.store.create_ipam_rack(&spine_rack_req).await {
+                            Ok(rack) => {
+                                spine_racks.push((hall_id, row_id, rack.id));
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to create spine rack: {}", e);
+                            }
                         }
-                        spine_racks.push((hall_id.clone(), row_id.clone(), spine_rack_id));
                     }
 
-                    let rack_id = format!("vclos-hall-{}-row-{}-rack-{}", h, r, k);
                     let rack_req = crate::models::CreateIpamRackRequest {
-                        id: rack_id.clone(),
                         name: format!("Hall {} Row {} Rack {}", h, r, k),
                         description: Some("Auto-created by Virtual CLOS".to_string()),
-                        row_id: row_id.clone(),
+                        row_id,
                     };
-                    if let Err(e) = state.store.create_ipam_rack(&rack_req).await {
-                        tracing::warn!("Failed to create rack {}: {}", rack_id, e);
+                    match state.store.create_ipam_rack(&rack_req).await {
+                        Ok(rack) => {
+                            rack_placements.push((hall_id, row_id, rack.id));
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to create rack hall-{}-row-{}-rack-{}: {}", h, r, k, e);
+                        }
                     }
-                    rack_placements.push((hall_id.clone(), row_id.clone(), rack_id));
                 }
 
                 // Create a patch panel device for this row
@@ -175,17 +212,17 @@ pub async fn build_virtual_clos(
                     config_template: String::new(),
                     ssh_user: None,
                     ssh_pass: None,
-                    topology_id: Some(VIRTUAL_CLOS_TOPOLOGY_ID.to_string()),
+                    topology_id: Some(topo_id_str.clone()),
                     topology_role: None,
                     device_type: Some("external".to_string()),
-                    hall_id: Some(hall_id.clone()),
-                    row_id: Some(row_id.clone()),
+                    hall_id: Some(hall_id),
+                    row_id: Some(row_id),
                     rack_id: None,
                     rack_position: None,
                 };
                 match state.store.create_device(&pp_req).await {
                     Ok(pp_dev) => {
-                        patch_panels.insert(row_id.clone(), pp_dev.id);
+                        patch_panels.insert(row_id, pp_dev.id);
                     }
                     Err(e) => {
                         tracing::warn!("Failed to create patch panel {}: {}", pp_hostname, e);
@@ -206,12 +243,13 @@ pub async fn build_virtual_clos(
             let rack_idx = (i - 1) % spine_racks.len();
             let pos_in_rack = ((i - 1) / spine_racks.len()) as i32 + 1;
             let p = &spine_racks[rack_idx];
-            (Some(p.0.clone()), Some(p.1.clone()), Some(p.2.clone()), Some(pos_in_rack))
+            (Some(p.0), Some(p.1), Some(p.2), Some(pos_in_rack))
         } else {
             (None, None, None, None)
         };
+        let hall_name = h.map(|id| id.to_string()).unwrap_or_default();
         nodes.push(VNode {
-            hostname: format!("spine-{}", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "spine", i),
             role: "spine".to_string(),
             loopback: format!("10.255.0.{}", i),
             asn: 65000,
@@ -233,15 +271,16 @@ pub async fn build_virtual_clos(
             let pos_in_rack = ((i - 1) % leaves_per_rack) as i32 + 1;
             if rack_idx < rack_placements.len() {
                 let p = &rack_placements[rack_idx];
-                (Some(p.0.clone()), Some(p.1.clone()), Some(p.2.clone()), Some(pos_in_rack))
+                (Some(p.0), Some(p.1), Some(p.2), Some(pos_in_rack))
             } else {
                 (None, None, None, None)
             }
         } else {
             (None, None, None, None)
         };
+        let hall_name = h.map(|id| id.to_string()).unwrap_or_default();
         nodes.push(VNode {
-            hostname: format!("leaf-{}", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "leaf", i),
             role: "leaf".to_string(),
             loopback: format!("10.255.1.{}", i),
             asn: 65000 + i as u32,
@@ -261,7 +300,7 @@ pub async fn build_virtual_clos(
         let hostname = external_names.get(i - 1)
             .filter(|n| !n.is_empty())
             .cloned()
-            .unwrap_or_else(|| format!("external-{}", i));
+            .unwrap_or_else(|| resolve_hostname(hostname_pattern, dc, region, "", "external", i));
         nodes.push(VNode {
             hostname,
             role: "external".to_string(),
@@ -295,7 +334,7 @@ pub async fn build_virtual_clos(
             config_template: role_templates.get(&node.role).cloned().unwrap_or_default(),
             ssh_user: Some("admin".to_string()),
             ssh_pass: Some("admin".to_string()),
-            topology_id: Some(VIRTUAL_CLOS_TOPOLOGY_ID.to_string()),
+            topology_id: Some(topo_id_str.clone()),
             topology_role: Some(node.role.clone()),
             device_type: node.device_type.clone(),
             hall_id: node.hall_id.clone(),
@@ -355,6 +394,19 @@ pub async fn build_virtual_clos(
             "Parent supernet {} must exist before building CLOS fabric", VIRTUAL_CLOS_P2P_PARENT_CIDR
         )))?;
 
+    // Find or create the "pool" IPAM role
+    let pool_role_id = match state.store.find_ipam_role_by_name("pool").await? {
+        Some(r) => r.id,
+        None => {
+            let role_req = crate::models::CreateIpamRoleRequest {
+                name: "pool".to_string(),
+                description: Some("Address/prefix pool".to_string()),
+            };
+            state.store.create_ipam_role(&role_req).await
+                .map_err(|e| ApiError::internal(format!("Failed to create pool role: {}", e)))?.id
+        }
+    };
+
     // Ensure P2P prefix pool exists in IPAM (10.1.0.0/16 under parent supernet)
     let p2p_pool = match state.store.find_ipam_prefix_by_cidr(VIRTUAL_CLOS_P2P_CIDR, None).await? {
         Some(p) => p,
@@ -364,7 +416,7 @@ pub async fn build_virtual_clos(
                 description: Some("Fabric P2P link pool".to_string()),
                 status: "active".to_string(),
                 is_supernet: false,
-                role_ids: vec!["pool".to_string()],
+                role_ids: vec![pool_role_id],
                 parent_id: Some(parent.id),
                 datacenter_id: None,
                 vlan_id: None,
@@ -384,7 +436,7 @@ pub async fn build_virtual_clos(
                 description: Some("Loopback address pool".to_string()),
                 status: "active".to_string(),
                 is_supernet: false,
-                role_ids: vec!["pool".to_string()],
+                role_ids: vec![pool_role_id],
                 parent_id: Some(parent.id),
                 datacenter_id: None,
                 vlan_id: None,
@@ -397,9 +449,7 @@ pub async fn build_virtual_clos(
 
     // Reserve loopback IPs in IPAM for each device
     for (device_id, node) in &created_ids {
-        let loopback_ip_id = format!("ip-lo-{}", node.hostname);
         let lo_req = crate::models::CreateIpamIpAddressRequest {
-            id: loopback_ip_id,
             address: node.loopback.clone(),
             prefix_id: loopback_pool.id,
             description: Some(format!("{} Loopback0", node.hostname)),
@@ -416,7 +466,7 @@ pub async fn build_virtual_clos(
     }
 
     // Build fabric links using IPAM-allocated /31 subnets
-    // Each spine-leaf pair gets 2 point-to-point /31 links
+    // Each spine-leaf pair gets links_per_leaf point-to-point /31 links
     // Spine side = network address (even), Leaf side = broadcast address (odd)
     let spines: Vec<_> = created_ids.iter().filter(|(_, n)| n.role == "spine").collect();
     let leaves: Vec<_> = created_ids.iter().filter(|(_, n)| n.role == "leaf").collect();
@@ -445,7 +495,7 @@ pub async fn build_virtual_clos(
 
     for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
         for (li, (leaf_device_id, leaf)) in leaves.iter().enumerate() {
-            for link in 0..2u32 {
+            for link in 0..links_per_leaf as u32 {
                 // Allocate a /31 from IPAM
                 let alloc_req = crate::models::NextAvailablePrefixRequest {
                     prefix_length: 31,
@@ -461,12 +511,10 @@ pub async fn build_virtual_clos(
                 let leaf_ip = crate::utils::u32_to_ipv4(net + 1);    // odd (broadcast)
 
                 // Reserve spine-side IP address in IPAM (spine uses first 2/3 of 100G ports for leaves)
-                let spine_port_idx = li * 2 + link as usize;
+                let spine_port_idx = li * links_per_leaf + link as usize;
                 let spine_if_name = spine_leaf_ports.get(spine_port_idx).cloned()
                     .unwrap_or_else(|| format!("Ethernet{}", spine_port_idx + 1));
-                let spine_ip_id = format!("ip-{}", spine_ip.replace('.', "-"));
                 let spine_ip_req = crate::models::CreateIpamIpAddressRequest {
-                    id: spine_ip_id,
                     address: spine_ip.clone(),
                     prefix_id: subnet.id,
                     description: Some(format!("{} {} -> {}", spine.hostname, spine_if_name, leaf.hostname)),
@@ -482,16 +530,14 @@ pub async fn build_virtual_clos(
                 }
 
                 // Reserve leaf-side IP address in IPAM (leaf uses 100G ports for spine uplinks)
-                let leaf_port_idx = si * 2 + link as usize;
+                let leaf_port_idx = si * links_per_leaf + link as usize;
                 let leaf_100g = model_100g_ports.get(&leaf.model).map(|p| p.as_slice()).unwrap_or(&[]);
                 let leaf_if_name = leaf_100g.get(leaf_port_idx).cloned()
                     .unwrap_or_else(|| format!("Ethernet{}", leaf_port_idx + 1));
                 // Extract port number from the resolved port name for peer variable keys
                 let leaf_peer_idx: usize = leaf_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
                     .parse().unwrap_or(leaf_port_idx + 1);
-                let leaf_ip_id = format!("ip-{}", leaf_ip.replace('.', "-"));
                 let leaf_ip_req = crate::models::CreateIpamIpAddressRequest {
-                    id: leaf_ip_id,
                     address: leaf_ip.clone(),
                     prefix_id: subnet.id,
                     description: Some(format!("{} {} -> {}", leaf.hostname, leaf_if_name, spine.hostname)),
@@ -543,9 +589,7 @@ pub async fn build_virtual_clos(
                 let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
                 let ext_if_name = ext_100g.get(ext_port_idx).cloned()
                     .unwrap_or_else(|| format!("Ethernet{}", ext_port_idx + 1));
-                let ext_ip_id = format!("ip-{}", ext_ip.replace('.', "-"));
                 let ext_ip_req = crate::models::CreateIpamIpAddressRequest {
-                    id: ext_ip_id,
                     address: ext_ip.clone(),
                     prefix_id: subnet.id,
                     description: Some(format!("{} {} -> {}", ext.hostname, ext_if_name, spine.hostname)),
@@ -564,9 +608,7 @@ pub async fn build_virtual_clos(
                 let spine_uplink_idx = ei * uplinks_per_spine + link;
                 let spine_if_name = spine_uplink_ports.get(spine_uplink_idx).cloned()
                     .unwrap_or_else(|| format!("Ethernet{}", spine_leaf_port_count + spine_uplink_idx + 1));
-                let spine_ip_id = format!("ip-{}", spine_ip.replace('.', "-"));
                 let spine_ip_req = crate::models::CreateIpamIpAddressRequest {
-                    id: spine_ip_id,
                     address: spine_ip.clone(),
                     prefix_id: subnet.id,
                     description: Some(format!("{} {} -> {}", spine.hostname, spine_if_name, ext.hostname)),
@@ -656,10 +698,10 @@ pub async fn build_virtual_clos(
     for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
         for (li, (leaf_device_id, leaf)) in leaves.iter().enumerate() {
             // Find the patch panel for the leaf's row
-            let leaf_pp_id = leaf.row_id.as_ref().and_then(|rid| patch_panels.get(rid)).copied();
-            for link in 0..2u32 {
-                let spine_if = format!("Ethernet{}", li * 2 + link as usize + 1);
-                let leaf_port_idx = si * 2 + link as usize;
+            let leaf_pp_id = leaf.row_id.and_then(|rid| patch_panels.get(&rid)).copied();
+            for link in 0..links_per_leaf as u32 {
+                let spine_if = format!("Ethernet{}", li * links_per_leaf + link as usize + 1);
+                let leaf_port_idx = si * links_per_leaf + link as usize;
                 let leaf_100g = model_100g_ports.get(&leaf.model).map(|p| p.as_slice()).unwrap_or(&[]);
                 let leaf_if = leaf_100g.get(leaf_port_idx).cloned()
                     .unwrap_or_else(|| format!("Ethernet{}", leaf_port_idx + 1));
@@ -772,8 +814,8 @@ pub async fn build_virtual_clos(
                     let serial = format!("SN-VCLOS-{}", node.hostname);
 
                     let mut labels = HashMap::new();
-                    labels.insert("ztp-test-client".to_string(), "true".to_string());
-                    labels.insert("ztp-vclos".to_string(), VIRTUAL_CLOS_TOPOLOGY_ID.to_string());
+                    labels.insert("fc-test-client".to_string(), "true".to_string());
+                    labels.insert("fc-vclos".to_string(), VIRTUAL_CLOS_TOPOLOGY_ID.to_string());
 
                     let mut endpoints = HashMap::new();
                     endpoints.insert(
@@ -786,7 +828,7 @@ pub async fn build_virtual_clos(
 
                     let config = if use_frr {
                         // FRR container config
-                        labels.insert("ztp-frr".to_string(), "true".to_string());
+                        labels.insert("fc-frr".to_string(), "true".to_string());
                         let env = vec![
                             format!("DEVICE_HOSTNAME={}", node.hostname),
                         ];
@@ -814,7 +856,7 @@ pub async fn build_virtual_clos(
                         }
                     } else {
                         // cEOS container config
-                        labels.insert("ztp-ceos".to_string(), "true".to_string());
+                        labels.insert("fc-ceos".to_string(), "true".to_string());
                         let env = vec![
                             "CEOS=1".to_string(),
                             "container=docker".to_string(),
@@ -913,7 +955,7 @@ pub async fn build_virtual_clos(
                                             config_template: role_templates.get(&node.role).cloned().unwrap_or_default(),
                                             ssh_user: Some("admin".to_string()),
                                             ssh_pass: Some("admin".to_string()),
-                                            topology_id: Some(VIRTUAL_CLOS_TOPOLOGY_ID.to_string()),
+                                            topology_id: Some(topo_id_str.clone()),
                                             topology_role: Some(node.role.clone()),
                                             device_type: node.device_type.clone(),
                                             hall_id: node.hall_id.clone(),
@@ -943,17 +985,17 @@ pub async fn build_virtual_clos(
                     .map(|(_, n)| (format!("vclos-{}", n.hostname), n.hostname.clone()))
                     .collect();
 
-                // Create spine↔leaf fabric links (2 links per pair)
+                // Create spine↔leaf fabric links (links_per_leaf links per pair)
                 for (_si, (spine_cname, spine_host)) in spine_containers.iter().enumerate() {
                     for (_li, (leaf_cname, leaf_host)) in leaf_containers.iter().enumerate() {
-                        for link in 0..2u32 {
+                        for link in 0..links_per_leaf as u32 {
                             let net_name = format!("vclos-{}-{}-link{}", spine_host, leaf_host, link + 1);
                             let create_opts = bollard::network::CreateNetworkOptions {
                                 name: net_name.clone(),
                                 driver: "bridge".to_string(),
                                 labels: {
                                     let mut l = HashMap::new();
-                                    l.insert("ztp-vclos".to_string(), VIRTUAL_CLOS_TOPOLOGY_ID.to_string());
+                                    l.insert("fc-vclos".to_string(), VIRTUAL_CLOS_TOPOLOGY_ID.to_string());
                                     l
                                 },
                                 ..Default::default()
@@ -989,7 +1031,7 @@ pub async fn build_virtual_clos(
                         driver: "bridge".to_string(),
                         labels: {
                             let mut l = HashMap::new();
-                            l.insert("ztp-vclos".to_string(), VIRTUAL_CLOS_TOPOLOGY_ID.to_string());
+                            l.insert("fc-vclos".to_string(), VIRTUAL_CLOS_TOPOLOGY_ID.to_string());
                             l
                         },
                         ..Default::default()
@@ -1020,7 +1062,7 @@ pub async fn build_virtual_clos(
     }
 
     Ok(Json(ClosLabResponse {
-        topology_id: VIRTUAL_CLOS_TOPOLOGY_ID.to_string(),
+        topology_id: topo_id_str,
         topology_name: VIRTUAL_CLOS_TOPOLOGY_NAME.to_string(),
         devices: result_devices,
         fabric_links,
@@ -1112,10 +1154,10 @@ pub async fn teardown_virtual_clos(
 }
 
 pub(super) async fn teardown_virtual_clos_inner(state: &Arc<AppState>) {
-    // Remove any spawned cEOS containers (labeled ztp-vclos)
+    // Remove any spawned cEOS containers (labeled fc-vclos)
     if let Ok(docker) = bollard::Docker::connect_with_socket_defaults() {
         let mut filters = HashMap::new();
-        filters.insert("label".to_string(), vec![format!("ztp-vclos={}", VIRTUAL_CLOS_TOPOLOGY_ID)]);
+        filters.insert("label".to_string(), vec![format!("fc-vclos={}", VIRTUAL_CLOS_TOPOLOGY_ID)]);
         let options = bollard::container::ListContainersOptions {
             all: true,
             filters,
@@ -1131,9 +1173,9 @@ pub(super) async fn teardown_virtual_clos_inner(state: &Arc<AppState>) {
                 }
             }
         }
-        // Clean up fabric networks (labeled ztp-vclos)
+        // Clean up fabric networks (labeled fc-vclos)
         let mut net_filters = HashMap::new();
-        net_filters.insert("label".to_string(), vec![format!("ztp-vclos={}", VIRTUAL_CLOS_TOPOLOGY_ID)]);
+        net_filters.insert("label".to_string(), vec![format!("fc-vclos={}", VIRTUAL_CLOS_TOPOLOGY_ID)]);
         let net_opts = bollard::network::ListNetworksOptions { filters: net_filters };
         if let Ok(networks) = docker.list_networks(Some(net_opts)).await {
             for net in &networks {
@@ -1145,9 +1187,15 @@ pub(super) async fn teardown_virtual_clos_inner(state: &Arc<AppState>) {
         }
     }
 
-    let deleted = state.store.delete_devices_by_topology(VIRTUAL_CLOS_TOPOLOGY_ID).await.unwrap_or(0);
-    if deleted > 0 {
-        tracing::info!("Deleted {} virtual CLOS devices", deleted);
+    // Find the topology by name to get its numeric ID for device cleanup
+    let topos = state.store.list_topologies().await.unwrap_or_default();
+    let vclos_topo = topos.iter().find(|t| t.name == VIRTUAL_CLOS_TOPOLOGY_NAME);
+    if let Some(topo) = vclos_topo {
+        let topo_id_str = topo.id.to_string();
+        let deleted = state.store.delete_devices_by_topology(&topo_id_str).await.unwrap_or(0);
+        if deleted > 0 {
+            tracing::info!("Deleted {} virtual CLOS devices", deleted);
+        }
     }
 
     // Clean up IPAM: delete /31 prefixes under the P2P pool and loopback pool
@@ -1166,30 +1214,31 @@ pub(super) async fn teardown_virtual_clos_inner(state: &Arc<AppState>) {
         // Delete IP addresses under loopback pool (they won't cascade from prefix deletion since they're direct children)
         if let Ok(ips) = state.store.list_ipam_ip_addresses_by_prefix(lo_pool.id).await {
             for ip in &ips {
-                let _ = state.store.delete_ipam_ip_address(&ip.id).await;
+                let _ = state.store.delete_ipam_ip_address(ip.id).await;
             }
         }
         // Delete the loopback pool itself
         let _ = state.store.delete_ipam_prefix(lo_pool.id).await;
     }
 
-    let _ = state.store.delete_topology(VIRTUAL_CLOS_TOPOLOGY_ID).await;
+    let _ = state.store.delete_topology_by_name(VIRTUAL_CLOS_TOPOLOGY_NAME).await;
 
-    // Clean up auto-created org entities (vclos-* prefix)
+    // Clean up auto-created org entities (matched by description)
     // Delete in reverse order: racks, rows, halls
+    let vclos_desc = "Auto-created by Virtual CLOS";
     if let Ok(racks) = state.store.list_ipam_racks().await {
-        for rack in racks.iter().filter(|r| r.id.starts_with("vclos-")) {
-            let _ = state.store.delete_ipam_rack(&rack.id).await;
+        for rack in racks.iter().filter(|r| r.description.as_deref().map_or(false, |d| d.starts_with(vclos_desc))) {
+            let _ = state.store.delete_ipam_rack(rack.id).await;
         }
     }
     if let Ok(rows) = state.store.list_ipam_rows().await {
-        for row in rows.iter().filter(|r| r.id.starts_with("vclos-")) {
-            let _ = state.store.delete_ipam_row(&row.id).await;
+        for row in rows.iter().filter(|r| r.description.as_deref().map_or(false, |d| d.starts_with(vclos_desc))) {
+            let _ = state.store.delete_ipam_row(row.id).await;
         }
     }
     if let Ok(halls) = state.store.list_ipam_halls().await {
-        for hall in halls.iter().filter(|h| h.id.starts_with("vclos-")) {
-            let _ = state.store.delete_ipam_hall(&hall.id).await;
+        for hall in halls.iter().filter(|h| h.description.as_deref().map_or(false, |d| d.starts_with(vclos_desc))) {
+            let _ = state.store.delete_ipam_hall(hall.id).await;
         }
     }
 }

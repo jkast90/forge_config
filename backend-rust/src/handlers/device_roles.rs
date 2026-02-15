@@ -15,9 +15,9 @@ pub async fn list_device_roles(
 
 pub async fn get_device_role(
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<DeviceRole>, ApiError> {
-    let role = state.store.get_device_role(&id).await?
+    let role = state.store.get_device_role(id).await?
         .ok_or_else(|| ApiError::not_found("DeviceRole"))?;
     Ok(Json(role))
 }
@@ -27,11 +27,8 @@ pub async fn create_device_role(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateDeviceRoleRequest>,
 ) -> Result<(StatusCode, Json<DeviceRole>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() {
-        return Err(ApiError::bad_request("id and name are required"));
-    }
-    if state.store.get_device_role(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("Device role with this ID already exists"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
     let role = state.store.create_device_role(&req).await?;
     Ok(created(role))
@@ -40,18 +37,18 @@ pub async fn create_device_role(
 pub async fn update_device_role(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<CreateDeviceRoleRequest>,
 ) -> Result<Json<DeviceRole>, ApiError> {
-    let role = state.store.update_device_role(&id, &req).await?;
+    let role = state.store.update_device_role(id, &req).await?;
     Ok(Json(role))
 }
 
 pub async fn delete_device_role(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_device_role(&id).await?;
+    state.store.delete_device_role(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

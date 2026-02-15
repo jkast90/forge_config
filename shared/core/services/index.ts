@@ -51,7 +51,7 @@ export { WebSocketService, getWebSocketService } from './websocket';
 export type { WebSocketEvent, WebSocketEventType, DeviceDiscoveredPayload, ConfigPulledPayload, WebSocketEventHandler } from './websocket';
 export { trackEvent, getTelemetryEvents, clearTelemetryEvents, onTelemetryChange, initTelemetry, type TelemetryEvent, type TelemetryEventType } from './telemetry';
 export { addNotification, markAllRead, clearNotifications, getNotifications, getUnreadCount, onNotificationsChange, type Notification, type NotificationAction, type NotificationLevel } from './notifications';
-export { navigateTo, navigateAction, registerNavigator, onTabNavigate, consumePendingTab, type NavigationTarget } from './navigation';
+export { navigateTo, navigateAction, dialogAction, registerNavigator, onTabNavigate, consumePendingTab, type NavigationTarget } from './navigation';
 
 export interface Services {
   auth: AuthService;

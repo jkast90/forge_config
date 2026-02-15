@@ -41,7 +41,7 @@ export function useJobTemplates(): UseJobTemplatesReturn {
   const create = useCallback(async (req: CreateJobTemplateRequest): Promise<boolean> => {
     try {
       await dispatch(createJobTemplateThunk(req)).unwrap();
-      addNotification('success', `Template "${req.name}" saved`);
+      addNotification('success', `Template "${req.name}" saved`, navigateAction('View Templates', 'jobs', 'templates'));
       dispatch(fetchJobTemplates());
       return true;
     } catch (err) {
@@ -53,7 +53,7 @@ export function useJobTemplates(): UseJobTemplatesReturn {
   const update = useCallback(async (id: string, req: CreateJobTemplateRequest): Promise<boolean> => {
     try {
       await dispatch(updateJobTemplateThunk({ id, req })).unwrap();
-      addNotification('success', `Template "${req.name}" updated`);
+      addNotification('success', `Template "${req.name}" updated`, navigateAction('View Templates', 'jobs', 'templates'));
       dispatch(fetchJobTemplates());
       return true;
     } catch (err) {
@@ -65,7 +65,7 @@ export function useJobTemplates(): UseJobTemplatesReturn {
   const remove = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteJobTemplateThunk(id)).unwrap();
-      addNotification('success', 'Template deleted');
+      addNotification('success', 'Template deleted', navigateAction('View Templates', 'jobs', 'templates'));
       dispatch(fetchJobTemplates());
       return true;
     } catch (err) {

@@ -11,6 +11,7 @@ import {
   clearLogs as clearLogsThunk,
 } from '../store/slices/discoverySlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 import { getServices } from '../services';
 
@@ -50,7 +51,7 @@ export function useDiscovery(options: UseDiscoveryOptions = {}): UseDiscoveryRet
       const services = getServices();
       await services.discovery.clearTracking();
       knownMacsRef.current = new Set();
-      addNotification('success', 'Discovery tracking cleared');
+      addNotification('success', 'Discovery tracking cleared', navigateAction('View Discovery', 'devices', 'discovery'));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       addNotification('error', `Failed to clear discovery: ${msg}`);
@@ -91,7 +92,7 @@ export function useDiscovery(options: UseDiscoveryOptions = {}): UseDiscoveryRet
   const dismiss = useCallback(async (mac: string) => {
     try {
       await dispatch(dismissDevice(mac)).unwrap();
-      addNotification('success', 'Device dismissed from discovery');
+      addNotification('success', 'Device dismissed from discovery', navigateAction('View Discovery', 'devices', 'discovery'));
     } catch (err) {
       addNotification('error', `Failed to dismiss device: ${getErrorMessage(err)}`);
     }
@@ -104,7 +105,7 @@ export function useDiscovery(options: UseDiscoveryOptions = {}): UseDiscoveryRet
   const clearLogsCallback = useCallback(async () => {
     try {
       await dispatch(clearLogsThunk()).unwrap();
-      addNotification('success', 'Discovery logs cleared');
+      addNotification('success', 'Discovery logs cleared', navigateAction('View Discovery', 'devices', 'discovery'));
     } catch (err) {
       addNotification('error', `Failed to clear logs: ${getErrorMessage(err)}`);
     }

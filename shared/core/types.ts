@@ -13,11 +13,11 @@ export interface Device {
   config_template: string;
   ssh_user?: string;
   ssh_pass?: string;
-  topology_id?: string;
+  topology_id?: number;
   topology_role?: TopologyRole;
-  hall_id?: string;
-  row_id?: string;
-  rack_id?: string;
+  hall_id?: number;
+  row_id?: number;
+  rack_id?: number;
   rack_position?: number;
   status: DeviceStatus;
   device_type?: string;
@@ -63,12 +63,12 @@ export interface VariableKeyInfo {
 
 // Topology types (CLOS fabric)
 export interface Topology {
-  id: string;
+  id: number;
   name: string;
   description?: string;
-  region_id?: string;
-  campus_id?: string;
-  datacenter_id?: string;
+  region_id?: number;
+  campus_id?: number;
+  datacenter_id?: number;
   device_count?: number;
   super_spine_count?: number;
   spine_count?: number;
@@ -78,7 +78,6 @@ export interface Topology {
 }
 
 export interface TopologyFormData {
-  id: string;
   name: string;
   description: string;
   region_id: string;
@@ -103,6 +102,8 @@ export interface Settings {
   // Branding
   app_name: string;
   logo_url: string;
+  // Device naming
+  hostname_pattern: string;
 }
 
 export interface Branding {
@@ -128,10 +129,11 @@ export interface Message {
 
 // Vendor configuration
 export interface Vendor {
-  id: string;
+  id: number;
   name: string;
   backup_command: string;
   deploy_command: string;
+  diff_command: string;
   ssh_port: number;
   ssh_user?: string;
   ssh_pass?: string;
@@ -144,10 +146,10 @@ export interface Vendor {
 }
 
 export interface VendorFormData {
-  id: string;
   name: string;
   backup_command: string;
   deploy_command: string;
+  diff_command: string;
   ssh_port: number;
   ssh_user: string;
   ssh_pass: string;
@@ -160,18 +162,17 @@ export interface VendorFormData {
 export type DhcpOptionType = 'string' | 'ip' | 'hex' | 'number';
 
 export interface DhcpOption {
-  id: string;
+  id: number;
   option_number: number;
   name: string;
   value: string;
   type: DhcpOptionType;
-  vendor_id?: string; // If set, only applies to this vendor
+  vendor_id?: number; // If set, only applies to this vendor
   description?: string;
   enabled: boolean;
 }
 
 export interface DhcpOptionFormData {
-  id: string;
   option_number: number;
   name: string;
   value: string;
@@ -193,10 +194,10 @@ export const COMMON_DHCP_OPTIONS = [
 
 // Template types
 export interface Template {
-  id: string;
+  id: number;
   name: string;
   description?: string;
-  vendor_id?: string;
+  vendor_id?: number;
   content: string;
   device_count?: number;
   created_at?: string;
@@ -204,7 +205,6 @@ export interface Template {
 }
 
 export interface TemplateFormData {
-  id: string;
   name: string;
   description: string;
   vendor_id: string;
@@ -271,7 +271,7 @@ export interface SpawnContainerRequest {
   vendor_class?: string; // DHCP Option 60 vendor class identifier
   config_method?: 'tftp' | 'http' | 'both'; // Config fetch method
   image?: string; // Docker image to use (e.g., 'ceosimage:latest' for cEOS)
-  topology_id?: string; // Assign to topology on creation
+  topology_id?: number; // Assign to topology on creation
   topology_role?: string; // Role in topology (spine, leaf, super-spine)
 }
 
@@ -285,7 +285,7 @@ export interface ClosLabDevice {
 }
 
 export interface ClosLabResponse {
-  topology_id: string;
+  topology_id: number;
   topology_name: string;
   devices: ClosLabDevice[];
   fabric_links: string[];
@@ -299,10 +299,10 @@ export const CONFIG_METHOD_OPTIONS = [
 ] as const;
 
 // Get the default template for a vendor using vendor cache
-export function getDefaultTemplateForVendor(vendorId: string): string {
+export function getDefaultTemplateForVendor(vendorName: string): string {
   const vendors = getVendorCache();
   if (vendors) {
-    const vendor = vendors.find((v) => v.id.toLowerCase() === vendorId.toLowerCase());
+    const vendor = vendors.find((v) => v.name.toLowerCase() === vendorName.toLowerCase());
     if (vendor?.default_template) {
       return vendor.default_template;
     }
@@ -324,8 +324,8 @@ export type ActionType = 'ssh' | 'webhook';
 export type WebhookMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface VendorAction {
-  id: string;
-  vendor_id: string;
+  id: number;
+  vendor_id: number;
   label: string;
   command: string;
   sort_order: number;
@@ -339,7 +339,6 @@ export interface VendorAction {
 }
 
 export interface VendorActionFormData {
-  id: string;
   vendor_id: string;
   label: string;
   command: string;
@@ -377,13 +376,13 @@ export interface Job {
 
 // Job template types
 export interface JobTemplate {
-  id: string;
+  id: number;
   name: string;
   description: string;
   job_type: JobType;
   command: string;
-  action_id: string;
-  credential_id?: string;
+  action_id: number;
+  credential_id?: number;
   target_mode: 'device' | 'group';
   target_device_ids: number[];
   target_group_id: number;
@@ -399,8 +398,8 @@ export interface CreateJobTemplateRequest {
   description?: string;
   job_type: string;
   command?: string;
-  action_id?: string;
-  credential_id?: string;
+  action_id?: number;
+  credential_id?: number;
   target_mode: string;
   target_device_ids?: number[];
   target_group_id?: number;
@@ -410,7 +409,7 @@ export interface CreateJobTemplateRequest {
 
 // User types
 export interface User {
-  id: string;
+  id: number;
   username: string;
   enabled: boolean;
   created_at: string;
@@ -425,7 +424,7 @@ export interface UserFormData {
 
 // Credential types
 export interface Credential {
-  id: string;
+  id: number;
   name: string;
   description?: string;
   cred_type: string;
@@ -436,7 +435,6 @@ export interface Credential {
 }
 
 export interface CredentialFormData {
-  id?: string;
   name: string;
   description: string;
   cred_type: string;
@@ -526,7 +524,7 @@ export interface ApiError {
 export type IpamStatus = 'active' | 'reserved' | 'deprecated' | 'dhcp';
 
 export interface IpamRegion {
-  id: string;
+  id: number;
   name: string;
   description?: string;
   campus_count?: number;
@@ -535,16 +533,15 @@ export interface IpamRegion {
 }
 
 export interface IpamRegionFormData {
-  id: string;
   name: string;
   description: string;
 }
 
 export interface IpamCampus {
-  id: string;
+  id: number;
   name: string;
   description?: string;
-  region_id: string;
+  region_id: number;
   region_name?: string;
   datacenter_count?: number;
   created_at: string;
@@ -552,17 +549,16 @@ export interface IpamCampus {
 }
 
 export interface IpamCampusFormData {
-  id: string;
   name: string;
   description: string;
   region_id: string;
 }
 
 export interface IpamDatacenter {
-  id: string;
+  id: number;
   name: string;
   description?: string;
-  campus_id: string;
+  campus_id: number;
   campus_name?: string;
   region_name?: string;
   hall_count?: number;
@@ -572,17 +568,16 @@ export interface IpamDatacenter {
 }
 
 export interface IpamDatacenterFormData {
-  id: string;
   name: string;
   description: string;
   campus_id: string;
 }
 
 export interface IpamHall {
-  id: string;
+  id: number;
   name: string;
   description?: string;
-  datacenter_id: string;
+  datacenter_id: number;
   datacenter_name?: string;
   row_count?: number;
   created_at: string;
@@ -590,17 +585,16 @@ export interface IpamHall {
 }
 
 export interface IpamHallFormData {
-  id: string;
   name: string;
   description: string;
   datacenter_id: string;
 }
 
 export interface IpamRow {
-  id: string;
+  id: number;
   name: string;
   description?: string;
-  hall_id: string;
+  hall_id: number;
   hall_name?: string;
   rack_count?: number;
   created_at: string;
@@ -608,17 +602,16 @@ export interface IpamRow {
 }
 
 export interface IpamRowFormData {
-  id: string;
   name: string;
   description: string;
   hall_id: string;
 }
 
 export interface IpamRack {
-  id: string;
+  id: number;
   name: string;
   description?: string;
-  row_id: string;
+  row_id: number;
   row_name?: string;
   device_count?: number;
   created_at: string;
@@ -626,21 +619,20 @@ export interface IpamRack {
 }
 
 export interface IpamRackFormData {
-  id: string;
   name: string;
   description: string;
   row_id: string;
 }
 
 export interface IpamRole {
-  id: string;
+  id: number;
   name: string;
   description?: string;
   created_at: string;
 }
 
 export interface IpamVrf {
-  id: string;
+  id: number;
   name: string;
   rd?: string;
   description?: string;
@@ -658,14 +650,14 @@ export interface IpamPrefix {
   description?: string;
   status: IpamStatus;
   is_supernet: boolean;
-  role_ids?: string[];
+  role_ids?: number[];
   role_names?: string[];
   parent_id?: number;
   parent_prefix?: string;
-  datacenter_id?: string;
+  datacenter_id?: number;
   datacenter_name?: string;
   vlan_id?: number;
-  vrf_id?: string;
+  vrf_id?: number;
   vrf_name?: string;
   child_prefix_count?: number;
   ip_address_count?: number;
@@ -679,7 +671,7 @@ export interface IpamPrefixFormData {
   description: string;
   status: IpamStatus;
   is_supernet: boolean;
-  role_ids: string[];
+  role_ids: number[];
   parent_id: string;
   datacenter_id: string;
   vlan_id: string;
@@ -687,32 +679,31 @@ export interface IpamPrefixFormData {
 }
 
 export interface IpamIpAddress {
-  id: string;
+  id: number;
   address: string;
   address_int: number;
   prefix_id: number;
   prefix?: string;
   description?: string;
   status: IpamStatus;
-  role_ids?: string[];
+  role_ids?: number[];
   role_names?: string[];
   dns_name?: string;
   device_id?: number;
   device_hostname?: string;
   interface_name?: string;
-  vrf_id?: string;
+  vrf_id?: number;
   vrf_name?: string;
   created_at: string;
   updated_at: string;
 }
 
 export interface IpamIpAddressFormData {
-  id: string;
   address: string;
   prefix_id: string;
   description: string;
   status: IpamStatus;
-  role_ids: string[];
+  role_ids: number[];
   dns_name: string;
   device_id: string; // kept as string for form input handling
   interface_name: string;
@@ -745,17 +736,17 @@ export const EMPTY_IPAM_PREFIX_FORM: IpamPrefixFormData = {
 };
 
 export const EMPTY_IPAM_IP_FORM: IpamIpAddressFormData = {
-  id: '', address: '', prefix_id: '', description: '', status: 'active',
+  address: '', prefix_id: '', description: '', status: 'active',
   role_ids: [], dns_name: '', device_id: '', interface_name: '', vrf_id: '',
 };
 
 // ========== Device Role Types ==========
 
 export interface DeviceRole {
-  id: string;
+  id: number;
   name: string;
   description?: string;
-  template_ids?: string[];
+  template_ids?: number[];
   template_names?: string[];
   group_names: string[];
   created_at: string;
@@ -763,10 +754,9 @@ export interface DeviceRole {
 }
 
 export interface DeviceRoleFormData {
-  id?: string;
   name: string;
   description: string;
-  template_ids: string[];
+  template_ids: number[];
   group_names: string[];
 }
 
@@ -797,7 +787,7 @@ export interface ChassisRow {
 }
 
 export interface ChassisLayout {
-  vendor_id: string;
+  vendor_id: number;
   model: string;
   display_name: string;
   rack_units: number;
@@ -805,8 +795,8 @@ export interface ChassisLayout {
 }
 
 export interface DeviceModel {
-  id: string;
-  vendor_id: string;
+  id: number;
+  vendor_id: number;
   model: string;
   display_name: string;
   rack_units: number;
@@ -817,7 +807,6 @@ export interface DeviceModel {
 }
 
 export interface DeviceModelFormData {
-  id: string;
   vendor_id: string;
   model: string;
   display_name: string;
@@ -826,7 +815,7 @@ export interface DeviceModelFormData {
 }
 
 export const EMPTY_DEVICE_MODEL_FORM: DeviceModelFormData = {
-  id: '', vendor_id: '', model: '', display_name: '', rack_units: 1, layout: [],
+  vendor_id: '', model: '', display_name: '', rack_units: 1, layout: [],
 };
 
 export const PORT_CONNECTOR_OPTIONS = [
@@ -878,7 +867,7 @@ export interface PortAssignment {
   remote_device_type?: string;
   patch_panel_a_hostname?: string;
   patch_panel_b_hostname?: string;
-  vrf_id?: string;
+  vrf_id?: number;
   vrf_name?: string;
   created_at: string;
   updated_at: string;
@@ -893,5 +882,5 @@ export interface SetPortAssignmentRequest {
   patch_panel_a_port?: string;
   patch_panel_b_id?: number;
   patch_panel_b_port?: string;
-  vrf_id?: string;
+  vrf_id?: number;
 }

@@ -77,5 +77,8 @@ tmp/
 temp/
 *.tmp
 
+# Bazel
+/bazel-*
+
 # AI
 .claude

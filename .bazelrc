@@ -79,7 +79,7 @@ build:ci --stamp
 build:ci --workspace_status_command=scripts/workspace_status.sh
 
 # ---- Config: Release ----
-# Usage: bazel build --config=release //backend-rust:ztp-server
+# Usage: bazel build --config=release //backend-rust:forge-config
 
 build:release --compilation_mode=opt
 build:release --strip=always

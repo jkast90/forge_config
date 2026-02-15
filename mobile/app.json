@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ZTP Manager",
-    "slug": "ztp-manager",
+    "name": "ForgeConfig",
+    "slug": "forge-config",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ztpserver.manager"
+      "bundleIdentifier": "com.forgeconfig.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +23,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.ztpserver.manager",
+      "package": "com.forgeconfig.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
@@ -37,7 +37,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow ZTP Manager to access your camera to scan device barcodes."
+          "cameraPermission": "Allow ForgeConfig to access your camera to scan device barcodes."
         }
       ],
       "./plugins/withCleartextTraffic"

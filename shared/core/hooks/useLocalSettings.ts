@@ -9,7 +9,7 @@ export interface LocalSettings {
   defaultPageSize: number;
 }
 
-const LOCAL_SETTINGS_KEY = 'ztp_local_settings';
+const LOCAL_SETTINGS_KEY = 'fc_local_settings';
 
 const DEFAULT_LOCAL_SETTINGS: LocalSettings = {
   apiUrl: '/api',
@@ -93,7 +93,7 @@ export function getDefaultPageSize(): number {
 }
 
 // Per-table page size overrides stored in localStorage
-const TABLE_PAGE_SIZE_KEY = 'ztp_table_page_sizes';
+const TABLE_PAGE_SIZE_KEY = 'fc_table_page_sizes';
 
 function getTablePageSizes(): Record<string, number> {
   if (typeof window === 'undefined') return {};

@@ -1,4 +1,4 @@
-# ZTP Server - Docker Compose
+# ForgeConfig - Docker Compose
 #
 # Usage:
 #   docker compose up                    # Start Rust backend + frontend
@@ -17,7 +17,7 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile.dev
-    container_name: ztp-frontend
+    container_name: fc-frontend
     networks:
       - ztp-net
     ports:
@@ -39,8 +39,8 @@ services:
     build:
       context: ./backend-rust
       dockerfile: Dockerfile
-    container_name: ztp-backend-rust
-    hostname: ztp-server
+    container_name: fc-backend-rust
+    hostname: forge-config
     networks:
       ztp-net:
         ipv4_address: 172.30.0.2
@@ -57,15 +57,15 @@ services:
     cap_add:
       - NET_ADMIN
     environment:
-      - DB_PATH=/data/ztp.db
+      - DB_PATH=/data/forge-config.db
       - TFTP_DIR=/tftp
       - BACKUP_DIR=/backups
       - TEMPLATES_DIR=/configs/templates
       - RUST_LOG=info
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       # Docker configuration for spawning test containers
-      - DOCKER_NETWORK=ztp-app_ztp-net
-      - TEST_CLIENT_IMAGE=ztp-server-test-client
+      - DOCKER_NETWORK=forge-config_fc-net
+      - TEST_CLIENT_IMAGE=forge-config-test-client
     restart: unless-stopped
 
   # ===========================================
@@ -75,7 +75,7 @@ services:
     build:
       context: ./test-client
       dockerfile: Dockerfile
-    container_name: ztp-test-client
+    container_name: fc-test-client
     hostname: test-switch
     networks:
       ztp-net:

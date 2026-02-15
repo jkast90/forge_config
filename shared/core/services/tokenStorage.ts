@@ -8,7 +8,7 @@ export interface TokenStorage {
 
 // Default implementation for web (localStorage)
 class WebTokenStorage implements TokenStorage {
-  private static readonly KEY = 'ztp_auth_token';
+  private static readonly KEY = 'fc_auth_token';
 
   getToken(): string | null {
     if (typeof localStorage === 'undefined') return null;

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { PortAssignment, SetPortAssignmentRequest } from '../types';
 import { getServices } from '../services';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UsePortAssignmentsReturn {
@@ -47,7 +48,7 @@ export function usePortAssignments(deviceId: number | undefined): UsePortAssignm
     if (!deviceId) return false;
     try {
       await getServices().portAssignments.set(deviceId, req);
-      addNotification('success', `Port ${req.port_name} assignment saved`);
+      addNotification('success', `Port ${req.port_name} assignment saved`, navigateAction('View Topology', 'topologies'));
       await refresh();
       return true;
     } catch (err) {
@@ -60,7 +61,7 @@ export function usePortAssignments(deviceId: number | undefined): UsePortAssignm
     if (!deviceId) return false;
     try {
       await getServices().portAssignments.remove(deviceId, portName);
-      addNotification('success', `Port ${portName} assignment cleared`);
+      addNotification('success', `Port ${portName} assignment cleared`, navigateAction('View Topology', 'topologies'));
       await refresh();
       return true;
     } catch (err) {
@@ -73,7 +74,7 @@ export function usePortAssignments(deviceId: number | undefined): UsePortAssignm
     if (!deviceId) return false;
     try {
       await getServices().portAssignments.bulkSet(deviceId, reqs);
-      addNotification('success', `Port assignments updated`);
+      addNotification('success', `Port assignments updated`, navigateAction('View Topology', 'topologies'));
       await refresh();
       return true;
     } catch (err) {

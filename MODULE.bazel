@@ -14,7 +14,7 @@
 #   bazel sync --only=npm_frontend
 
 module(
-    name = "ztp_app",
+    name = "forge_config",
     version = "0.1.0",
 )
 
@@ -59,7 +59,7 @@ use_repo(crate, "crates")
 # ============================================================
 
 bazel_dep(name = "aspect_rules_js", version = "2.9.2")
-bazel_dep(name = "aspect_rules_ts", version = "3.8.5")
+bazel_dep(name = "aspect_rules_ts", version = "3.8.4")
 
 # Node.js toolchain — pinned to match current Dockerfile (node:20-alpine)
 node = use_extension("@aspect_rules_js//js:extensions.bzl", "node")

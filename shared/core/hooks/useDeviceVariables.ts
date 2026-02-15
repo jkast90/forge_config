@@ -12,6 +12,7 @@ import {
 } from '../store/slices/deviceVariablesSlice';
 import { getServices } from '../services';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseDeviceVariablesOptions {
@@ -77,7 +78,7 @@ export function useDeviceVariables(options: UseDeviceVariablesOptions = {}): Use
     try {
       const entries = deviceIds.map(device_id => ({ device_id, key, value: defaultValue }));
       await dispatch(bulkSetThunk(entries)).unwrap();
-      addNotification('success', `Added key "${key}" to ${deviceIds.length} device(s)`);
+      addNotification('success', `Added key "${key}" to ${deviceIds.length} device(s)`, navigateAction('View Variables', 'config', 'variables'));
       await dispatch(fetchKeys());
       return true;
     } catch (err) {
@@ -89,7 +90,7 @@ export function useDeviceVariables(options: UseDeviceVariablesOptions = {}): Use
   const deleteKeyAction = useCallback(async (key: string): Promise<boolean> => {
     try {
       await dispatch(deleteKeyThunk(key)).unwrap();
-      addNotification('success', `Deleted key "${key}" from all devices`);
+      addNotification('success', `Deleted key "${key}" from all devices`, navigateAction('View Variables', 'config', 'variables'));
       dispatch(fetchKeys());
       return true;
     } catch (err) {
@@ -115,7 +116,7 @@ export function useDeviceVariables(options: UseDeviceVariablesOptions = {}): Use
   const deleteVariable = useCallback(async (deviceId: number, key: string): Promise<boolean> => {
     try {
       await getServices().deviceVariables.deleteVariable(deviceId, key);
-      addNotification('success', 'Variable deleted');
+      addNotification('success', 'Variable deleted', navigateAction('View Variables', 'config', 'variables'));
       if (selectedKey === key) {
         dispatch(fetchByKey(key));
       }
@@ -130,7 +131,7 @@ export function useDeviceVariables(options: UseDeviceVariablesOptions = {}): Use
   const bulkSet = useCallback(async (entries: { device_id: number; key: string; value: string }[]): Promise<boolean> => {
     try {
       await dispatch(bulkSetThunk(entries)).unwrap();
-      addNotification('success', `Updated ${entries.length} variable(s)`);
+      addNotification('success', `Updated ${entries.length} variable(s)`, navigateAction('View Variables', 'config', 'variables'));
       dispatch(fetchKeys());
       if (selectedKey) {
         dispatch(fetchByKey(selectedKey));

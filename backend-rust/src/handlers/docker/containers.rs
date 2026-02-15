@@ -23,7 +23,7 @@ pub async fn list_containers(
 
     // Filter containers by label
     let mut filters = HashMap::new();
-    filters.insert("label", vec!["ztp-test-client=true"]);
+    filters.insert("label", vec!["fc-test-client=true"]);
 
     let options = bollard::container::ListContainersOptions {
         all: true,
@@ -156,13 +156,13 @@ pub async fn spawn_container(
         req.hostname
     };
     let container_name = if ceos {
-        format!("ztp-ceos-{}", timestamp)
+        format!("fc-ceos-{}", timestamp)
     } else if frr {
-        format!("ztp-frr-{}", timestamp)
+        format!("fc-frr-{}", timestamp)
     } else if gobgp {
-        format!("ztp-gobgp-{}", timestamp)
+        format!("fc-gobgp-{}", timestamp)
     } else {
-        format!("ztp-test-{}", timestamp)
+        format!("fc-test-{}", timestamp)
     };
 
     // Build environment
@@ -220,13 +220,13 @@ pub async fn spawn_container(
     }
 
     let mut labels = HashMap::new();
-    labels.insert("ztp-test-client".to_string(), "true".to_string());
+    labels.insert("fc-test-client".to_string(), "true".to_string());
     if ceos {
-        labels.insert("ztp-ceos".to_string(), "true".to_string());
+        labels.insert("fc-ceos".to_string(), "true".to_string());
     } else if frr {
-        labels.insert("ztp-frr".to_string(), "true".to_string());
+        labels.insert("fc-frr".to_string(), "true".to_string());
     } else if gobgp {
-        labels.insert("ztp-gobgp".to_string(), "true".to_string());
+        labels.insert("fc-gobgp".to_string(), "true".to_string());
     }
 
     // Build endpoint settings

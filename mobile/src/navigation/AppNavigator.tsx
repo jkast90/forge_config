@@ -398,11 +398,21 @@ export function AppNavigator() {
         }}
       >
         {!isAuthenticated ? (
-          <Stack.Screen
-            name="Login"
-            component={LoginScreen}
-            options={{ headerShown: false }}
-          />
+          <>
+            <Stack.Screen
+              name="Login"
+              component={LoginScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="Scanner"
+              component={ScannerScreen}
+              options={{
+                title: 'Scan QR Code',
+                presentation: 'modal',
+              }}
+            />
+          </>
         ) : (
           <>
             <Stack.Screen

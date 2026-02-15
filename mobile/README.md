@@ -1,6 +1,6 @@
-# ZTP Server Mobile App
+# ForgeConfig Mobile App
 
-React Native mobile app for managing ZTP Server devices with barcode scanning support.
+React Native mobile app for managing ForgeConfig devices with barcode scanning support.
 
 ## Features
 
@@ -24,7 +24,7 @@ React Native mobile app for managing ZTP Server devices with barcode scanning su
 
 2. **Node.js 18+** on your computer
 
-3. **ZTP Server running** (see main README)
+3. **ForgeConfig Server running** (see main README)
 
 ### Setup
 

@@ -9,6 +9,7 @@ import {
   reloadConfig as reloadConfigThunk,
 } from '../store/slices/settingsSlice';
 import { addNotification } from '../services/notifications';
+import { dialogAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseSettingsReturn {
@@ -41,7 +42,7 @@ export function useSettings(): UseSettingsReturn {
   const save = useCallback(async (newSettings: Settings): Promise<boolean> => {
     try {
       await dispatch(saveSettingsThunk(newSettings)).unwrap();
-      addNotification('success', 'Settings saved successfully');
+      addNotification('success', 'Settings saved successfully', dialogAction('View Settings', 'settings'));
       return true;
     } catch (err) {
       addNotification('error', `Failed to save settings: ${getErrorMessage(err)}`);
@@ -52,7 +53,7 @@ export function useSettings(): UseSettingsReturn {
   const reloadConfig = useCallback(async (): Promise<boolean> => {
     try {
       await dispatch(reloadConfigThunk()).unwrap();
-      addNotification('success', 'Configuration reloaded');
+      addNotification('success', 'Configuration reloaded', dialogAction('View Settings', 'settings'));
       return true;
     } catch (err) {
       addNotification('error', `Failed to reload: ${getErrorMessage(err)}`);

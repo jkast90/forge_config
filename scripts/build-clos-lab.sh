@@ -14,7 +14,7 @@ set -euo pipefail
 
 API_URL="${API_URL:-http://localhost:8080}"
 IMAGE="${CEOS_IMAGE:-ceosimage:latest}"
-MGMT_NETWORK="${MGMT_NETWORK:-ztp-app_ztp-net}"
+MGMT_NETWORK="${MGMT_NETWORK:-forge-config_fc-net}"
 TOPOLOGY_ID="dc1-fabric"
 TOPOLOGY_NAME="DC1 Fabric"
 
@@ -161,9 +161,9 @@ for i in "${!CONTAINERS[@]}"; do
     --network "$MGMT_NETWORK" \
     --mac-address "$mac" \
     --device /dev/net/tun:/dev/net/tun \
-    --label "ztp-test-client=true" \
-    --label "ztp-ceos=true" \
-    --label "ztp-clos=$TOPOLOGY_ID" \
+    --label "fc-test-client=true" \
+    --label "fc-ceos=true" \
+    --label "fc-clos=$TOPOLOGY_ID" \
     -e "CEOS=1" \
     -e "container=docker" \
     -e "INTFTYPE=eth" \

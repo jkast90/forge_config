@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Canonical job status values
+#[allow(dead_code)]
 pub mod job_status {
     pub const QUEUED: &str = "queued";
     pub const RUNNING: &str = "running";
@@ -13,6 +14,7 @@ pub mod job_status {
 pub mod job_type {
     pub const COMMAND: &str = "command";
     pub const DEPLOY: &str = "deploy";
+    pub const DIFF: &str = "diff";
     pub const WEBHOOK: &str = "webhook";
     pub const APPLY_TEMPLATE: &str = "apply_template";
 }
@@ -58,12 +60,12 @@ fn default_true() -> bool {
 /// JobTemplate represents a saved, reusable job configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobTemplate {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     pub description: String,
     pub job_type: String,
     pub command: String,
-    pub action_id: String,
+    pub action_id: i64,
     pub target_mode: String,
     pub target_device_ids: Vec<i64>,
     #[serde(default)]
@@ -75,7 +77,7 @@ pub struct JobTemplate {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
-    pub credential_id: String,
+    pub credential_id: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -89,7 +91,7 @@ pub struct CreateJobTemplateRequest {
     #[serde(default)]
     pub command: String,
     #[serde(default)]
-    pub action_id: String,
+    pub action_id: i64,
     #[serde(default)]
     pub target_mode: String,
     #[serde(default)]
@@ -101,7 +103,7 @@ pub struct CreateJobTemplateRequest {
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default)]
-    pub credential_id: String,
+    pub credential_id: i64,
 }
 
 // ========== Credential Models ==========
@@ -112,7 +114,7 @@ fn default_ssh() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Credential {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -125,7 +127,6 @@ pub struct Credential {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateCredentialRequest {
-    pub id: String,
     pub name: String,
     #[serde(default)]
     pub description: String,

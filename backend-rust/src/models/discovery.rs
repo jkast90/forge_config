@@ -5,8 +5,6 @@ use serde::{Deserialize, Serialize};
 pub mod discovery_event {
     pub const DISCOVERED: &str = "discovered";
     pub const LEASE_RENEWED: &str = "lease_renewed";
-    pub const ADDED: &str = "added";
-    pub const LEASE_EXPIRED: &str = "lease_expired";
 }
 
 /// Lease represents a DHCP lease from dnsmasq, enriched with DHCP request metadata

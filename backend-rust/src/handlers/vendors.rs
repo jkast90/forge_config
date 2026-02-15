@@ -32,11 +32,11 @@ pub async fn get_default_vendors(
 pub async fn get_vendor(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Vendor>, ApiError> {
     let vendor = state
         .store
-        .get_vendor(&id)
+        .get_vendor(id)
         .await?
         .ok_or_else(|| ApiError::not_found("vendor"))?;
     Ok(Json(vendor))
@@ -48,13 +48,8 @@ pub async fn create_vendor(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateVendorRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Vendor>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() {
-        return Err(ApiError::bad_request("id and name are required"));
-    }
-
-    // Check for duplicate
-    if state.store.get_vendor(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("vendor with this ID already exists"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
 
     let vendor = state.store.create_vendor(&req).await?;
@@ -65,11 +60,10 @@ pub async fn create_vendor(
 pub async fn update_vendor(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateVendorRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateVendorRequest>,
 ) -> Result<Json<Vendor>, ApiError> {
-    req.id = id.clone();
-    let vendor = state.store.update_vendor(&id, &req).await?;
+    let vendor = state.store.update_vendor(id, &req).await?;
     Ok(Json(vendor))
 }
 
@@ -77,9 +71,9 @@ pub async fn update_vendor(
 pub async fn delete_vendor(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    state.store.delete_vendor(&id).await?;
+    state.store.delete_vendor(id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
@@ -98,9 +92,9 @@ pub async fn list_vendor_actions(
 pub async fn list_vendor_actions_by_vendor(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Vec<VendorAction>>, ApiError> {
-    let actions = state.store.list_vendor_actions_by_vendor(&id).await?;
+    let actions = state.store.list_vendor_actions_by_vendor(id).await?;
     Ok(Json(actions))
 }
 
@@ -110,8 +104,8 @@ pub async fn create_vendor_action(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateVendorActionRequest>,
 ) -> Result<(axum::http::StatusCode, Json<VendorAction>), ApiError> {
-    if req.id.is_empty() || req.vendor_id.is_empty() || req.label.is_empty() {
-        return Err(ApiError::bad_request("id, vendor_id, and label are required"));
+    if req.vendor_id == 0 || req.label.is_empty() {
+        return Err(ApiError::bad_request("vendor_id and label are required"));
     }
     if req.action_type == "webhook" {
         if req.webhook_url.is_empty() {
@@ -128,11 +122,10 @@ pub async fn create_vendor_action(
 pub async fn update_vendor_action(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateVendorActionRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateVendorActionRequest>,
 ) -> Result<Json<VendorAction>, ApiError> {
-    req.id = id.clone();
-    let action = state.store.update_vendor_action(&id, &req).await?;
+    let action = state.store.update_vendor_action(id, &req).await?;
     Ok(Json(action))
 }
 
@@ -140,9 +133,9 @@ pub async fn update_vendor_action(
 pub async fn delete_vendor_action(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_vendor_action(&id).await?;
+    state.store.delete_vendor_action(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -150,9 +143,9 @@ pub async fn delete_vendor_action(
 pub async fn run_vendor_action(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<(StatusCode, Json<Job>), ApiError> {
-    let action = state.store.get_vendor_action(&id).await
+    let action = state.store.get_vendor_action(id).await
         .map_err(|e| ApiError::internal(e.to_string()))?
         .ok_or_else(|| ApiError::not_found("vendor action"))?;
 
@@ -164,7 +157,7 @@ pub async fn run_vendor_action(
     let req = CreateJobRequest {
         device_id: 0,
         job_type: job_type::WEBHOOK.to_string(),
-        command: action.id.clone(),
+        command: action.id.to_string(),
         credential_id: String::new(),
     };
 

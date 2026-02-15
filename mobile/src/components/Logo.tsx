@@ -6,7 +6,7 @@ interface LogoIconProps {
   color?: string;
 }
 
-// Lightning bolt icon for ZTP Manager
+// Lightning bolt icon for ForgeConfig
 export function LogoIcon({ size = 24, color = '#4a9eff' }: LogoIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -22,7 +22,7 @@ interface LogoFullProps {
   height?: number;
 }
 
-// Full logo with lightning bolt icon and "ZTP Manager" text
+// Full logo with lightning bolt icon and "ForgeConfig" text
 export function LogoFull({ height = 24 }: LogoFullProps) {
   const iconSize = height;
   const fontSize = height * 0.7;
@@ -30,7 +30,7 @@ export function LogoFull({ height = 24 }: LogoFullProps) {
   return (
     <View style={styles.container}>
       <LogoIcon size={iconSize} />
-      <Text style={[styles.text, { fontSize }]}>ZTP Manager</Text>
+      <Text style={[styles.text, { fontSize }]}>ForgeConfig</Text>
     </View>
   );
 }

@@ -21,7 +21,7 @@ impl Config {
     /// Load configuration from environment variables with defaults
     pub fn load() -> Self {
         Self {
-            db_path: get_env("DB_PATH", "/data/ztp.db"),
+            db_path: get_env("DB_PATH", "/data/forge-config.db"),
             db_max_connections: get_env("DB_MAX_CONNECTIONS", "5")
                 .parse()
                 .unwrap_or(5),

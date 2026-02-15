@@ -1,6 +1,6 @@
 // Navigation type definitions
 
-export type ScanField = 'serial_number' | 'mac' | 'model';
+export type ScanField = 'serial_number' | 'mac' | 'model' | 'url';
 
 // Bottom tab navigator params
 export type TabParamList = {
@@ -30,7 +30,7 @@ export type ConfigStackParamList = {
 
 // Stack navigator params (screens within tabs and modals)
 export type RootStackParamList = {
-  Login: undefined;
+  Login: { scannedUrl?: string } | undefined;
   Main: undefined;
   DeviceForm: {
     mac?: string;
@@ -43,7 +43,7 @@ export type RootStackParamList = {
     editMode?: boolean; // true = edit existing device, false/undefined = add new device
   } | undefined;
   Settings: undefined;
-  Scanner: { returnTo: 'DeviceForm'; mac?: string; field: ScanField };
+  Scanner: { returnTo: 'DeviceForm' | 'Login'; mac?: string; field: ScanField };
   Templatizer: {
     onComplete?: (templateContent: string) => void;
   } | undefined;

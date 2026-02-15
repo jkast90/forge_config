@@ -11,6 +11,7 @@ import {
   deleteDhcpOption as deleteDhcpOptionThunk,
 } from '../store/slices/dhcpOptionsSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseDhcpOptionsOptions {
@@ -62,7 +63,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
   const createOption = useCallback(async (data: Partial<DhcpOption>): Promise<boolean> => {
     try {
       await dispatch(createDhcpOptionThunk(data)).unwrap();
-      addNotification('success', 'DHCP option added successfully');
+      addNotification('success', 'DHCP option added successfully', navigateAction('View DHCP', 'vendors-models', 'dhcp'));
       dispatch(fetchDhcpOptions());
       return true;
     } catch (err) {
@@ -74,7 +75,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
   const updateOption = useCallback(async (id: string, data: Partial<DhcpOption>): Promise<boolean> => {
     try {
       await dispatch(updateDhcpOptionThunk({ id, data })).unwrap();
-      addNotification('success', 'DHCP option updated successfully');
+      addNotification('success', 'DHCP option updated successfully', navigateAction('View DHCP', 'vendors-models', 'dhcp'));
       dispatch(fetchDhcpOptions());
       return true;
     } catch (err) {
@@ -86,7 +87,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
   const deleteOption = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteDhcpOptionThunk(id)).unwrap();
-      addNotification('success', 'DHCP option deleted successfully');
+      addNotification('success', 'DHCP option deleted successfully', navigateAction('View DHCP', 'vendors-models', 'dhcp'));
       dispatch(fetchDhcpOptions());
       return true;
     } catch (err) {
@@ -111,7 +112,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
       }
 
       dispatch(fetchDhcpOptions());
-      addNotification('success', 'DHCP options reset to defaults');
+      addNotification('success', 'DHCP options reset to defaults', navigateAction('View DHCP', 'vendors-models', 'dhcp'));
       return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to reset DHCP options';

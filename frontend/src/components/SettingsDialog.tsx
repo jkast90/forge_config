@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useSettings, useLocalSettings, useLocalAddresses, configureServices, createChangeHandler, clearTablePageSizeOverrides, getServices, addNotification } from '@core';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSettings, useLocalSettings, useLocalAddresses, configureServices, createChangeHandler, clearTablePageSizeOverrides } from '@core';
 import type { Settings, NetworkInterface } from '@core';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
@@ -8,7 +8,6 @@ import { SelectField } from './SelectField';
 import { ValidatedInput } from './ValidatedInput';
 import { validators } from '@core';
 import { Icon } from './Icon';
-import { IconButton } from './IconButton';
 import QRCode from 'qrcode';
 
 function QrButton({ url }: { url: string }) {
@@ -53,16 +52,12 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
   const { addresses, loading: addressesLoading, refresh: refreshAddresses } = useLocalAddresses();
   const [formData, setFormData] = useState<Settings | null>(null);
   const [localFormData, setLocalFormData] = useState({ apiUrl: '', defaultPageSize: 25 });
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const logoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       load();
       refreshAddresses();
       setLocalFormData({ apiUrl: localSettings.apiUrl, defaultPageSize: localSettings.defaultPageSize });
-      setLogoPreview(null);
     }
   }, [isOpen, load, refreshAddresses, localSettings.apiUrl]);
 
@@ -79,47 +74,6 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
   const handleLocalChange = useMemo(() => createChangeHandler<{ apiUrl: string; defaultPageSize: number }>(
     (name, value) => setLocalFormData(prev => ({ ...prev, [name]: value }))
   ), []);
-
-  const handleLogoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Show preview immediately
-    const reader = new FileReader();
-    reader.onload = (ev) => setLogoPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-
-    // Upload
-    setUploadingLogo(true);
-    try {
-      const services = getServices();
-      await services.settings.uploadLogo(file);
-      addNotification('success', 'Logo uploaded');
-      // Reload settings to get updated logo_url
-      await load();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      addNotification('error', `Logo upload failed: ${msg}`);
-      setLogoPreview(null);
-    } finally {
-      setUploadingLogo(false);
-      // Reset input so same file can be re-selected
-      if (logoInputRef.current) logoInputRef.current.value = '';
-    }
-  };
-
-  const handleRemoveLogo = async () => {
-    try {
-      const services = getServices();
-      await services.settings.deleteLogo();
-      addNotification('success', 'Logo removed');
-      setLogoPreview(null);
-      await load();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      addNotification('error', `Failed to remove logo: ${msg}`);
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,9 +99,6 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
     }
   };
 
-  // Resolve what logo to show in the preview
-  const currentLogoSrc = logoPreview || formData?.logo_url || null;
-
   return (
     <FormDialog
       isOpen={isOpen}
@@ -164,65 +115,6 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
         <p>Failed to load settings</p>
       ) : (
         <>
-          <div className="settings-section">
-            <h3>
-              <Icon name="palette" size={18} />
-              Branding
-            </h3>
-            <div className="form-row">
-              <FormField
-                label="Application Name"
-                name="app_name"
-                type="text"
-                value={formData.app_name || ''}
-                onChange={handleChange}
-                placeholder="ZTP Manager"
-              />
-            </div>
-            <div className="branding-logo-row">
-              <div className="branding-logo-preview">
-                {currentLogoSrc ? (
-                  <img src={currentLogoSrc} alt="Logo preview" className="branding-logo-img" />
-                ) : (
-                  <div className="branding-logo-placeholder">
-                    <Icon name="image" size={32} />
-                  </div>
-                )}
-              </div>
-              <div className="branding-logo-actions">
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml"
-                  onChange={handleLogoSelect}
-                  style={{ display: 'none' }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => logoInputRef.current?.click()}
-                  disabled={uploadingLogo}
-                >
-                  <Icon name="upload" size={14} />
-                  {uploadingLogo ? 'Uploading...' : 'Upload Logo'}
-                </button>
-                {formData.logo_url && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={handleRemoveLogo}
-                  >
-                    <Icon name="delete" size={14} />
-                    Remove
-                  </button>
-                )}
-              </div>
-            </div>
-            <p className="settings-hint">
-              Customize the application name and logo shown in the header and login page. PNG, JPG, GIF, WebP, or SVG under 2MB.
-            </p>
-          </div>
-
           <div className="settings-section">
             <h3>
               <Icon name="cloud" size={18} />

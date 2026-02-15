@@ -11,6 +11,7 @@ import {
   deleteVendor as deleteVendorThunk,
 } from '../store/slices/vendorsSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseVendorsOptions {
@@ -53,7 +54,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
   const createVendor = useCallback(async (data: Partial<Vendor>): Promise<boolean> => {
     try {
       await dispatch(createVendorThunk(data)).unwrap();
-      addNotification('success', 'Vendor added successfully');
+      addNotification('success', 'Vendor added successfully', navigateAction('View Vendors', 'vendors-models', 'vendors'));
       dispatch(fetchVendors());
       return true;
     } catch (err) {
@@ -65,7 +66,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
   const updateVendor = useCallback(async (id: string, data: Partial<Vendor>): Promise<boolean> => {
     try {
       await dispatch(updateVendorThunk({ id, data })).unwrap();
-      addNotification('success', 'Vendor updated successfully');
+      addNotification('success', 'Vendor updated successfully', navigateAction('View Vendors', 'vendors-models', 'vendors'));
       dispatch(fetchVendors());
       return true;
     } catch (err) {
@@ -77,7 +78,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
   const deleteVendor = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteVendorThunk(id)).unwrap();
-      addNotification('success', 'Vendor deleted successfully');
+      addNotification('success', 'Vendor deleted successfully', navigateAction('View Vendors', 'vendors-models', 'vendors'));
       dispatch(fetchVendors());
       return true;
     } catch (err) {
@@ -106,7 +107,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
       }
 
       dispatch(fetchVendors());
-      addNotification('success', 'Vendors reset to defaults');
+      addNotification('success', 'Vendors reset to defaults', navigateAction('View Vendors', 'vendors-models', 'vendors'));
       return true;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to reset vendors';

@@ -1,6 +1,6 @@
-# ZTP Server - Rust Backend
+# ForgeConfig Server - Rust Backend
 
-A Rust implementation of the Zero Touch Provisioning (ZTP) server backend.
+A Rust implementation of the Network Device Provisioning server backend.
 
 ## Overview
 
@@ -67,7 +67,7 @@ docker-compose -f docker-compose.rust.yml up --build
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DB_PATH` | `/data/ztp.db` | SQLite database path |
+| `DB_PATH` | `/data/forge-config.db` | SQLite database path |
 | `DNSMASQ_CONFIG` | `/dnsmasq/dnsmasq.conf` | dnsmasq config file path |
 | `TFTP_DIR` | `/tftp` | TFTP root directory |
 | `TEMPLATES_DIR` | `/configs/templates` | Config templates directory |
@@ -122,4 +122,4 @@ Key dependencies:
 
 ## License
 
-Same as the main ZTP Server project.
+Same as the main ForgeConfig project.

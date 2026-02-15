@@ -11,7 +11,7 @@ impl Store {
         ipam::IpamRegionRepo::list(&self.pool).await
     }
 
-    pub async fn get_ipam_region(&self, id: &str) -> Result<Option<IpamRegion>> {
+    pub async fn get_ipam_region(&self, id: i64) -> Result<Option<IpamRegion>> {
         ipam::IpamRegionRepo::get(&self.pool, id).await
     }
 
@@ -19,11 +19,11 @@ impl Store {
         ipam::IpamRegionRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_region(&self, id: &str, req: &CreateIpamRegionRequest) -> Result<IpamRegion> {
+    pub async fn update_ipam_region(&self, id: i64, req: &CreateIpamRegionRequest) -> Result<IpamRegion> {
         ipam::IpamRegionRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_region(&self, id: &str) -> Result<()> {
+    pub async fn delete_ipam_region(&self, id: i64) -> Result<()> {
         ipam::IpamRegionRepo::delete(&self.pool, id).await
     }
 
@@ -33,7 +33,7 @@ impl Store {
         ipam::IpamCampusRepo::list(&self.pool).await
     }
 
-    pub async fn get_ipam_campus(&self, id: &str) -> Result<Option<IpamCampus>> {
+    pub async fn get_ipam_campus(&self, id: i64) -> Result<Option<IpamCampus>> {
         ipam::IpamCampusRepo::get(&self.pool, id).await
     }
 
@@ -41,11 +41,11 @@ impl Store {
         ipam::IpamCampusRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_campus(&self, id: &str, req: &CreateIpamCampusRequest) -> Result<IpamCampus> {
+    pub async fn update_ipam_campus(&self, id: i64, req: &CreateIpamCampusRequest) -> Result<IpamCampus> {
         ipam::IpamCampusRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_campus(&self, id: &str) -> Result<()> {
+    pub async fn delete_ipam_campus(&self, id: i64) -> Result<()> {
         ipam::IpamCampusRepo::delete(&self.pool, id).await
     }
 
@@ -55,7 +55,7 @@ impl Store {
         ipam::IpamDatacenterRepo::list(&self.pool).await
     }
 
-    pub async fn get_ipam_datacenter(&self, id: &str) -> Result<Option<IpamDatacenter>> {
+    pub async fn get_ipam_datacenter(&self, id: i64) -> Result<Option<IpamDatacenter>> {
         ipam::IpamDatacenterRepo::get(&self.pool, id).await
     }
 
@@ -63,11 +63,11 @@ impl Store {
         ipam::IpamDatacenterRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_datacenter(&self, id: &str, req: &CreateIpamDatacenterRequest) -> Result<IpamDatacenter> {
+    pub async fn update_ipam_datacenter(&self, id: i64, req: &CreateIpamDatacenterRequest) -> Result<IpamDatacenter> {
         ipam::IpamDatacenterRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_datacenter(&self, id: &str) -> Result<()> {
+    pub async fn delete_ipam_datacenter(&self, id: i64) -> Result<()> {
         ipam::IpamDatacenterRepo::delete(&self.pool, id).await
     }
 
@@ -77,7 +77,7 @@ impl Store {
         ipam::IpamHallRepo::list(&self.pool).await
     }
 
-    pub async fn get_ipam_hall(&self, id: &str) -> Result<Option<IpamHall>> {
+    pub async fn get_ipam_hall(&self, id: i64) -> Result<Option<IpamHall>> {
         ipam::IpamHallRepo::get(&self.pool, id).await
     }
 
@@ -85,11 +85,11 @@ impl Store {
         ipam::IpamHallRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_hall(&self, id: &str, req: &CreateIpamHallRequest) -> Result<IpamHall> {
+    pub async fn update_ipam_hall(&self, id: i64, req: &CreateIpamHallRequest) -> Result<IpamHall> {
         ipam::IpamHallRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_hall(&self, id: &str) -> Result<()> {
+    pub async fn delete_ipam_hall(&self, id: i64) -> Result<()> {
         ipam::IpamHallRepo::delete(&self.pool, id).await
     }
 
@@ -99,7 +99,7 @@ impl Store {
         ipam::IpamRowRepo::list(&self.pool).await
     }
 
-    pub async fn get_ipam_row(&self, id: &str) -> Result<Option<IpamRow>> {
+    pub async fn get_ipam_row(&self, id: i64) -> Result<Option<IpamRow>> {
         ipam::IpamRowRepo::get(&self.pool, id).await
     }
 
@@ -107,11 +107,11 @@ impl Store {
         ipam::IpamRowRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_row(&self, id: &str, req: &CreateIpamRowRequest) -> Result<IpamRow> {
+    pub async fn update_ipam_row(&self, id: i64, req: &CreateIpamRowRequest) -> Result<IpamRow> {
         ipam::IpamRowRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_row(&self, id: &str) -> Result<()> {
+    pub async fn delete_ipam_row(&self, id: i64) -> Result<()> {
         ipam::IpamRowRepo::delete(&self.pool, id).await
     }
 
@@ -121,7 +121,7 @@ impl Store {
         ipam::IpamRackRepo::list(&self.pool).await
     }
 
-    pub async fn get_ipam_rack(&self, id: &str) -> Result<Option<IpamRack>> {
+    pub async fn get_ipam_rack(&self, id: i64) -> Result<Option<IpamRack>> {
         ipam::IpamRackRepo::get(&self.pool, id).await
     }
 
@@ -129,11 +129,11 @@ impl Store {
         ipam::IpamRackRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_rack(&self, id: &str, req: &CreateIpamRackRequest) -> Result<IpamRack> {
+    pub async fn update_ipam_rack(&self, id: i64, req: &CreateIpamRackRequest) -> Result<IpamRack> {
         ipam::IpamRackRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_rack(&self, id: &str) -> Result<()> {
+    pub async fn delete_ipam_rack(&self, id: i64) -> Result<()> {
         ipam::IpamRackRepo::delete(&self.pool, id).await
     }
 
@@ -143,11 +143,15 @@ impl Store {
         ipam::IpamRoleRepo::list(&self.pool).await
     }
 
+    pub async fn find_ipam_role_by_name(&self, name: &str) -> Result<Option<IpamRole>> {
+        ipam::IpamRoleRepo::find_by_name(&self.pool, name).await
+    }
+
     pub async fn create_ipam_role(&self, req: &CreateIpamRoleRequest) -> Result<IpamRole> {
         ipam::IpamRoleRepo::create(&self.pool, req).await
     }
 
-    pub async fn delete_ipam_role(&self, id: &str) -> Result<()> {
+    pub async fn delete_ipam_role(&self, id: i64) -> Result<()> {
         ipam::IpamRoleRepo::delete(&self.pool, id).await
     }
 
@@ -165,7 +169,7 @@ impl Store {
         ipam::IpamPrefixRepo::get(&self.pool, id).await
     }
 
-    pub async fn find_ipam_prefix_by_cidr(&self, cidr: &str, vrf_id: Option<&str>) -> Result<Option<IpamPrefix>> {
+    pub async fn find_ipam_prefix_by_cidr(&self, cidr: &str, vrf_id: Option<i64>) -> Result<Option<IpamPrefix>> {
         ipam::IpamPrefixRepo::find_by_cidr(&self.pool, cidr, vrf_id).await
     }
 
@@ -195,7 +199,7 @@ impl Store {
         ipam::IpamIpAddressRepo::list_by_prefix(&self.pool, prefix_id).await
     }
 
-    pub async fn get_ipam_ip_address(&self, id: &str) -> Result<Option<IpamIpAddress>> {
+    pub async fn get_ipam_ip_address(&self, id: i64) -> Result<Option<IpamIpAddress>> {
         ipam::IpamIpAddressRepo::get(&self.pool, id).await
     }
 
@@ -203,11 +207,11 @@ impl Store {
         ipam::IpamIpAddressRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_ipam_ip_address(&self, id: &str, req: &CreateIpamIpAddressRequest) -> Result<IpamIpAddress> {
+    pub async fn update_ipam_ip_address(&self, id: i64, req: &CreateIpamIpAddressRequest) -> Result<IpamIpAddress> {
         ipam::IpamIpAddressRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_ipam_ip_address(&self, id: &str) -> Result<()> {
+    pub async fn delete_ipam_ip_address(&self, id: i64) -> Result<()> {
         ipam::IpamIpAddressRepo::delete(&self.pool, id).await
     }
 
@@ -243,7 +247,7 @@ impl Store {
         ipam::IpamVrfRepo::create(&self.pool, req).await
     }
 
-    pub async fn delete_ipam_vrf(&self, id: &str) -> Result<()> {
+    pub async fn delete_ipam_vrf(&self, id: i64) -> Result<()> {
         ipam::IpamVrfRepo::delete(&self.pool, id).await
     }
 }

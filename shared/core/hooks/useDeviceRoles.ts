@@ -8,6 +8,7 @@ import {
   deleteDeviceRole as deleteDeviceRoleThunk,
 } from '../store/slices/deviceRolesSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseDeviceRolesReturn {
@@ -36,7 +37,7 @@ export function useDeviceRoles(): UseDeviceRolesReturn {
     try {
       const payload = data.id ? data : { ...data, id: String(Date.now()) };
       await dispatch(createDeviceRoleThunk(payload)).unwrap();
-      addNotification('success', 'Device role created');
+      addNotification('success', 'Device role created', navigateAction('View Roles', 'config', 'roles'));
       dispatch(fetchDeviceRoles());
       return true;
     } catch (err) {
@@ -48,7 +49,7 @@ export function useDeviceRoles(): UseDeviceRolesReturn {
   const updateDeviceRole = useCallback(async (id: string, data: DeviceRoleFormData): Promise<boolean> => {
     try {
       await dispatch(updateDeviceRoleThunk({ id, data })).unwrap();
-      addNotification('success', 'Device role updated');
+      addNotification('success', 'Device role updated', navigateAction('View Roles', 'config', 'roles'));
       dispatch(fetchDeviceRoles());
       return true;
     } catch (err) {
@@ -60,7 +61,7 @@ export function useDeviceRoles(): UseDeviceRolesReturn {
   const deleteDeviceRole = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteDeviceRoleThunk(id)).unwrap();
-      addNotification('success', 'Device role deleted');
+      addNotification('success', 'Device role deleted', navigateAction('View Roles', 'config', 'roles'));
       dispatch(fetchDeviceRoles());
       return true;
     } catch (err) {

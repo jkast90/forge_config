@@ -1,10 +1,10 @@
-# ZTP Server
+# ForgeConfig
 
-A containerized Zero Touch Provisioning server for network devices with web and mobile management interfaces.
+A containerized Network Device Provisioning server for network devices with web and mobile management interfaces.
 
 ## Overview
 
-ZTP Server automates the provisioning of network devices by:
+ForgeConfig automates the provisioning of network devices by:
 - Assigning IP addresses via DHCP based on MAC address
 - Serving device-specific configurations via TFTP or HTTP
 - Automatically backing up device configs after provisioning
@@ -15,26 +15,41 @@ ZTP Server automates the provisioning of network devices by:
 - **DHCP Server** - Static IP assignment based on MAC address using dnsmasq, with configurable DHCP options per vendor
 - **TFTP / HTTP Config Server** - Serves templated configuration files to network devices via TFTP or HTTP
 - **Config Backup** - Automatically SSHs into devices after provisioning to backup running configs
+- **Config Deploy** - Push configs to devices over SSH, with preview and diff support
+- **Remote Execution** - Run ad-hoc commands on devices via SSH
 - **Web UI** - React-based interface for managing devices, templates, vendors, groups, IPAM, and more
 - **Mobile App** - React Native (Expo) app with barcode scanner for easy device onboarding
-- **REST API** - Full API for automation and integration
+- **REST API** - Full API with 200+ endpoints for automation and integration
 - **Vendor Management** - Define vendor profiles with MAC prefixes, default templates, SSH settings, custom DHCP options, and quick actions
 - **Device Variables** - Per-device and per-group key-value variables for template rendering (Ansible-style inheritance)
 - **Groups** - Hierarchical device groups with variable inheritance and precedence
-- **IPAM** - IP Address Management with regions, locations, datacenters, prefixes, IP addresses, roles, and tags
-- **Topologies** - CLOS fabric topology management with super-spine/spine/leaf roles
+- **IPAM** - IP Address Management with regions, campuses, datacenters, halls, rows, racks, prefixes, IP addresses, VRFs, roles, and tags
+- **Topologies** - CLOS fabric topology management with super-spine/spine/leaf roles and visual diagrams
 - **DHCP Options** - Configurable DHCP options (Option 43, 60, 66, 67, 125, 150, etc.) with per-vendor scoping
 - **Device Discovery** - Automatic detection of new devices via DHCP lease monitoring with rich metadata capture (vendor class, circuit ID, relay info)
-- **Config Deploy** - Push configs to devices over SSH, with preview and diff support
-- **Remote Execution** - Run ad-hoc commands on devices via SSH
-- **Docker Lab** - Spawn and manage test containers from the UI, including automated CLOS lab builds
+- **Docker Lab** - Spawn and manage test containers from the UI, including automated CLOS lab builds with FRR routing
+- **Virtual CLOS Builder** - Create CLOS fabric device topologies with IPAM integration (without Docker containers)
+- **Device Models** - Hardware model definitions with port layouts and chassis visualization
+- **Device Roles** - Role-based template assignment with multiple templates per role
+- **Port Assignments** - Per-port configuration with VLAN assignments and descriptions
+- **Credentials** - Reusable SSH and API key credential storage
+- **Job System** - Async job queue for command execution, config deploys, and webhooks with real-time WebSocket updates
+- **Job Templates** - Reusable job definitions with cron scheduling and group targeting
+- **Vendor Actions** - Per-vendor SSH commands and webhook integrations with variable substitution
+- **Output Parsers** - Regex-based extraction of structured data from command output
 - **NetBox Integration** - Bidirectional sync of devices and vendors with NetBox
 - **Templatizer** - Convert raw device configs into reusable Tera templates
-- **Jobs** - Async job queue for long-running operations (command execution, config deploys)
+- **Hostname Patterns** - Configurable hostname auto-generation with `$datacenter`, `$role`, and `#` variables
 - **WebSocket** - Real-time event streaming for discovery, status changes, and job progress
-- **JWT Authentication** - Secure API access with token-based auth
-- **Themes** - 14 built-in themes including dark, light, solarized, dracula, nord, and more
+- **JWT Authentication** - Secure API access with token-based auth and user management
+- **Themes** - 14 built-in themes including dark, light, solarized, dracula, nord, evergreen, ocean, nautical, and high-contrast variants
+- **Branding** - Custom application name and logo
 - **OpenGear Support** - Built-in support for OpenGear Lighthouse ZTP enrollment
+- **Notifications** - In-app notification center with history and action links
+- **ScratchPad** - Persistent notes accessible from the header
+- **API History** - Request/response logging for debugging
+- **Telemetry** - Feature usage analytics and page navigation tracking
+- **Help Tour** - Interactive guided tour of the application
 
 ## Quick Start
 
@@ -48,7 +63,7 @@ ZTP Server automates the provisioning of network devices by:
 
 ```bash
 git clone <repo-url>
-cd ztp-app
+cd forge-config
 docker compose up
 
 # Verify it's running
@@ -61,27 +76,146 @@ Open http://localhost:5174 in your browser (Vite dev server proxies to the Rust 
 
 ### 3. Configure Settings
 
-1. Click the **Settings** icon (gear) in the header
+1. Click the **Settings** icon (gear) in the footer
 2. Set your default SSH credentials for device backup
 3. Configure DHCP range and gateway settings
 4. (Optional) Configure OpenGear Lighthouse enrollment
+5. (Optional) Set a custom hostname pattern
 
 ### 4. Add Your First Device
 
-1. Click **Add Device**
-2. Enter the device's MAC address, desired IP, and hostname
-3. Select a vendor and config template
-4. Click **Add Device**
+1. Navigate to the **Devices** page
+2. Click **Add Device**
+3. Enter the device's MAC address, desired IP, and hostname
+4. Select a vendor and config template
+5. Click **Add Device**
 
 The device will receive its IP and config on next boot.
 
 ---
 
-## Mobile App Setup
+## Web UI Pages & Tabs
 
-The mobile app lets you manage devices from your phone and scan barcodes/QR codes to quickly add device serial numbers.
+The web UI has 10 primary pages, each with tabbed sub-sections:
 
-### Development Setup
+### Dashboard
+Overview of device status (online/offline/provisioning counts), recent devices, pending discoveries, topology and IPAM metrics, recent job statistics, and quick navigation cards.
+
+### Devices
+| Tab | Description |
+|-----|-------------|
+| **Devices** | Device list with CRUD, SSH connectivity testing, config preview/deploy/diff, remote command execution, backup triggering, and expandable row details |
+| **Discovery** | Discovered-but-unprovisioned devices from DHCP lease monitoring with one-click provisioning, vendor identification via MAC OUI, circuit ID, relay info, and vendor class metadata |
+| **Test Containers** | Spawn, start, stop, and restart Docker test host containers for lab testing |
+
+### Configuration
+| Tab | Description |
+|-----|-------------|
+| **Templates** | Tera template editor with syntax highlighting, variable extraction, and preview rendering |
+| **Roles** | Device role definitions that assign one or more templates based on network function |
+| **Groups** | Hierarchical device groups with parent-child relationships, bulk membership, and group-level variables |
+| **Variables** | Per-device key-value variable management with bulk operations |
+| **Inspector** | Resolved variables preview showing final merged values for any device (device + group + "all" group inheritance) |
+| **Credentials** | SSH and API key credential storage for use in jobs and actions |
+
+### Jobs
+| Tab | Description |
+|-----|-------------|
+| **Actions** | Vendor-specific SSH commands and webhook/API integrations with variable substitution and output parsing |
+| **Job History** | Execution logs with real-time WebSocket status updates, output viewing, duration tracking, and re-launch |
+| **Templates** | Reusable job template definitions with device/group targeting and cron scheduling |
+| **Credentials** | Shared credential panel (same as Configuration > Credentials) |
+| **Output Parsers** | Regex-based output extraction with named capture groups for structured result display |
+
+### Topologies
+Topology table with expandable rows showing device assignments by role (super-spine, spine, leaf, external). Features include:
+- Visual topology diagrams
+- CLOS fabric builder (Docker containers with FRR routing)
+- Virtual CLOS builder (device records with IPAM/rack integration, no containers)
+- Per-device config preview, deploy, diff, and command execution
+- Port assignment management with chassis visualization
+- Add/swap/remove devices per role
+
+### IPAM (IP Address Management)
+| Tab | Description |
+|-----|-------------|
+| **Prefixes** | Network prefix hierarchy with supernets, subnets, next-available-prefix/IP allocation |
+| **IP Addresses** | Individual IP address assignments with device association |
+| **VRFs** | Virtual Routing and Forwarding instance management |
+| **Roles** | Prefix and IP address role categorization |
+
+### Locations
+| Tab | Description |
+|-----|-------------|
+| **Regions** | Geographic regions |
+| **Campuses** | Campus-level organization within regions |
+| **Datacenters** | Datacenter facilities within campuses |
+| **Halls** | Datacenter halls within datacenters |
+| **Rows** | Equipment rows within halls |
+| **Racks** | Physical racks with device assignments within rows |
+
+### Vendors & Models
+| Tab | Description |
+|-----|-------------|
+| **Vendors** | Vendor profiles with MAC OUI prefixes, default templates, SSH settings, and quick actions |
+| **DHCP Options** | DHCP option definitions (43, 60, 66, 67, 125, 150, etc.) with per-vendor scoping and sub-option support |
+| **Device Models** | Hardware model definitions with port layouts and chassis preview visualization |
+
+### System
+| Tab | Description |
+|-----|-------------|
+| **Users** | User management (create, edit, enable/disable, delete) |
+| **Branding** | Application name and logo customization |
+| **Device Naming** | Hostname pattern configuration (`$datacenter-$role-#`) with live preview |
+
+### Data Explorer
+Redux store inspector with real-time JSON tree navigation for debugging application state.
+
+### Additional UI Features
+
+- **Settings Dialog** - Global settings for branding, device naming, SSH defaults, DHCP, backup, OpenGear enrollment, network interfaces with QR codes, table row density, and layout
+- **Notification Center** - Notification history with read/unread tracking and action buttons
+- **ScratchPad** - Persistent notes (local storage) accessible from the header
+- **API History** - Request/response debugging with timestamps and performance metrics
+- **Telemetry** - Feature usage analytics viewer
+- **Help Tour** - Interactive guided tour of all application features
+- **Theme Selector** - 14 themes (dark, light, plain, solarized, dracula, nord, evergreen dark/light, ocean dark/light, nautical dark/light, high contrast dark/light)
+
+---
+
+## Mobile App
+
+The mobile app (React Native / Expo) provides full device management on the go.
+
+### Screens
+
+| Screen | Description |
+|--------|-------------|
+| **Dashboard** | Status overview and quick navigation |
+| **Devices Hub** | Device list with search and filtering |
+| **Device Form** | Add/edit devices |
+| **Discovery** | View discovered devices and provision them |
+| **Templates** | Browse and manage config templates |
+| **Templatizer** | Convert raw configs to Tera templates |
+| **Groups** | Group management with membership |
+| **Variables** | Per-device variable management |
+| **Inspector** | Resolved variable preview |
+| **Vendors** | Vendor profile management |
+| **DHCP Options** | DHCP option configuration |
+| **Device Models** | Hardware model browsing |
+| **Actions** | Run vendor actions on devices |
+| **Jobs** | Job history and status |
+| **Credentials** | Credential management |
+| **Topologies** | Topology browsing |
+| **IPAM** | IP address management |
+| **Locations** | Location hierarchy |
+| **Test Containers** | Container management |
+| **Scanner** | Barcode/QR code scanner for device serial numbers |
+| **Settings** | App configuration and API URL |
+| **Data Explorer** | State debugging |
+| **Login** | Authentication |
+
+### Mobile Setup
 
 ```bash
 cd mobile
@@ -89,22 +223,10 @@ npm install
 npm start
 ```
 
-### Configure API Connection
-
-Edit `mobile/src/config.ts` to set your server's IP address:
-
-```typescript
-export const API_BASE_URL = __DEV__
-  ? 'http://192.168.1.100:8080'  // Your computer's local IP
-  : 'http://your-production-server:8080';
-```
-
-### Running on Your Phone
-
 1. Install **Expo Go** from the App Store (iOS) or Play Store (Android)
 2. Make sure your phone is on the same WiFi network as your computer
-3. Run `npm start` in the mobile directory
-4. Scan the QR code with Expo Go (Android) or Camera app (iOS)
+3. Scan the QR code with Expo Go (Android) or Camera app (iOS)
+4. In the web UI Settings, scan the QR code next to your server's network interface to auto-configure the mobile app's API URL
 
 ---
 
@@ -140,27 +262,34 @@ export const API_BASE_URL = __DEV__
 ### Project Structure
 
 ```
-ztp-app/
+forge-config/
 ├── backend-rust/              # Rust API server (Axum)
 │   ├── src/
 │   │   ├── main.rs            # Entry point
-│   │   ├── router.rs          # Route definitions
+│   │   ├── router.rs          # Route definitions (200+ endpoints)
 │   │   ├── auth.rs            # JWT authentication
 │   │   ├── handlers/          # HTTP endpoint handlers
-│   │   │   ├── devices.rs     # Device CRUD + connect/deploy/exec
+│   │   │   ├── devices.rs     # Device CRUD + connect/deploy/diff/exec
 │   │   │   ├── templates.rs   # Template CRUD + preview
-│   │   │   ├── vendors.rs     # Vendor & vendor action CRUD
+│   │   │   ├── vendors.rs     # Vendor, vendor action CRUD + run
 │   │   │   ├── groups.rs      # Groups, members, variables
 │   │   │   ├── device_variables.rs  # Per-device KV variables
-│   │   │   ├── ipam.rs        # IPAM regions/locations/prefixes/IPs
+│   │   │   ├── ipam.rs        # IPAM regions/campuses/datacenters/halls/rows/racks/prefixes/IPs/VRFs/tags
 │   │   │   ├── topologies.rs  # Topology CRUD
 │   │   │   ├── dhcp_options.rs # DHCP option management
 │   │   │   ├── backups.rs     # Backup trigger & listing
 │   │   │   ├── discovery.rs   # Device discovery & logs
-│   │   │   ├── docker.rs      # Container spawn & CLOS lab
+│   │   │   ├── docker/        # Container spawn, CLOS lab, virtual CLOS
 │   │   │   ├── netbox.rs      # NetBox sync endpoints
 │   │   │   ├── jobs.rs        # Async job queue
-│   │   │   ├── settings.rs    # Global settings
+│   │   │   ├── job_templates.rs # Job template CRUD + run
+│   │   │   ├── credentials.rs # Credential CRUD
+│   │   │   ├── device_models.rs # Device model CRUD
+│   │   │   ├── device_roles.rs # Device role CRUD
+│   │   │   ├── output_parsers.rs # Output parser CRUD
+│   │   │   ├── port_assignments.rs # Port assignment CRUD
+│   │   │   ├── users.rs       # User management
+│   │   │   ├── settings.rs    # Global settings + branding + logo
 │   │   │   ├── configs.rs     # HTTP config server
 │   │   │   └── benchmarks.rs  # Performance benchmarks
 │   │   ├── db/                # SQLite data layer
@@ -181,13 +310,13 @@ ztp-app/
 │
 ├── frontend/                  # React web UI (Vite + TypeScript)
 │   └── src/
-│       ├── components/        # UI components (56+)
+│       ├── components/        # UI components (70+)
 │       ├── context/           # React contexts
 │       └── core -> ../../shared/core
 │
 ├── mobile/                    # React Native app (Expo)
 │   └── src/
-│       ├── screens/           # App screens (16+)
+│       ├── screens/           # App screens (23+)
 │       ├── components/        # Mobile UI components (26+)
 │       ├── navigation/        # React Navigation setup
 │       ├── hooks/             # Custom hooks
@@ -196,10 +325,10 @@ ztp-app/
 ├── shared/                    # Shared code between web and mobile
 │   └── core/
 │       ├── types.ts           # TypeScript interfaces
-│       ├── services/          # API service layer (19 modules)
-│       ├── hooks/             # React hooks (34+)
+│       ├── services/          # API service layer (27 modules)
+│       ├── hooks/             # React hooks (42+)
 │       ├── store/             # Redux store
-│       ├── theme/             # Theme definitions
+│       ├── theme/             # Theme definitions (14 themes)
 │       ├── utils/             # Validation & formatting
 │       └── constants/         # App constants
 │
@@ -214,22 +343,22 @@ ztp-app/
 
 ---
 
-## ZTP Flow
+## Provisioning Flow
 
 ```
 1. Device boots
         │
         ▼
-2. DHCP Request ──────────► ZTP Server assigns IP based on MAC
+2. DHCP Request ──────────► ForgeConfig assigns IP based on MAC
         │                    (vendor-specific DHCP options applied)
         ▼
-3. TFTP/HTTP Request ─────► ZTP Server serves device-specific config
+3. TFTP/HTTP Request ─────► ForgeConfig serves device-specific config
         │                    (template rendered with device + group variables)
         ▼
 4. Device applies config and comes online
         │
         ▼
-5. ZTP Server detects lease ──► Waits for backup delay
+5. ForgeConfig detects lease ──► Waits for backup delay
         │
         ▼
 6. SSH to device ──────────► Runs vendor-specific backup command
@@ -258,28 +387,39 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 |--------|----------|-------------|
 | GET | `/api/devices` | List all devices |
 | POST | `/api/devices` | Create a new device |
-| GET | `/api/devices/:mac` | Get device by MAC |
-| PUT | `/api/devices/:mac` | Update device |
-| DELETE | `/api/devices/:mac` | Delete device |
-| POST | `/api/devices/:mac/connect` | Test SSH connectivity |
-| GET | `/api/devices/:mac/config` | Get rendered config |
-| POST | `/api/devices/:mac/preview-config` | Preview config with variables |
-| POST | `/api/devices/:mac/deploy-config` | Deploy config over SSH |
-| POST | `/api/devices/:mac/exec` | Execute command on device |
+| GET | `/api/devices/next-hostname` | Generate next hostname from pattern |
+| GET | `/api/devices/:id` | Get device by ID |
+| PUT | `/api/devices/:id` | Update device |
+| DELETE | `/api/devices/:id` | Delete device |
+| POST | `/api/devices/:id/connect` | Test SSH connectivity |
+| GET | `/api/devices/:id/config` | Get rendered config |
+| POST | `/api/devices/:id/preview-config` | Preview config with variables |
+| POST | `/api/devices/:id/deploy-config` | Deploy config over SSH |
+| POST | `/api/devices/:id/diff-config` | Diff current vs. new config |
+| POST | `/api/devices/:id/exec` | Execute command on device |
 
 ### Device Variables
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/devices/:mac/variables` | List device variables |
-| PUT | `/api/devices/:mac/variables` | Set all device variables |
-| PUT | `/api/devices/:mac/variables/:key` | Set a single variable |
-| DELETE | `/api/devices/:mac/variables/:key` | Delete a variable |
+| GET | `/api/devices/:id/variables` | List device variables |
+| PUT | `/api/devices/:id/variables` | Set all device variables |
+| PUT | `/api/devices/:id/variables/:key` | Set a single variable |
+| DELETE | `/api/devices/:id/variables/:key` | Delete a variable |
 | GET | `/api/variables/keys` | List all variable keys |
 | DELETE | `/api/variables/keys/:key` | Delete a key from all devices |
 | GET | `/api/variables/by-key/:key` | List all values for a key |
 | POST | `/api/variables/bulk` | Bulk set variables |
-| GET | `/api/devices/:mac/resolved-variables` | Get resolved variables (with group inheritance) |
+| GET | `/api/devices/:id/resolved-variables` | Get resolved variables (with group inheritance) |
+
+### Port Assignments
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/devices/:id/port-assignments` | List port assignments |
+| PUT | `/api/devices/:id/port-assignments` | Bulk set port assignments |
+| PUT | `/api/devices/:id/port-assignments/:port_name` | Set single port assignment |
+| DELETE | `/api/devices/:id/port-assignments/:port_name` | Delete port assignment |
 
 ### Groups
 
@@ -295,10 +435,10 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 | DELETE | `/api/groups/:id/variables/:key` | Delete group variable |
 | GET | `/api/groups/:id/members` | List group members |
 | PUT | `/api/groups/:id/members` | Set all group members |
-| PUT | `/api/groups/:id/members/:mac` | Add member to group |
-| DELETE | `/api/groups/:id/members/:mac` | Remove member from group |
-| GET | `/api/devices/:mac/groups` | List groups for a device |
-| PUT | `/api/devices/:mac/groups` | Set groups for a device |
+| PUT | `/api/groups/:id/members/:device_id` | Add member to group |
+| DELETE | `/api/groups/:id/members/:device_id` | Remove member from group |
+| GET | `/api/devices/:id/groups` | List groups for a device |
+| PUT | `/api/devices/:id/groups` | Set groups for a device |
 
 ### Templates
 
@@ -332,6 +472,27 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 | POST | `/api/vendor-actions` | Create a vendor action |
 | PUT | `/api/vendor-actions/:id` | Update vendor action |
 | DELETE | `/api/vendor-actions/:id` | Delete vendor action |
+| POST | `/api/vendor-actions/:id/run` | Execute vendor action |
+
+### Device Models
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/device-models` | List all device models |
+| POST | `/api/device-models` | Create a device model |
+| GET | `/api/device-models/:id` | Get device model |
+| PUT | `/api/device-models/:id` | Update device model |
+| DELETE | `/api/device-models/:id` | Delete device model |
+
+### Device Roles
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/device-roles` | List all device roles |
+| POST | `/api/device-roles` | Create a device role |
+| GET | `/api/device-roles/:id` | Get device role |
+| PUT | `/api/device-roles/:id` | Update device role |
+| DELETE | `/api/device-roles/:id` | Delete device role |
 
 ### Topologies
 
@@ -358,8 +519,8 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/devices/:mac/backup` | Trigger manual backup |
-| GET | `/api/devices/:mac/backups` | List backups for device |
+| POST | `/api/devices/:id/backup` | Trigger manual backup |
+| GET | `/api/devices/:id/backups` | List backups for device |
 | GET | `/api/backups/:id` | Download backup file |
 
 ### Discovery
@@ -380,6 +541,47 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 | GET | `/api/jobs` | List all jobs |
 | GET | `/api/jobs/:id` | Get job status and output |
 
+### Job Templates
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/job-templates` | List all job templates |
+| POST | `/api/job-templates` | Create a job template |
+| GET | `/api/job-templates/:id` | Get job template |
+| PUT | `/api/job-templates/:id` | Update job template |
+| DELETE | `/api/job-templates/:id` | Delete job template |
+| POST | `/api/job-templates/:id/run` | Execute job template |
+
+### Credentials
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/credentials` | List all credentials |
+| POST | `/api/credentials` | Create a credential |
+| GET | `/api/credentials/:id` | Get credential |
+| PUT | `/api/credentials/:id` | Update credential |
+| DELETE | `/api/credentials/:id` | Delete credential |
+
+### Output Parsers
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/output-parsers` | List all output parsers |
+| POST | `/api/output-parsers` | Create an output parser |
+| GET | `/api/output-parsers/:id` | Get output parser |
+| PUT | `/api/output-parsers/:id` | Update output parser |
+| DELETE | `/api/output-parsers/:id` | Delete output parser |
+
+### Users
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/users` | List all users |
+| POST | `/api/users` | Create a user |
+| GET | `/api/users/:id` | Get user |
+| PUT | `/api/users/:id` | Update user |
+| DELETE | `/api/users/:id` | Delete user |
+
 ### Docker / Lab Management
 
 | Method | Endpoint | Description |
@@ -391,32 +593,59 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 | POST | `/api/docker/containers/:id/restart` | Restart a container |
 | POST | `/api/docker/clos-lab` | Build a CLOS lab topology |
 | DELETE | `/api/docker/clos-lab` | Tear down CLOS lab |
+| POST | `/api/virtual-clos` | Build virtual CLOS topology (devices only) |
+| DELETE | `/api/virtual-clos` | Tear down virtual CLOS |
+| POST | `/api/connect` | Test connectivity to IP |
 
 ### IPAM
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| **Regions** | | |
 | GET | `/api/ipam/regions` | List regions |
 | POST | `/api/ipam/regions` | Create region |
 | GET | `/api/ipam/regions/:id` | Get region |
 | PUT | `/api/ipam/regions/:id` | Update region |
 | DELETE | `/api/ipam/regions/:id` | Delete region |
-| GET | `/api/ipam/locations` | List locations |
-| POST | `/api/ipam/locations` | Create location |
-| GET | `/api/ipam/locations/:id` | Get location |
-| PUT | `/api/ipam/locations/:id` | Update location |
-| DELETE | `/api/ipam/locations/:id` | Delete location |
+| **Campuses** | | |
+| GET | `/api/ipam/campuses` | List campuses |
+| POST | `/api/ipam/campuses` | Create campus |
+| GET | `/api/ipam/campuses/:id` | Get campus |
+| PUT | `/api/ipam/campuses/:id` | Update campus |
+| DELETE | `/api/ipam/campuses/:id` | Delete campus |
+| **Datacenters** | | |
 | GET | `/api/ipam/datacenters` | List datacenters |
 | POST | `/api/ipam/datacenters` | Create datacenter |
 | GET | `/api/ipam/datacenters/:id` | Get datacenter |
 | PUT | `/api/ipam/datacenters/:id` | Update datacenter |
 | DELETE | `/api/ipam/datacenters/:id` | Delete datacenter |
+| **Halls** | | |
+| GET | `/api/ipam/halls` | List halls |
+| POST | `/api/ipam/halls` | Create hall |
+| GET | `/api/ipam/halls/:id` | Get hall |
+| PUT | `/api/ipam/halls/:id` | Update hall |
+| DELETE | `/api/ipam/halls/:id` | Delete hall |
+| **Rows** | | |
+| GET | `/api/ipam/rows` | List rows |
+| POST | `/api/ipam/rows` | Create row |
+| GET | `/api/ipam/rows/:id` | Get row |
+| PUT | `/api/ipam/rows/:id` | Update row |
+| DELETE | `/api/ipam/rows/:id` | Delete row |
+| **Racks** | | |
+| GET | `/api/ipam/racks` | List racks |
+| POST | `/api/ipam/racks` | Create rack |
+| GET | `/api/ipam/racks/:id` | Get rack |
+| PUT | `/api/ipam/racks/:id` | Update rack |
+| DELETE | `/api/ipam/racks/:id` | Delete rack |
+| **Roles** | | |
 | GET | `/api/ipam/roles` | List roles |
 | POST | `/api/ipam/roles` | Create role |
 | DELETE | `/api/ipam/roles/:id` | Delete role |
+| **VRFs** | | |
 | GET | `/api/ipam/vrfs` | List VRFs |
 | POST | `/api/ipam/vrfs` | Create VRF |
 | DELETE | `/api/ipam/vrfs/:id` | Delete VRF |
+| **Prefixes** | | |
 | GET | `/api/ipam/prefixes` | List prefixes |
 | GET | `/api/ipam/prefixes/supernets` | List supernets |
 | POST | `/api/ipam/prefixes` | Create prefix |
@@ -425,11 +654,13 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 | DELETE | `/api/ipam/prefixes/:id` | Delete prefix |
 | POST | `/api/ipam/prefixes/:id/available-prefixes` | Get next available prefix |
 | POST | `/api/ipam/prefixes/:id/available-ips` | Get next available IP |
+| **IP Addresses** | | |
 | GET | `/api/ipam/ip-addresses` | List IP addresses |
 | POST | `/api/ipam/ip-addresses` | Create IP address |
 | GET | `/api/ipam/ip-addresses/:id` | Get IP address |
 | PUT | `/api/ipam/ip-addresses/:id` | Update IP address |
 | DELETE | `/api/ipam/ip-addresses/:id` | Delete IP address |
+| **Tags** | | |
 | GET | `/api/ipam/tags/keys` | List all tag keys in use |
 | GET | `/api/ipam/tags/:type/:id` | List tags for resource |
 | POST | `/api/ipam/tags/:type/:id` | Set tag on resource |
@@ -450,7 +681,7 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 | GET | `/api/netbox/sites` | List NetBox sites |
 | GET | `/api/netbox/device-roles` | List NetBox device roles |
 
-### Settings
+### Settings & Branding
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -458,6 +689,10 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 | PUT | `/api/settings` | Update settings |
 | POST | `/api/reload` | Reload DHCP/TFTP config |
 | GET | `/api/network/addresses` | List local network interfaces |
+| GET | `/api/branding` | Get branding info (public) |
+| GET | `/api/branding/logo` | Get logo image (public) |
+| POST | `/api/branding/logo` | Upload logo |
+| DELETE | `/api/branding/logo` | Delete logo |
 
 ### WebSocket
 
@@ -488,19 +723,22 @@ curl -X POST http://localhost:8080/api/devices \
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DB_PATH` | `/data/ztp.db` | SQLite database path |
+| `DB_PATH` | `/data/forge-config.db` | SQLite database path |
 | `TFTP_DIR` | `/tftp` | TFTP root directory |
 | `BACKUP_DIR` | `/backups` | Config backup directory |
 | `TEMPLATES_DIR` | `/configs/templates` | Config templates directory |
 | `RUST_LOG` | `info` | Log level |
 | `JWT_SECRET` | `change-me-in-production` | Secret for JWT token signing |
-| `DOCKER_NETWORK` | `ztp-app_ztp-net` | Docker network for spawned containers |
-| `TEST_CLIENT_IMAGE` | `ztp-server-test-client` | Docker image for test containers |
+| `DOCKER_NETWORK` | `forge-config_fc-net` | Docker network for spawned containers |
+| `TEST_CLIENT_IMAGE` | `forge-config-test-client` | Docker image for test containers |
 
 ### Settings (via UI or API)
 
 | Setting | Description |
 |---------|-------------|
+| **Application Name** | Custom name shown in the header and login page |
+| **Logo** | Custom logo (PNG, JPG, GIF, WebP, or SVG under 2MB) |
+| **Hostname Pattern** | Pattern for auto-generated hostnames (`$datacenter-$role-#`) |
 | **Default SSH User** | Username for device backup connections |
 | **Default SSH Password** | Password for device backup connections |
 | **Backup Command** | Command to run on device (default: `show running-config`) |
@@ -512,6 +750,8 @@ curl -X POST http://localhost:8080/api/devices \
 | **OpenGear Enroll URL** | Lighthouse enrollment server address |
 | **OpenGear Bundle** | Lighthouse bundle name |
 | **OpenGear Password** | Lighthouse enrollment password |
+| **API URL** | Base URL for API requests (local setting) |
+| **Rows per Page** | Default table pagination size (local setting) |
 
 ---
 
@@ -592,7 +832,11 @@ docker compose logs -f backend-rust test-client
 
 ### CLOS Lab
 
-You can also build an automated CLOS fabric lab from the Docker management page in the web UI, which spawns spine and leaf containers with pre-configured topology roles.
+You can also build an automated CLOS fabric lab from the Topologies page in the web UI, which spawns spine and leaf containers with pre-configured FRR routing and topology roles.
+
+### Virtual CLOS
+
+The Virtual CLOS builder creates device records with full IPAM integration (datacenters, halls, rows, racks) without requiring Docker containers. Configure spine count, leaf count, uplinks, external devices, and rack placement.
 
 ---
 
@@ -641,8 +885,8 @@ docker compose logs -f backend-rust  # View backend logs
 The `shared/core/` directory contains platform-agnostic code shared between web and mobile:
 
 - **types.ts** - TypeScript interfaces for all domain types
-- **services/** - API service layer (devices, templates, vendors, groups, IPAM, etc.)
-- **hooks/** - React hooks (useDevices, useSettings, useBackups, useTheme, etc.)
+- **services/** - API service layer (27 modules: devices, templates, vendors, groups, IPAM, jobs, credentials, output parsers, etc.)
+- **hooks/** - React hooks (42+ hooks: useDevices, useSettings, useBackups, useTheme, useJobs, useIpam, etc.)
 - **store/** - Redux store configuration
 - **theme/** - Theme definitions (14 themes)
 - **utils/** - Validation and formatting utilities
@@ -656,7 +900,7 @@ Both `frontend/src/core` and `mobile/src/core` are symlinks to `shared/core/`.
 ### Mobile app can't connect to API
 
 1. Ensure your phone and computer are on the same WiFi network
-2. Check that the IP in `mobile/src/config.ts` is correct
+2. Open Settings in the web UI and scan the QR code next to your network interface
 3. Verify the API is accessible: `curl http://<your-ip>:8080/api/devices`
 4. Check firewall settings allow port 8080
 
@@ -674,10 +918,10 @@ Both `frontend/src/core` and `mobile/src/core` are symlinks to `shared/core/`.
 
 ### Template not applying
 
-1. Verify template exists in the Templates section of the UI
+1. Verify template exists in the Configuration > Templates tab
 2. Check that the device has the correct template assigned
 3. Look for Tera rendering errors in the logs
-4. Ensure required variables are set on the device or its groups
+4. Ensure required variables are set on the device or its groups (check Configuration > Inspector)
 
 ---
 

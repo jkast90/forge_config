@@ -16,7 +16,7 @@ export interface LayoutContextValue extends LayoutSettings {
   pushPageWidthOverride: (minWidth: PageWidth) => () => void;
 }
 
-const STORAGE_KEY = 'ztp_layout_settings';
+const STORAGE_KEY = 'fc_layout_settings';
 
 const DEFAULT_SETTINGS: LayoutSettings = {
   pageWidth: 'default',

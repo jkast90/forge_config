@@ -10,6 +10,7 @@ import {
   deleteVendorAction as deleteVendorActionThunk,
 } from '../store/slices/vendorActionsSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseVendorActionsOptions {
@@ -59,7 +60,7 @@ export function useVendorActions(options: UseVendorActionsOptions = {}): UseVend
   const createAction = useCallback(async (data: Partial<VendorAction>): Promise<boolean> => {
     try {
       await dispatch(createVendorActionThunk(data)).unwrap();
-      addNotification('success', 'Action added successfully');
+      addNotification('success', 'Action added successfully', navigateAction('View Actions', 'jobs', 'actions'));
       dispatch(fetchVendorActions());
       return true;
     } catch (err) {
@@ -71,7 +72,7 @@ export function useVendorActions(options: UseVendorActionsOptions = {}): UseVend
   const updateAction = useCallback(async (id: string, data: Partial<VendorAction>): Promise<boolean> => {
     try {
       await dispatch(updateVendorActionThunk({ id, data })).unwrap();
-      addNotification('success', 'Action updated successfully');
+      addNotification('success', 'Action updated successfully', navigateAction('View Actions', 'jobs', 'actions'));
       dispatch(fetchVendorActions());
       return true;
     } catch (err) {
@@ -83,7 +84,7 @@ export function useVendorActions(options: UseVendorActionsOptions = {}): UseVend
   const deleteAction = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteVendorActionThunk(id)).unwrap();
-      addNotification('success', 'Action deleted successfully');
+      addNotification('success', 'Action deleted successfully', navigateAction('View Actions', 'jobs', 'actions'));
       dispatch(fetchVendorActions());
       return true;
     } catch (err) {

@@ -10,6 +10,13 @@ pub(super) fn csv_to_vec(csv: Option<String>) -> Vec<String> {
     }
 }
 
+pub(super) fn csv_to_i64_vec(csv: Option<String>) -> Vec<i64> {
+    match csv {
+        Some(s) if !s.is_empty() => s.split(',').filter_map(|s| s.trim().parse::<i64>().ok()).collect(),
+        _ => vec![],
+    }
+}
+
 pub(super) fn map_region_row(row: &SqliteRow) -> IpamRegion {
     IpamRegion {
         id: row.get("id"),
@@ -108,14 +115,14 @@ pub(super) fn map_prefix_row(row: &SqliteRow) -> IpamPrefix {
         description: none_if_empty(row.get("description")),
         status: row.get("status"),
         is_supernet: is_supernet != 0,
-        role_ids: csv_to_vec(row.try_get("role_ids_csv").ok().and_then(|v: Option<String>| v)),
+        role_ids: csv_to_i64_vec(row.try_get("role_ids_csv").ok().and_then(|v: Option<String>| v)),
         role_names: csv_to_vec(row.try_get("role_names_csv").ok().and_then(|v: Option<String>| v)),
         parent_id: row.get("parent_id"),
         parent_prefix: row.try_get("parent_prefix").ok().and_then(|v: Option<String>| v),
-        datacenter_id: none_if_empty(row.get("datacenter_id")),
+        datacenter_id: row.try_get::<Option<i64>, _>("datacenter_id").ok().flatten(),
         datacenter_name: row.try_get("datacenter_name").ok().and_then(|v: Option<String>| v),
         vlan_id: row.get("vlan_id"),
-        vrf_id: none_if_empty(row.get("vrf_id")),
+        vrf_id: row.try_get::<Option<i64>, _>("vrf_id").ok().flatten(),
         vrf_name: row.try_get("vrf_name").ok().and_then(|v: Option<String>| v),
         child_prefix_count: row.try_get("child_prefix_count").ok(),
         ip_address_count: row.try_get("ip_address_count").ok(),
@@ -134,13 +141,13 @@ pub(super) fn map_ip_address_row(row: &SqliteRow) -> IpamIpAddress {
         prefix: row.try_get("prefix_cidr").ok().and_then(|v: Option<String>| v),
         description: none_if_empty(row.get("description")),
         status: row.get("status"),
-        role_ids: csv_to_vec(row.try_get("role_ids_csv").ok().and_then(|v: Option<String>| v)),
+        role_ids: csv_to_i64_vec(row.try_get("role_ids_csv").ok().and_then(|v: Option<String>| v)),
         role_names: csv_to_vec(row.try_get("role_names_csv").ok().and_then(|v: Option<String>| v)),
         dns_name: none_if_empty(row.get("dns_name")),
         device_id: row.try_get::<Option<i64>, _>("device_id").ok().flatten(),
         device_hostname: row.try_get("device_hostname").ok().and_then(|v: Option<String>| v),
         interface_name: none_if_empty(row.get("interface_name")),
-        vrf_id: none_if_empty(row.get("vrf_id")),
+        vrf_id: row.try_get::<Option<i64>, _>("vrf_id").ok().flatten(),
         vrf_name: row.try_get("vrf_name").ok().and_then(|v: Option<String>| v),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),

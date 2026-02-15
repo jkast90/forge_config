@@ -23,7 +23,7 @@ impl DhcpOptionRepo {
         Ok(rows.iter().map(map_dhcp_option_row).collect())
     }
 
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<DhcpOption>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<DhcpOption>> {
         let row = sqlx::query(&format!("{} WHERE id = ?", SELECT_DHCP_OPTION))
             .bind(id)
             .fetch_optional(pool)
@@ -34,18 +34,17 @@ impl DhcpOptionRepo {
 
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateDhcpOptionRequest) -> Result<DhcpOption> {
         let now = Utc::now();
-        sqlx::query(
+        let result = sqlx::query(
             r#"
-            INSERT INTO dhcp_options (id, option_number, name, value, type, vendor_id, description, enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO dhcp_options (option_number, name, value, type, vendor_id, description, enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
-        .bind(&req.id)
         .bind(req.option_number)
         .bind(&req.name)
         .bind(&req.value)
         .bind(&req.option_type)
-        .bind(&req.vendor_id.clone().unwrap_or_default())
+        .bind(&req.vendor_id)
         .bind(&req.description.clone().unwrap_or_default())
         .bind(req.enabled as i32)
         .bind(now)
@@ -53,12 +52,13 @@ impl DhcpOptionRepo {
         .execute(pool)
         .await?;
 
-        Self::get(pool, &req.id)
+        let new_id = result.last_insert_rowid();
+        Self::get(pool, new_id)
             .await?
             .context("DHCP option not found after creation")
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateDhcpOptionRequest) -> Result<DhcpOption> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateDhcpOptionRequest) -> Result<DhcpOption> {
         let now = Utc::now();
         let result = sqlx::query(
             r#"
@@ -71,7 +71,7 @@ impl DhcpOptionRepo {
         .bind(&req.name)
         .bind(&req.value)
         .bind(&req.option_type)
-        .bind(&req.vendor_id.clone().unwrap_or_default())
+        .bind(&req.vendor_id)
         .bind(&req.description.clone().unwrap_or_default())
         .bind(req.enabled as i32)
         .bind(now)
@@ -80,7 +80,7 @@ impl DhcpOptionRepo {
         .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("DHCP option", id).into());
+            return Err(super::NotFoundError::new("DHCP option", &id.to_string()).into());
         }
 
         Self::get(pool, id)
@@ -88,14 +88,14 @@ impl DhcpOptionRepo {
             .context("DHCP option not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM dhcp_options WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("DHCP option", id).into());
+            return Err(super::NotFoundError::new("DHCP option", &id.to_string()).into());
         }
         Ok(())
     }

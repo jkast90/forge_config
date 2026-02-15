@@ -117,22 +117,40 @@ impl Store {
         Ok(())
     }
 
+    /// Build a mapping from old text vendor IDs (e.g. "cisco", "arista") to new integer IDs.
+    /// Uses the seed data to get old_id → name mapping, then looks up by name.
+    async fn build_vendor_id_map(&self) -> Result<HashMap<String, i64>> {
+        let mut map = HashMap::new();
+        for (old_id, name, _, _, _, _, _, _, _) in seeds::seed_vendor_params() {
+            let row: Option<(i64,)> = sqlx::query_as("SELECT id FROM vendors WHERE name = ?")
+                .bind(&name)
+                .fetch_optional(&self.pool)
+                .await?;
+            if let Some((vid,)) = row {
+                map.insert(old_id, vid);
+            }
+        }
+        Ok(map)
+    }
+
     async fn seed_default_vendors(&self) -> Result<()> {
-        for (id, name, backup_command, deploy_command, ssh_port, mac_json, vendor_class, default_template) in seeds::seed_vendor_params() {
+        for (_id, name, backup_command, deploy_command, diff_command, ssh_port, mac_json, vendor_class, default_template) in seeds::seed_vendor_params() {
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO vendors (id, name, backup_command, deploy_command, ssh_port, mac_prefixes, vendor_class, default_template, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT OR IGNORE INTO vendors (name, backup_command, deploy_command, diff_command, ssh_port, mac_prefixes, vendor_class, default_template, created_at, updated_at)
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                WHERE NOT EXISTS (SELECT 1 FROM vendors WHERE name = ?)
                 "#,
             )
-            .bind(&id)
             .bind(&name)
             .bind(&backup_command)
             .bind(&deploy_command)
+            .bind(&diff_command)
             .bind(ssh_port)
             .bind(&mac_json)
             .bind(&vendor_class)
             .bind(&default_template)
+            .bind(&name)
             .execute(&self.pool)
             .await?;
         }
@@ -140,49 +158,91 @@ impl Store {
     }
 
     async fn seed_default_templates(&self) -> Result<()> {
+        // Build a mapping from old text vendor IDs to new integer IDs
+        let vendor_map = self.build_vendor_id_map().await?;
+
         for (id, name, description, vendor_id, content) in seeds::seed_template_params() {
-            // Role templates (spine/leaf) use INSERT OR REPLACE so they stay
+            // Role templates (spine/leaf) use UPDATE-or-INSERT so they stay
             // in sync with updated variable-based templates across upgrades.
-            // Base templates use INSERT OR IGNORE so user edits are preserved.
-            let sql = if seeds::is_role_template(&id) {
-                r#"
-                INSERT OR REPLACE INTO templates (id, name, description, vendor_id, content, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                "#
+            // Base templates use INSERT with NOT EXISTS so user edits are preserved.
+            let vendor_id_val: Option<i64> = if vendor_id.is_empty() {
+                None
             } else {
-                r#"
-                INSERT OR IGNORE INTO templates (id, name, description, vendor_id, content, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                "#
+                vendor_map.get(&vendor_id).copied()
             };
-            sqlx::query(sql)
-            .bind(&id)
-            .bind(&name)
-            .bind(&description)
-            .bind(&vendor_id)
-            .bind(&content)
-            .execute(&self.pool)
-            .await?;
+
+            if seeds::is_role_template(&id) {
+                // Update existing role template, or insert if missing
+                let updated = sqlx::query(
+                    "UPDATE templates SET description = ?, vendor_id = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?"
+                )
+                .bind(&description)
+                .bind(&vendor_id_val)
+                .bind(&content)
+                .bind(&name)
+                .execute(&self.pool)
+                .await?;
+
+                if updated.rows_affected() == 0 {
+                    sqlx::query(
+                        r#"
+                        INSERT INTO templates (name, description, vendor_id, content, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        "#,
+                    )
+                    .bind(&name)
+                    .bind(&description)
+                    .bind(&vendor_id_val)
+                    .bind(&content)
+                    .execute(&self.pool)
+                    .await?;
+                }
+            } else {
+                sqlx::query(
+                    r#"
+                    INSERT INTO templates (name, description, vendor_id, content, created_at, updated_at)
+                    SELECT ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    WHERE NOT EXISTS (SELECT 1 FROM templates WHERE name = ?)
+                    "#,
+                )
+                .bind(&name)
+                .bind(&description)
+                .bind(&vendor_id_val)
+                .bind(&content)
+                .bind(&name)
+                .execute(&self.pool)
+                .await?;
+            }
         }
         Ok(())
     }
 
     async fn seed_default_dhcp_options(&self) -> Result<()> {
-        for (id, option_number, name, value, option_type, vendor_id, description, enabled) in seeds::seed_dhcp_option_params() {
+        let vendor_map = self.build_vendor_id_map().await?;
+
+        for (_id, option_number, name, value, option_type, vendor_id, description, enabled) in seeds::seed_dhcp_option_params() {
+            let vendor_id_val: Option<i64> = if vendor_id.is_empty() {
+                None
+            } else {
+                vendor_map.get(&vendor_id).copied()
+            };
+
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO dhcp_options (id, option_number, name, value, type, vendor_id, description, enabled, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO dhcp_options (option_number, name, value, type, vendor_id, description, enabled, created_at, updated_at)
+                SELECT ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                WHERE NOT EXISTS (SELECT 1 FROM dhcp_options WHERE option_number = ? AND name = ?)
                 "#,
             )
-            .bind(&id)
             .bind(option_number)
             .bind(&name)
             .bind(&value)
             .bind(&option_type)
-            .bind(&vendor_id)
+            .bind(&vendor_id_val)
             .bind(&description)
             .bind(enabled)
+            .bind(option_number)
+            .bind(&name)
             .execute(&self.pool)
             .await?;
         }
@@ -195,11 +255,10 @@ impl Store {
             .await?;
 
         if count.0 == 0 {
-            let id = uuid::Uuid::new_v4().to_string();
             let password_hash = bcrypt::hash("admin", bcrypt::DEFAULT_COST)
                 .map_err(|e| anyhow::anyhow!("Failed to hash default password: {}", e))?;
 
-            self.create_user(&id, "admin", &password_hash).await?;
+            self.create_user("admin", &password_hash).await?;
             tracing::info!("Created default admin user (username: admin, password: admin)");
         }
 
@@ -207,17 +266,23 @@ impl Store {
     }
 
     async fn seed_default_vendor_actions(&self) -> Result<()> {
-        // INSERT OR IGNORE ensures new seed actions are added to existing databases
-        // without overwriting user-modified actions (matched by primary key)
-        for (id, vendor_id, label, command, sort_order, action_type, webhook_url, webhook_method, webhook_headers, webhook_body) in seeds::seed_vendor_action_params() {
+        let vendor_map = self.build_vendor_id_map().await?;
+
+        for (_id, vendor_id, label, command, sort_order, action_type, webhook_url, webhook_method, webhook_headers, webhook_body) in seeds::seed_vendor_action_params() {
+            let vendor_id_val: Option<i64> = vendor_map.get(&vendor_id).copied();
+            if vendor_id_val.is_none() {
+                continue; // Skip actions for unknown vendors
+            }
+            let vid = vendor_id_val.unwrap();
+
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO vendor_actions (id, vendor_id, label, command, sort_order, action_type, webhook_url, webhook_method, webhook_headers, webhook_body, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO vendor_actions (vendor_id, label, command, sort_order, action_type, webhook_url, webhook_method, webhook_headers, webhook_body, created_at)
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+                WHERE NOT EXISTS (SELECT 1 FROM vendor_actions WHERE vendor_id = ? AND label = ?)
                 "#,
             )
-            .bind(&id)
-            .bind(&vendor_id)
+            .bind(vid)
             .bind(&label)
             .bind(&command)
             .bind(sort_order)
@@ -226,6 +291,8 @@ impl Store {
             .bind(&webhook_method)
             .bind(&webhook_headers)
             .bind(&webhook_body)
+            .bind(vid)
+            .bind(&label)
             .execute(&self.pool)
             .await?;
         }
@@ -250,36 +317,49 @@ impl Store {
             .execute(&self.pool)
             .await?;
 
-            // Link the parser to its vendor action (only if action has no parser yet)
-            sqlx::query(
-                r#"
-                UPDATE vendor_actions
-                SET output_parser_id = (SELECT id FROM output_parsers WHERE name = ?)
-                WHERE id = ? AND output_parser_id IS NULL
-                "#,
-            )
-            .bind(parser.name)
-            .bind(parser.action_id)
-            .execute(&self.pool)
-            .await?;
+            // Link the parser to its vendor action by label match (since action IDs are now integers)
+            // The old action_id was a text slug like "arista-show-ip-int-brief"
+            // We match by looking up the action label from the seed data
+            if let Some(action_label) = seeds::action_id_to_label(parser.action_id) {
+                sqlx::query(
+                    r#"
+                    UPDATE vendor_actions
+                    SET output_parser_id = (SELECT id FROM output_parsers WHERE name = ?)
+                    WHERE label = ? AND output_parser_id IS NULL
+                    "#,
+                )
+                .bind(parser.name)
+                .bind(action_label)
+                .execute(&self.pool)
+                .await?;
+            }
         }
         Ok(())
     }
 
     async fn seed_default_device_models(&self) -> Result<()> {
-        for (id, vendor_id, model, display_name, rack_units, layout) in seeds::seed_device_model_params() {
+        let vendor_map = self.build_vendor_id_map().await?;
+
+        for (_id, vendor_id, model, display_name, rack_units, layout) in seeds::seed_device_model_params() {
+            let vendor_id_val = match vendor_map.get(&vendor_id) {
+                Some(&vid) => vid,
+                None => continue, // Skip models for unknown vendors
+            };
+
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO device_models (id, vendor_id, model, display_name, rack_units, layout, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                INSERT INTO device_models (vendor_id, model, display_name, rack_units, layout, created_at, updated_at)
+                SELECT ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                WHERE NOT EXISTS (SELECT 1 FROM device_models WHERE vendor_id = ? AND model = ?)
                 "#,
             )
-            .bind(&id)
-            .bind(&vendor_id)
+            .bind(vendor_id_val)
             .bind(&model)
             .bind(&display_name)
             .bind(rack_units)
             .bind(&layout)
+            .bind(vendor_id_val)
+            .bind(&model)
             .execute(&self.pool)
             .await?;
         }
@@ -317,7 +397,7 @@ impl Store {
         users::UserRepo::list(&self.pool).await
     }
 
-    pub async fn get_user(&self, id: &str) -> Result<Option<User>> {
+    pub async fn get_user(&self, id: i64) -> Result<Option<User>> {
         users::UserRepo::get(&self.pool, id).await
     }
 
@@ -325,23 +405,33 @@ impl Store {
         users::UserRepo::get_by_username(&self.pool, username).await
     }
 
-    pub async fn create_user(&self, id: &str, username: &str, password_hash: &str) -> Result<()> {
-        users::UserRepo::create(&self.pool, id, username, password_hash).await
+    pub async fn create_user(&self, username: &str, password_hash: &str) -> Result<()> {
+        users::UserRepo::create(&self.pool, username, password_hash).await
     }
 
-    pub async fn create_user_full(&self, id: &str, req: &CreateUserRequest) -> Result<User> {
-        users::UserRepo::create_full(&self.pool, id, req).await
+    pub async fn create_user_full(&self, req: &CreateUserRequest) -> Result<User> {
+        users::UserRepo::create_full(&self.pool, req).await
     }
 
-    pub async fn update_user(&self, id: &str, req: &UpdateUserRequest) -> Result<User> {
+    pub async fn update_user(&self, id: i64, req: &UpdateUserRequest) -> Result<User> {
         users::UserRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_user(&self, id: &str) -> Result<()> {
+    pub async fn delete_user(&self, id: i64) -> Result<()> {
         users::UserRepo::delete(&self.pool, id).await
     }
 
     // ========== Device Operations ==========
+
+    pub async fn list_hostnames_matching(&self, pattern: &str) -> Result<Vec<String>> {
+        let rows: Vec<String> = sqlx::query_scalar(
+            "SELECT hostname FROM devices WHERE hostname LIKE ?",
+        )
+        .bind(pattern)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows)
+    }
 
     pub async fn list_devices(&self) -> Result<Vec<Device>> {
         devices::DeviceRepo::list(&self.pool).await
@@ -459,19 +549,23 @@ impl Store {
         vendors::VendorRepo::list(&self.pool).await
     }
 
-    pub async fn get_vendor(&self, id: &str) -> Result<Option<Vendor>> {
+    pub async fn get_vendor(&self, id: i64) -> Result<Option<Vendor>> {
         vendors::VendorRepo::get(&self.pool, id).await
+    }
+
+    pub async fn get_vendor_by_name(&self, name: &str) -> Result<Option<Vendor>> {
+        vendors::VendorRepo::get_by_name(&self.pool, name).await
     }
 
     pub async fn create_vendor(&self, req: &CreateVendorRequest) -> Result<Vendor> {
         vendors::VendorRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_vendor(&self, id: &str, req: &CreateVendorRequest) -> Result<Vendor> {
+    pub async fn update_vendor(&self, id: i64, req: &CreateVendorRequest) -> Result<Vendor> {
         vendors::VendorRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_vendor(&self, id: &str) -> Result<()> {
+    pub async fn delete_vendor(&self, id: i64) -> Result<()> {
         vendors::VendorRepo::delete(&self.pool, id).await
     }
 
@@ -481,7 +575,7 @@ impl Store {
         device_models::DeviceModelRepo::list(&self.pool).await
     }
 
-    pub async fn get_device_model(&self, id: &str) -> Result<Option<DeviceModel>> {
+    pub async fn get_device_model(&self, id: i64) -> Result<Option<DeviceModel>> {
         device_models::DeviceModelRepo::get(&self.pool, id).await
     }
 
@@ -489,11 +583,11 @@ impl Store {
         device_models::DeviceModelRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_device_model(&self, id: &str, req: &CreateDeviceModelRequest) -> Result<DeviceModel> {
+    pub async fn update_device_model(&self, id: i64, req: &CreateDeviceModelRequest) -> Result<DeviceModel> {
         device_models::DeviceModelRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_device_model(&self, id: &str) -> Result<()> {
+    pub async fn delete_device_model(&self, id: i64) -> Result<()> {
         device_models::DeviceModelRepo::delete(&self.pool, id).await
     }
 
@@ -525,7 +619,7 @@ impl Store {
         dhcp_options::DhcpOptionRepo::list(&self.pool).await
     }
 
-    pub async fn get_dhcp_option(&self, id: &str) -> Result<Option<DhcpOption>> {
+    pub async fn get_dhcp_option(&self, id: i64) -> Result<Option<DhcpOption>> {
         dhcp_options::DhcpOptionRepo::get(&self.pool, id).await
     }
 
@@ -533,11 +627,11 @@ impl Store {
         dhcp_options::DhcpOptionRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_dhcp_option(&self, id: &str, req: &CreateDhcpOptionRequest) -> Result<DhcpOption> {
+    pub async fn update_dhcp_option(&self, id: i64, req: &CreateDhcpOptionRequest) -> Result<DhcpOption> {
         dhcp_options::DhcpOptionRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_dhcp_option(&self, id: &str) -> Result<()> {
+    pub async fn delete_dhcp_option(&self, id: i64) -> Result<()> {
         dhcp_options::DhcpOptionRepo::delete(&self.pool, id).await
     }
 
@@ -547,19 +641,23 @@ impl Store {
         templates::TemplateRepo::list(&self.pool).await
     }
 
-    pub async fn get_template(&self, id: &str) -> Result<Option<Template>> {
+    pub async fn get_template(&self, id: i64) -> Result<Option<Template>> {
         templates::TemplateRepo::get(&self.pool, id).await
+    }
+
+    pub async fn get_template_by_name(&self, name: &str) -> Result<Option<Template>> {
+        templates::TemplateRepo::get_by_name(&self.pool, name).await
     }
 
     pub async fn create_template(&self, req: &CreateTemplateRequest) -> Result<Template> {
         templates::TemplateRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_template(&self, id: &str, req: &CreateTemplateRequest) -> Result<Template> {
+    pub async fn update_template(&self, id: i64, req: &CreateTemplateRequest) -> Result<Template> {
         templates::TemplateRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_template(&self, id: &str) -> Result<()> {
+    pub async fn delete_template(&self, id: i64) -> Result<()> {
         templates::TemplateRepo::delete(&self.pool, id).await
     }
 
@@ -609,7 +707,7 @@ impl Store {
 
     // ========== Vendor Action Operations ==========
 
-    pub async fn get_vendor_action(&self, id: &str) -> Result<Option<VendorAction>> {
+    pub async fn get_vendor_action(&self, id: i64) -> Result<Option<VendorAction>> {
         vendor_actions::VendorActionRepo::get(&self.pool, id).await
     }
 
@@ -617,7 +715,7 @@ impl Store {
         vendor_actions::VendorActionRepo::list_all(&self.pool).await
     }
 
-    pub async fn list_vendor_actions_by_vendor(&self, vendor_id: &str) -> Result<Vec<VendorAction>> {
+    pub async fn list_vendor_actions_by_vendor(&self, vendor_id: i64) -> Result<Vec<VendorAction>> {
         vendor_actions::VendorActionRepo::list_by_vendor(&self.pool, vendor_id).await
     }
 
@@ -625,11 +723,11 @@ impl Store {
         vendor_actions::VendorActionRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_vendor_action(&self, id: &str, req: &CreateVendorActionRequest) -> Result<VendorAction> {
+    pub async fn update_vendor_action(&self, id: i64, req: &CreateVendorActionRequest) -> Result<VendorAction> {
         vendor_actions::VendorActionRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_vendor_action(&self, id: &str) -> Result<()> {
+    pub async fn delete_vendor_action(&self, id: i64) -> Result<()> {
         vendor_actions::VendorActionRepo::delete(&self.pool, id).await
     }
 
@@ -673,7 +771,7 @@ impl Store {
         job_templates::JobTemplateRepo::list(&self.pool).await
     }
 
-    pub async fn get_job_template(&self, id: &str) -> Result<Option<JobTemplate>> {
+    pub async fn get_job_template(&self, id: i64) -> Result<Option<JobTemplate>> {
         job_templates::JobTemplateRepo::get(&self.pool, id).await
     }
 
@@ -681,11 +779,11 @@ impl Store {
         job_templates::JobTemplateRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_job_template(&self, id: &str, req: &CreateJobTemplateRequest) -> Result<JobTemplate> {
+    pub async fn update_job_template(&self, id: i64, req: &CreateJobTemplateRequest) -> Result<JobTemplate> {
         job_templates::JobTemplateRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_job_template(&self, id: &str) -> Result<()> {
+    pub async fn delete_job_template(&self, id: i64) -> Result<()> {
         job_templates::JobTemplateRepo::delete(&self.pool, id).await
     }
 
@@ -693,7 +791,7 @@ impl Store {
         job_templates::JobTemplateRepo::list_scheduled(&self.pool).await
     }
 
-    pub async fn update_job_template_last_run(&self, id: &str) -> Result<()> {
+    pub async fn update_job_template_last_run(&self, id: i64) -> Result<()> {
         job_templates::JobTemplateRepo::update_last_run(&self.pool, id).await
     }
 
@@ -703,7 +801,7 @@ impl Store {
         topologies::TopologyRepo::list(&self.pool).await
     }
 
-    pub async fn get_topology(&self, id: &str) -> Result<Option<Topology>> {
+    pub async fn get_topology(&self, id: i64) -> Result<Option<Topology>> {
         topologies::TopologyRepo::get(&self.pool, id).await
     }
 
@@ -711,12 +809,20 @@ impl Store {
         topologies::TopologyRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_topology(&self, id: &str, req: &CreateTopologyRequest) -> Result<Topology> {
+    pub async fn update_topology(&self, id: i64, req: &CreateTopologyRequest) -> Result<Topology> {
         topologies::TopologyRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_topology(&self, id: &str) -> Result<()> {
+    pub async fn delete_topology(&self, id: i64) -> Result<()> {
         topologies::TopologyRepo::delete(&self.pool, id).await
+    }
+
+    pub async fn delete_topology_by_name(&self, name: &str) -> Result<()> {
+        let topos = self.list_topologies().await?;
+        if let Some(t) = topos.iter().find(|t| t.name == name) {
+            self.delete_topology(t.id).await?;
+        }
+        Ok(())
     }
 
     // ========== Group Operations ==========
@@ -811,7 +917,7 @@ impl Store {
         credentials::CredentialRepo::list(&self.pool).await
     }
 
-    pub async fn get_credential(&self, id: &str) -> Result<Option<Credential>> {
+    pub async fn get_credential(&self, id: i64) -> Result<Option<Credential>> {
         credentials::CredentialRepo::get(&self.pool, id).await
     }
 
@@ -819,11 +925,11 @@ impl Store {
         credentials::CredentialRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_credential(&self, id: &str, req: &CreateCredentialRequest) -> Result<Credential> {
+    pub async fn update_credential(&self, id: i64, req: &CreateCredentialRequest) -> Result<Credential> {
         credentials::CredentialRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_credential(&self, id: &str) -> Result<()> {
+    pub async fn delete_credential(&self, id: i64) -> Result<()> {
         credentials::CredentialRepo::delete(&self.pool, id).await
     }
 
@@ -833,19 +939,23 @@ impl Store {
         device_roles::DeviceRoleRepo::list(&self.pool).await
     }
 
-    pub async fn get_device_role(&self, id: &str) -> Result<Option<DeviceRole>> {
+    pub async fn get_device_role(&self, id: i64) -> Result<Option<DeviceRole>> {
         device_roles::DeviceRoleRepo::get(&self.pool, id).await
+    }
+
+    pub async fn find_device_role_by_name(&self, name: &str) -> Result<Option<DeviceRole>> {
+        device_roles::DeviceRoleRepo::find_by_name(&self.pool, name).await
     }
 
     pub async fn create_device_role(&self, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
         device_roles::DeviceRoleRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_device_role(&self, id: &str, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
+    pub async fn update_device_role(&self, id: i64, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
         device_roles::DeviceRoleRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_device_role(&self, id: &str) -> Result<()> {
+    pub async fn delete_device_role(&self, id: i64) -> Result<()> {
         device_roles::DeviceRoleRepo::delete(&self.pool, id).await
     }
 

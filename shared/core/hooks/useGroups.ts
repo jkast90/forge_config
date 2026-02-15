@@ -10,6 +10,7 @@ import {
   deleteGroup as deleteGroupThunk,
 } from '../store/slices/groupsSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 import { getServices } from '../services';
 
@@ -70,7 +71,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
   const createGroup = useCallback(async (data: Partial<GroupFormData>): Promise<boolean> => {
     try {
       await dispatch(createGroupThunk(data)).unwrap();
-      addNotification('success', 'Group created successfully');
+      addNotification('success', 'Group created successfully', navigateAction('View Groups', 'config', 'groups'));
       dispatch(fetchGroups());
       return true;
     } catch (err) {
@@ -82,7 +83,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
   const updateGroup = useCallback(async (id: number, data: Partial<GroupFormData>): Promise<boolean> => {
     try {
       await dispatch(updateGroupThunk({ id, data })).unwrap();
-      addNotification('success', 'Group updated successfully');
+      addNotification('success', 'Group updated successfully', navigateAction('View Groups', 'config', 'groups'));
       dispatch(fetchGroups());
       return true;
     } catch (err) {
@@ -94,7 +95,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
   const deleteGroup = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(deleteGroupThunk(id)).unwrap();
-      addNotification('success', 'Group deleted');
+      addNotification('success', 'Group deleted', navigateAction('View Groups', 'config', 'groups'));
       dispatch(fetchGroups());
       return true;
     } catch (err) {
@@ -119,7 +120,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
   const setGroupVariable = useCallback(async (groupId: number, key: string, value: string): Promise<boolean> => {
     try {
       await getServices().groups.setVariable(groupId, key, value);
-      addNotification('success', `Variable "${key}" set`);
+      addNotification('success', `Variable "${key}" set`, navigateAction('View Groups', 'config', 'groups'));
       await fetchGroupVariables(groupId);
       return true;
     } catch (err) {
@@ -131,7 +132,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
   const deleteGroupVariable = useCallback(async (groupId: number, key: string): Promise<boolean> => {
     try {
       await getServices().groups.deleteVariable(groupId, key);
-      addNotification('success', `Variable "${key}" deleted`);
+      addNotification('success', `Variable "${key}" deleted`, navigateAction('View Groups', 'config', 'groups'));
       await fetchGroupVariables(groupId);
       return true;
     } catch (err) {
@@ -156,7 +157,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
   const setMembersAction = useCallback(async (groupId: number, deviceIds: number[]): Promise<boolean> => {
     try {
       await getServices().groups.setMembers(groupId, deviceIds);
-      addNotification('success', 'Members updated');
+      addNotification('success', 'Members updated', navigateAction('View Groups', 'config', 'groups'));
       await fetchMembers(groupId);
       dispatch(fetchGroups());
       return true;
@@ -169,7 +170,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
   const addMember = useCallback(async (groupId: number, deviceId: number): Promise<boolean> => {
     try {
       await getServices().groups.addMember(groupId, deviceId);
-      addNotification('success', 'Device added to group');
+      addNotification('success', 'Device added to group', navigateAction('View Groups', 'config', 'groups'));
       await fetchMembers(groupId);
       dispatch(fetchGroups());
       return true;
@@ -182,7 +183,7 @@ export function useGroups(options: UseGroupsOptions = {}): UseGroupsReturn {
   const removeMember = useCallback(async (groupId: number, deviceId: number): Promise<boolean> => {
     try {
       await getServices().groups.removeMember(groupId, deviceId);
-      addNotification('success', 'Device removed from group');
+      addNotification('success', 'Device removed from group', navigateAction('View Groups', 'config', 'groups'));
       await fetchMembers(groupId);
       dispatch(fetchGroups());
       return true;

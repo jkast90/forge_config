@@ -1,10 +1,12 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import type { Device } from '@core';
-import { useForm, useTemplates, useVendors, useTopologies, validateDeviceForm, autoDetectVendorFromMac, autoSelectTemplateForVendor, TOPOLOGY_ROLE_OPTIONS } from '@core';
+import { useForm, useTemplates, useVendors, useTopologies, validateDeviceForm, autoDetectVendorFromMac, autoSelectTemplateForVendor, getServices, TOPOLOGY_ROLE_OPTIONS } from '@core';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
+import { IconButton } from './IconButton';
 import { SelectField } from './SelectField';
 import { ValidatedInput } from './ValidatedInput';
+import { Icon } from './Icon';
 import { validators } from '@core';
 
 interface Props {
@@ -151,6 +153,17 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
     }
   }, [formData.config_template, handleChange]);
 
+  // Generate hostname from pattern
+  const handleGenerateHostname = useCallback(async () => {
+    try {
+      const role = formData.topology_role || 'device';
+      const hostname = await getServices().devices.nextHostname(role);
+      handleChange('hostname', hostname);
+    } catch {
+      // silently fail — user can still type manually
+    }
+  }, [formData.topology_role, handleChange]);
+
   // Adapter for web input onChange events
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -197,17 +210,23 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
             validate={validators.ip}
             error={errors.ip}
           />
-          <ValidatedInput
-            label="Hostname *"
-            name="hostname"
-            type="text"
-            value={formData.hostname}
-            onChange={onInputChange}
-            placeholder="switch-01"
-            required
-            validate={validators.hostname}
-            error={errors.hostname}
-          />
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end' }}>
+            <ValidatedInput
+              label="Hostname *"
+              name="hostname"
+              type="text"
+              value={formData.hostname}
+              onChange={onInputChange}
+              placeholder="switch-01"
+              required
+              validate={validators.hostname}
+              error={errors.hostname}
+              style={{ flex: 1 }}
+            />
+            <IconButton onClick={handleGenerateHostname} title="Generate hostname from pattern" style={{ marginBottom: errors.hostname ? '20px' : '0' }}>
+              <Icon name="auto_fix_high" size={16} />
+            </IconButton>
+          </div>
           <SelectField
             label="Vendor"
             name="vendor"

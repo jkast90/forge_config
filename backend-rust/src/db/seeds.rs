@@ -7,6 +7,7 @@ pub(super) struct DefaultVendor {
     name: String,
     backup_command: String,
     deploy_command: String,
+    diff_command: String,
     ssh_port: i32,
     mac_prefixes: Vec<String>,
     vendor_class: String,
@@ -20,6 +21,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             name: "OpenGear".to_string(),
             backup_command: "config export".to_string(),
             deploy_command: String::new(),
+            diff_command: String::new(),
             ssh_port: 22,
             mac_prefixes: vec!["00:13:C6".to_string()],
             vendor_class: "OpenGear".to_string(),
@@ -30,6 +32,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             name: "Cisco".to_string(),
             backup_command: "show running-config".to_string(),
             deploy_command: "configure terminal\n{CONFIG}\nend\nwrite memory".to_string(),
+            diff_command: String::new(),
             ssh_port: 22,
             mac_prefixes: vec![
                 "00:00:0C".to_string(), "00:1A:2F".to_string(), "00:1B:0D".to_string(),
@@ -45,6 +48,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             name: "Arista".to_string(),
             backup_command: "show running-config".to_string(),
             deploy_command: "configure session ztp-deploy\n{CONFIG}\ncommit".to_string(),
+            diff_command: "configure session ztp-diff\n{CONFIG}\nshow session-config diffs\nabort".to_string(),
             ssh_port: 22,
             mac_prefixes: vec![
                 "00:1C:73".to_string(), "28:99:3A".to_string(), "44:4C:A8".to_string(),
@@ -58,6 +62,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             name: "Juniper".to_string(),
             backup_command: "show configuration | display set".to_string(),
             deploy_command: "configure\n{CONFIG}\ncommit and-quit".to_string(),
+            diff_command: "configure\n{CONFIG}\nshow | compare\nrollback 0\nexit".to_string(),
             ssh_port: 22,
             mac_prefixes: vec![
                 "00:05:85".to_string(), "00:10:DB".to_string(), "00:12:1E".to_string(),
@@ -75,6 +80,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             name: "Raspberry Pi".to_string(),
             backup_command: "cat /etc/network/interfaces".to_string(),
             deploy_command: String::new(),
+            diff_command: String::new(),
             ssh_port: 22,
             mac_prefixes: vec![
                 "B8:27:EB".to_string(), "DC:A6:32".to_string(), "E4:5F:01".to_string(),
@@ -88,6 +94,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             name: "FRRouting".to_string(),
             backup_command: "vtysh -c 'show running-config'".to_string(),
             deploy_command: "vtysh\nconfigure terminal\n{CONFIG}\nend\nwrite memory".to_string(),
+            diff_command: String::new(),
             ssh_port: 22,
             mac_prefixes: vec![],
             vendor_class: "FRRouting".to_string(),
@@ -98,6 +105,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             name: "GoBGP".to_string(),
             backup_command: "gobgp global; echo '---'; gobgp neighbor".to_string(),
             deploy_command: String::new(),
+            diff_command: String::new(),
             ssh_port: 22,
             mac_prefixes: vec![],
             vendor_class: "GoBGP".to_string(),
@@ -108,6 +116,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             name: "Patch Panel".to_string(),
             backup_command: String::new(),
             deploy_command: String::new(),
+            diff_command: String::new(),
             ssh_port: 0,
             mac_prefixes: vec![],
             vendor_class: String::new(),
@@ -1428,12 +1437,12 @@ fn get_default_dhcp_options_internal() -> Vec<DefaultDhcpOption> {
 
 /// Seed data helpers used by the Store during migration
 
-pub(super) fn seed_vendor_params() -> Vec<(String, String, String, String, i32, String, String, String)> {
+pub(super) fn seed_vendor_params() -> Vec<(String, String, String, String, String, i32, String, String, String)> {
     get_default_vendors_internal()
         .into_iter()
         .map(|v| {
             let mac_json = serde_json::to_string(&v.mac_prefixes).unwrap_or_else(|_| "[]".to_string());
-            (v.id, v.name, v.backup_command, v.deploy_command, v.ssh_port, mac_json, v.vendor_class, v.default_template)
+            (v.id, v.name, v.backup_command, v.deploy_command, v.diff_command, v.ssh_port, mac_json, v.vendor_class, v.default_template)
         })
         .collect()
 }
@@ -1472,11 +1481,13 @@ pub fn get_default_vendors_models() -> Vec<Vendor> {
     let now = Utc::now();
     get_default_vendors_internal()
         .into_iter()
-        .map(|v| Vendor {
-            id: v.id,
+        .enumerate()
+        .map(|(i, v)| Vendor {
+            id: (i + 1) as i64,
             name: v.name,
             backup_command: v.backup_command,
             deploy_command: v.deploy_command,
+            diff_command: v.diff_command,
             ssh_port: v.ssh_port,
             ssh_user: None,
             ssh_pass: None,
@@ -1634,6 +1645,16 @@ pub(super) fn seed_vendor_action_params() -> Vec<(String, String, String, String
         .collect()
 }
 
+/// Map an old text action ID (e.g. "arista-interfaces") to its label ("Interfaces")
+pub(super) fn action_id_to_label(old_id: &str) -> Option<String> {
+    for action in get_default_vendor_actions_internal() {
+        if action.id == old_id {
+            return Some(action.label);
+        }
+    }
+    None
+}
+
 pub(super) fn seed_device_model_params() -> Vec<(String, String, String, String, i32, String)> {
     // Helper to build port JSON arrays
     fn ports_json(count: usize, col_start: usize, name_fn: &dyn Fn(usize) -> String, connector: &str, speed: u32) -> Vec<String> {
@@ -1758,13 +1779,14 @@ pub fn get_default_dhcp_options_models() -> Vec<DhcpOption> {
     let now = Utc::now();
     get_default_dhcp_options_internal()
         .into_iter()
-        .map(|o| DhcpOption {
-            id: o.id,
+        .enumerate()
+        .map(|(i, o)| DhcpOption {
+            id: (i + 1) as i64,
             option_number: o.option_number,
             name: o.name,
             value: o.value,
             option_type: o.option_type,
-            vendor_id: if o.vendor_id.is_empty() { None } else { Some(o.vendor_id) },
+            vendor_id: None, // vendor_id lookup requires DB; defaults use None
             description: if o.description.is_empty() { None } else { Some(o.description) },
             enabled: o.enabled,
             created_at: now,

@@ -66,7 +66,7 @@ pub async fn get_branding(
 ) -> Result<Json<BrandingResponse>, ApiError> {
     let settings = state.store.get_settings().await?;
     Ok(Json(BrandingResponse {
-        app_name: settings.app_name.unwrap_or_else(|| "ZTP Manager".to_string()),
+        app_name: settings.app_name.unwrap_or_else(|| "ForgeConfig".to_string()),
         logo_url: settings.logo_url.clone(),
     }))
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, checkApiHealth, getLocalApiUrl, setLocalApiUrl, configureServices } from '@core';
 import type { Branding } from '@core';
 import { Button } from './Button';
-import defaultLogo from '../assets/image.png';
+import defaultLogo from '../assets/logo.svg';
 
 interface Props {
   branding?: Branding;
@@ -48,7 +48,7 @@ export function LoginPage({ branding }: Props) {
       <div className="login-card">
         <div className="login-header">
           <img src={branding?.logo_url || defaultLogo} alt="Logo" className="login-logo" />
-          <h2>{branding?.app_name || 'ZTP Manager'}</h2>
+          <h2>{branding?.app_name || 'ForgeConfig'}</h2>
         </div>
 
         {apiReachable === false && (

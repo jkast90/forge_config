@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 /// Template represents a configuration template
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Template {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub vendor_id: Option<String>,
+    pub vendor_id: Option<i64>,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_count: Option<i32>,
@@ -20,12 +20,11 @@ pub struct Template {
 /// CreateTemplateRequest for creating new templates
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateTemplateRequest {
-    pub id: String,
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub vendor_id: Option<String>,
+    pub vendor_id: Option<i64>,
     pub content: String,
 }
 

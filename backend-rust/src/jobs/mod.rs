@@ -129,14 +129,16 @@ impl JobService {
 
                     let is_webhook = tmpl.job_type == crate::models::job_type::WEBHOOK;
 
+                    let credential_id_str = tmpl.credential_id.to_string();
+
                     if is_webhook && device_ids.is_empty() {
                         // Static webhook — run once without device
                         let job_id = uuid::Uuid::new_v4().to_string();
                         let req = CreateJobRequest {
                             device_id: 0,
                             job_type: crate::models::job_type::WEBHOOK.to_string(),
-                            command: tmpl.action_id.clone(),
-                            credential_id: tmpl.credential_id.clone(),
+                            command: tmpl.action_id.to_string(),
+                            credential_id: credential_id_str.clone(),
                         };
                         if let Ok(job) = svc.store.create_job(&job_id, &req).await {
                             if let Some(ref hub) = svc.ws_hub {
@@ -149,9 +151,9 @@ impl JobService {
                         for device_id in &device_ids {
                             let job_id = uuid::Uuid::new_v4().to_string();
                             let command = if is_webhook {
-                                tmpl.action_id.clone()
-                            } else if !tmpl.action_id.is_empty() {
-                                match svc.store.get_vendor_action(&tmpl.action_id).await {
+                                tmpl.action_id.to_string()
+                            } else if tmpl.action_id != 0 {
+                                match svc.store.get_vendor_action(tmpl.action_id).await {
                                     Ok(Some(action)) => action.command.clone(),
                                     _ => tmpl.command.clone(),
                                 }
@@ -169,7 +171,7 @@ impl JobService {
                                 device_id: *device_id,
                                 job_type: jt,
                                 command,
-                                credential_id: tmpl.credential_id.clone(),
+                                credential_id: credential_id_str.clone(),
                             };
 
                             if let Ok(job) = svc.store.create_job(&job_id, &req).await {
@@ -182,7 +184,7 @@ impl JobService {
                     }
 
                     // Update last_run_at
-                    let _ = svc.store.update_job_template_last_run(&tmpl.id).await;
+                    let _ = svc.store.update_job_template_last_run(tmpl.id).await;
                 }
             }
         });
@@ -213,6 +215,7 @@ impl JobService {
         let result = match job.job_type.as_str() {
             job_type::COMMAND => self.execute_command_job(&job).await,
             job_type::DEPLOY => self.execute_deploy_job(&job).await,
+            job_type::DIFF => self.execute_diff_job(&job).await,
             job_type::WEBHOOK => self.execute_webhook_job(&job).await,
             job_type::APPLY_TEMPLATE => self.execute_apply_template_job(&job).await,
             _ => Err(anyhow::anyhow!("Unknown job type: {}", job.job_type)),
@@ -242,9 +245,11 @@ impl JobService {
 
         // Override with job-specific credential if set
         if !job.credential_id.is_empty() {
-            if let Some(cred) = self.store.get_credential(&job.credential_id).await? {
-                if !cred.username.is_empty() { ssh_user = cred.username; }
-                if !cred.password.is_empty() { ssh_pass = cred.password; }
+            if let Ok(cred_id) = job.credential_id.parse::<i64>() {
+                if let Some(cred) = self.store.get_credential(cred_id).await? {
+                    if !cred.username.is_empty() { ssh_user = cred.username; }
+                    if !cred.password.is_empty() { ssh_pass = cred.password; }
+                }
             }
         }
 
@@ -263,27 +268,36 @@ impl JobService {
 
         // Resolve template: use device's config_template, or fall back to vendor's default_template
         let template_id = if !device.config_template.is_empty() {
-            device.config_template.clone()
-        } else if let Some(ref vendor_id) = device.vendor {
+            device.config_template.parse::<i64>()
+                .map_err(|_| anyhow::anyhow!("Invalid template ID: {}", device.config_template))?
+        } else if let Some(ref vendor_str) = device.vendor {
+            let vendor_id = vendor_str.parse::<i64>()
+                .map_err(|_| anyhow::anyhow!("Invalid vendor ID: {}", vendor_str))?;
             let vendor = self.store.get_vendor(vendor_id).await?
                 .ok_or_else(|| anyhow::anyhow!("Device has no template and vendor not found"))?;
             if vendor.default_template.is_empty() {
                 return Err(anyhow::anyhow!("Device has no template and vendor has no default template"));
             }
-            vendor.default_template
+            vendor.default_template.parse::<i64>()
+                .map_err(|_| anyhow::anyhow!("Invalid default template ID: {}", vendor.default_template))?
         } else {
             return Err(anyhow::anyhow!("Device has no template assigned and no vendor to infer from"));
         };
 
-        let template = self.store.get_template(&template_id).await?
+        let template = self.store.get_template(template_id).await?
             .ok_or_else(|| anyhow::anyhow!("Template not found: {}", template_id))?;
 
         let settings = self.store.get_settings().await?;
 
-        // Look up role-specific template (e.g., "arista-eos-spine" or "arista-eos-leaf")
+        // Look up role-specific template by name convention
         let role_template = if let Some(ref role) = device.topology_role {
-            let role_id = format!("{}-{}", template.id, role);
-            self.store.get_template(&role_id).await.ok().flatten()
+            let capitalized_role = format!("{}{}", &role[..1].to_uppercase(), &role[1..]);
+            let role_name = if template.name.ends_with(" Default") {
+                format!("{} {}", template.name.trim_end_matches(" Default"), capitalized_role)
+            } else {
+                format!("{} {}", template.name, capitalized_role)
+            };
+            self.store.get_template_by_name(&role_name).await.ok().flatten()
         } else {
             None
         };
@@ -306,9 +320,11 @@ impl JobService {
 
         // Override with job-specific credential if set
         if !job.credential_id.is_empty() {
-            if let Some(cred) = self.store.get_credential(&job.credential_id).await? {
-                if !cred.username.is_empty() { ssh_user = cred.username; }
-                if !cred.password.is_empty() { ssh_pass = cred.password; }
+            if let Ok(cred_id) = job.credential_id.parse::<i64>() {
+                if let Some(cred) = self.store.get_credential(cred_id).await? {
+                    if !cred.username.is_empty() { ssh_user = cred.username; }
+                    if !cred.password.is_empty() { ssh_pass = cred.password; }
+                }
             }
         }
 
@@ -318,7 +334,13 @@ impl JobService {
 
         // Resolve vendor deploy_command wrapper
         let vendor = match device.vendor.as_deref() {
-            Some(v) if !v.is_empty() => self.store.get_vendor(v).await.ok().flatten(),
+            Some(v) if !v.is_empty() => {
+                if let Ok(vid) = v.parse::<i64>() {
+                    self.store.get_vendor(vid).await.ok().flatten()
+                } else {
+                    None
+                }
+            }
             _ => None,
         };
 
@@ -351,10 +373,116 @@ impl JobService {
         Ok(output)
     }
 
+    async fn execute_diff_job(&self, job: &Job) -> Result<String> {
+        let device = self.store.get_device(job.device_id).await?
+            .ok_or_else(|| anyhow::anyhow!("Device not found: {}", job.device_id))?;
+
+        // Resolve template: use device's config_template, or fall back to vendor's default_template
+        let template_id = if !device.config_template.is_empty() {
+            device.config_template.parse::<i64>()
+                .map_err(|_| anyhow::anyhow!("Invalid template ID: {}", device.config_template))?
+        } else if let Some(ref vendor_str) = device.vendor {
+            let vendor_id = vendor_str.parse::<i64>()
+                .map_err(|_| anyhow::anyhow!("Invalid vendor ID: {}", vendor_str))?;
+            let vendor = self.store.get_vendor(vendor_id).await?
+                .ok_or_else(|| anyhow::anyhow!("Device has no template and vendor not found"))?;
+            if vendor.default_template.is_empty() {
+                return Err(anyhow::anyhow!("Device has no template and vendor has no default template"));
+            }
+            vendor.default_template.parse::<i64>()
+                .map_err(|_| anyhow::anyhow!("Invalid default template ID: {}", vendor.default_template))?
+        } else {
+            return Err(anyhow::anyhow!("Device has no template assigned and no vendor to infer from"));
+        };
+
+        let template = self.store.get_template(template_id).await?
+            .ok_or_else(|| anyhow::anyhow!("Template not found: {}", template_id))?;
+
+        let settings = self.store.get_settings().await?;
+
+        // Look up role-specific template by name convention
+        let role_template = if let Some(ref role) = device.topology_role {
+            let capitalized_role = format!("{}{}", &role[..1].to_uppercase(), &role[1..]);
+            let role_name = if template.name.ends_with(" Default") {
+                format!("{} {}", template.name.trim_end_matches(" Default"), capitalized_role)
+            } else {
+                format!("{} {}", template.name, capitalized_role)
+            };
+            self.store.get_template_by_name(&role_name).await.ok().flatten()
+        } else {
+            None
+        };
+
+        // Load resolved variables (group + host inheritance) for template rendering
+        let vars = self
+            .store
+            .resolve_device_variables_flat(device.id)
+            .await
+            .unwrap_or_default();
+
+        // Load port assignments for VRF context
+        let port_assignments = self.store.list_port_assignments(device.id).await.unwrap_or_default();
+
+        // Render the template
+        let rendered_config = render_config(&device, &template, &settings, role_template.as_ref(), &vars, Some(&port_assignments))?;
+
+        // Resolve SSH credentials
+        let (mut ssh_user, mut ssh_pass) = crate::utils::resolve_ssh_credentials(&self.store, device.ssh_user.clone(), device.ssh_pass.clone(), device.vendor.as_deref()).await;
+
+        // Override with job-specific credential if set
+        if !job.credential_id.is_empty() {
+            if let Ok(cred_id) = job.credential_id.parse::<i64>() {
+                if let Some(cred) = self.store.get_credential(cred_id).await? {
+                    if !cred.username.is_empty() { ssh_user = cred.username; }
+                    if !cred.password.is_empty() { ssh_pass = cred.password; }
+                }
+            }
+        }
+
+        if ssh_user.is_empty() || ssh_pass.is_empty() {
+            return Err(anyhow::anyhow!("No SSH credentials available for this device"));
+        }
+
+        // Resolve vendor diff_command wrapper
+        let vendor = match device.vendor.as_deref() {
+            Some(v) if !v.is_empty() => {
+                if let Ok(vid) = v.parse::<i64>() {
+                    self.store.get_vendor(vid).await.ok().flatten()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        let has_diff_command = vendor.as_ref().map_or(false, |v| !v.diff_command.is_empty());
+
+        if !has_diff_command {
+            return Err(anyhow::anyhow!("Vendor has no diff_command configured"));
+        }
+
+        // Strip "end" lines that would exit config mode entirely since the diff_command
+        // wrapper manages the session lifecycle (e.g., show session-config diffs / abort for Arista)
+        let config_for_diff: String = rendered_config
+            .lines()
+            .filter(|line| !line.trim().eq_ignore_ascii_case("end"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let diff_payload = vendor.as_ref().unwrap().diff_command.replace("{CONFIG}", &config_for_diff);
+
+        // Use interactive shell for multi-line diff commands (network devices need PTY)
+        let output = crate::utils::ssh_run_interactive_async(&device.ip, &ssh_user, &ssh_pass, &diff_payload)
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+
+        Ok(output)
+    }
+
     async fn execute_apply_template_job(&self, job: &Job) -> Result<String> {
         // job.command stores the template ID to apply
-        let template_id = if !job.command.is_empty() {
-            job.command.clone()
+        let template_id: i64 = if !job.command.is_empty() {
+            job.command.parse()
+                .map_err(|_| anyhow::anyhow!("Invalid template ID: {}", job.command))?
         } else {
             return Err(anyhow::anyhow!("No template ID specified in apply_template job"));
         };
@@ -362,15 +490,20 @@ impl JobService {
         let device = self.store.get_device(job.device_id).await?
             .ok_or_else(|| anyhow::anyhow!("Device not found: {}", job.device_id))?;
 
-        let template = self.store.get_template(&template_id).await?
+        let template = self.store.get_template(template_id).await?
             .ok_or_else(|| anyhow::anyhow!("Template not found: {}", template_id))?;
 
         let settings = self.store.get_settings().await?;
 
-        // Look up role-specific template variant
+        // Look up role-specific template by name convention
         let role_template = if let Some(ref role) = device.topology_role {
-            let role_id = format!("{}-{}", template.id, role);
-            self.store.get_template(&role_id).await.ok().flatten()
+            let capitalized_role = format!("{}{}", &role[..1].to_uppercase(), &role[1..]);
+            let role_name = if template.name.ends_with(" Default") {
+                format!("{} {}", template.name.trim_end_matches(" Default"), capitalized_role)
+            } else {
+                format!("{} {}", template.name, capitalized_role)
+            };
+            self.store.get_template_by_name(&role_name).await.ok().flatten()
         } else {
             None
         };
@@ -389,9 +522,11 @@ impl JobService {
 
         // Override with job-specific credential if set
         if !job.credential_id.is_empty() {
-            if let Some(cred) = self.store.get_credential(&job.credential_id).await? {
-                if !cred.username.is_empty() { ssh_user = cred.username; }
-                if !cred.password.is_empty() { ssh_pass = cred.password; }
+            if let Ok(cred_id) = job.credential_id.parse::<i64>() {
+                if let Some(cred) = self.store.get_credential(cred_id).await? {
+                    if !cred.username.is_empty() { ssh_user = cred.username; }
+                    if !cred.password.is_empty() { ssh_pass = cred.password; }
+                }
             }
         }
 
@@ -400,7 +535,13 @@ impl JobService {
         }
 
         let vendor = match device.vendor.as_deref() {
-            Some(v) if !v.is_empty() => self.store.get_vendor(v).await.ok().flatten(),
+            Some(v) if !v.is_empty() => {
+                if let Ok(vid) = v.parse::<i64>() {
+                    self.store.get_vendor(vid).await.ok().flatten()
+                } else {
+                    None
+                }
+            }
             _ => None,
         };
 
@@ -433,8 +574,10 @@ impl JobService {
     }
 
     async fn execute_webhook_job(&self, job: &Job) -> Result<String> {
-        // The command field stores the action ID for webhook jobs
-        let action = self.store.get_vendor_action(&job.command).await?
+        // The command field stores the action ID (as text) for webhook jobs
+        let action_id: i64 = job.command.parse()
+            .map_err(|_| anyhow::anyhow!("Invalid vendor action ID: {}", job.command))?;
+        let action = self.store.get_vendor_action(action_id).await?
             .ok_or_else(|| anyhow::anyhow!("Vendor action not found: {}", job.command))?;
 
         if action.action_type != "webhook" {

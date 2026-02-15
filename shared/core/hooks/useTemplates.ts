@@ -12,6 +12,7 @@ import {
   deleteTemplate as deleteTemplateThunk,
 } from '../store/slices/templatesSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseTemplatesOptions {
@@ -64,7 +65,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
   const createTemplate = useCallback(async (data: Partial<Template>): Promise<boolean> => {
     try {
       await dispatch(createTemplateThunk(data)).unwrap();
-      addNotification('success', 'Template added successfully');
+      addNotification('success', 'Template added successfully', navigateAction('View Templates', 'config', 'templates'));
       dispatch(fetchTemplates());
       return true;
     } catch (err) {
@@ -76,7 +77,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
   const updateTemplate = useCallback(async (id: string, data: Partial<Template>): Promise<boolean> => {
     try {
       await dispatch(updateTemplateThunk({ id, data })).unwrap();
-      addNotification('success', 'Template updated successfully');
+      addNotification('success', 'Template updated successfully', navigateAction('View Templates', 'config', 'templates'));
       dispatch(fetchTemplates());
       return true;
     } catch (err) {
@@ -88,7 +89,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
   const deleteTemplate = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteTemplateThunk(id)).unwrap();
-      addNotification('success', 'Template deleted successfully');
+      addNotification('success', 'Template deleted successfully', navigateAction('View Templates', 'config', 'templates'));
       dispatch(fetchTemplates());
       return true;
     } catch (err) {

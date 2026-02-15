@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tera::{Context, Tera};
 use tokio::process::Command;
 
+use serde::Deserialize;
+
 use crate::models::*;
 use crate::utils::{normalize_mac, is_valid_ipv4, is_valid_hostname};
 use crate::AppState;
@@ -294,14 +296,14 @@ pub async fn exec_command(
         .ok_or_else(|| ApiError::not_found("device"))?;
 
     // Determine job type: if action_id is provided and the action is a webhook, create a webhook job
-    let (jt, command) = if let Some(ref action_id) = body.action_id {
+    let (jt, command) = if let Some(action_id) = body.action_id {
         let action = state.store.get_vendor_action(action_id).await
             .map_err(|e| ApiError::internal(e.to_string()))?
             .ok_or_else(|| ApiError::not_found("vendor action"))?;
 
         if action.action_type == "webhook" {
             // For webhook jobs, store the action_id in the command field
-            (job_type::WEBHOOK.to_string(), action.id.clone())
+            (job_type::WEBHOOK.to_string(), action.id.to_string())
         } else {
             // SSH action — use its command
             (job_type::COMMAND.to_string(), action.command.clone())
@@ -391,31 +393,40 @@ pub async fn preview_device_config(
         .ok_or_else(|| ApiError::not_found("device"))?;
 
     // Resolve template: use device's config_template, or fall back to vendor's default_template
-    let template_id = if !device.config_template.is_empty() {
-        device.config_template.clone()
-    } else if let Some(vendor_id) = &device.vendor {
+    let template_id: i64 = if !device.config_template.is_empty() {
+        device.config_template.parse::<i64>()
+            .map_err(|_| ApiError::bad_request(format!("Invalid template ID: {}", device.config_template)))?
+    } else if let Some(ref vendor_str) = device.vendor {
+        let vendor_id = vendor_str.parse::<i64>()
+            .map_err(|_| ApiError::bad_request(format!("Invalid vendor ID: {}", vendor_str)))?;
         let vendor = state.store.get_vendor(vendor_id).await?
             .ok_or_else(|| ApiError::bad_request("Device has no template and vendor not found"))?;
         if vendor.default_template.is_empty() {
             return Err(ApiError::bad_request("Device has no template and vendor has no default template"));
         }
-        vendor.default_template
+        vendor.default_template.parse::<i64>()
+            .map_err(|_| ApiError::bad_request(format!("Invalid default template ID: {}", vendor.default_template)))?
     } else {
         return Err(ApiError::bad_request("Device has no template assigned and no vendor to infer from"));
     };
 
     let template = state
         .store
-        .get_template(&template_id)
+        .get_template(template_id)
         .await?
         .ok_or_else(|| ApiError::not_found("template"))?;
 
     let settings = state.store.get_settings().await?;
 
-    // Look up role-specific template (e.g., "arista-eos-spine" or "arista-eos-leaf")
+    // Look up role-specific template by name convention
     let role_template = if let Some(role) = &device.topology_role {
-        let role_id = format!("{}-{}", template.id, role);
-        state.store.get_template(&role_id).await.ok().flatten()
+        let capitalized_role = format!("{}{}", &role[..1].to_uppercase(), &role[1..]);
+        let role_name = if template.name.ends_with(" Default") {
+            format!("{} {}", template.name.trim_end_matches(" Default"), capitalized_role)
+        } else {
+            format!("{} {}", template.name, capitalized_role)
+        };
+        state.store.get_template_by_name(&role_name).await.ok().flatten()
     } else {
         None
     };
@@ -444,17 +455,20 @@ pub async fn deploy_device_config(
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Result<(StatusCode, Json<Job>), ApiError> {
-    let _device = state
+    let device = state
         .store
         .get_device(id)
         .await?
         .ok_or_else(|| ApiError::not_found("device"))?;
 
+    // Resolve template name for job metadata
+    let template_name = resolve_job_template_name(&state, &device).await;
+
     let job_id = uuid::Uuid::new_v4().to_string();
     let req = CreateJobRequest {
         device_id: id,
         job_type: job_type::DEPLOY.to_string(),
-        command: String::new(),
+        command: template_name,
         credential_id: String::new(),
     };
 
@@ -471,4 +485,161 @@ pub async fn deploy_device_config(
     }
 
     Ok((StatusCode::ACCEPTED, Json(job)))
+}
+
+/// Show a diff of the pending configuration on a device via SSH — creates a job and returns 202 Accepted
+pub async fn diff_device_config(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Result<(StatusCode, Json<Job>), ApiError> {
+    let device = state
+        .store
+        .get_device(id)
+        .await?
+        .ok_or_else(|| ApiError::not_found("device"))?;
+
+    // Resolve template name for job metadata
+    let template_name = resolve_job_template_name(&state, &device).await;
+
+    let job_id = uuid::Uuid::new_v4().to_string();
+    let req = CreateJobRequest {
+        device_id: id,
+        job_type: job_type::DIFF.to_string(),
+        command: template_name,
+        credential_id: String::new(),
+    };
+
+    let job = state.store.create_job(&job_id, &req).await?;
+
+    // Broadcast queued event
+    if let Some(ref hub) = state.ws_hub {
+        hub.broadcast_job_update(crate::ws::EventType::JobQueued, &job).await;
+    }
+
+    // Submit to worker
+    if let Some(ref job_service) = state.job_service {
+        job_service.submit(job_id).await;
+    }
+
+    Ok((StatusCode::ACCEPTED, Json(job)))
+}
+
+// ========== Hostname Generation ==========
+
+#[derive(Deserialize)]
+pub struct NextHostnameQuery {
+    pub role: String,
+    pub datacenter: Option<String>,
+    pub region: Option<String>,
+    pub hall: Option<String>,
+}
+
+/// Generate the next available hostname based on the hostname pattern setting
+pub async fn next_hostname(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<NextHostnameQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let hostname = resolve_next_hostname(&state, &params.role, params.datacenter.as_deref(), params.region.as_deref(), params.hall.as_deref()).await?;
+    Ok(Json(serde_json::json!({ "hostname": hostname })))
+}
+
+/// Resolve the next available hostname for a given role and optional datacenter.
+/// Shared by both the API endpoint and the CLOS builder.
+pub async fn resolve_next_hostname(
+    state: &AppState,
+    role: &str,
+    datacenter: Option<&str>,
+    region: Option<&str>,
+    hall: Option<&str>,
+) -> Result<String, ApiError> {
+    let settings = state.store.get_settings().await?;
+    let pattern = &settings.hostname_pattern;
+
+    let dc = datacenter.unwrap_or("");
+    let rgn = region.unwrap_or("");
+    let hl = hall.unwrap_or("");
+    let base = pattern
+        .replace("$region", rgn)
+        .replace("$datacenter", dc)
+        .replace("$hall", hl)
+        .replace("$role", role);
+
+    // Clean up leading/trailing hyphens and double hyphens from empty variables
+    let mut base = base.trim_matches('-').to_string();
+    while base.contains("--") {
+        base = base.replace("--", "-");
+    }
+
+    // Build a LIKE pattern from the base (replace # with %)
+    let like_pattern = base.replace('#', "%");
+
+    let rows = state.store.list_hostnames_matching(&like_pattern)
+        .await
+        .unwrap_or_default();
+
+    // Build regex to extract the number from matching hostnames
+    let re_pattern = format!(
+        "^{}$",
+        regex_lite::escape(&base).replace(r"\#", r"(\d+)")
+    );
+    let number_re = regex_lite::Regex::new(&re_pattern).unwrap();
+
+    let max_num = rows
+        .iter()
+        .filter_map(|h| number_re.captures(h))
+        .filter_map(|c| c.get(1)?.as_str().parse::<u32>().ok())
+        .max()
+        .unwrap_or(0);
+
+    let hostname = base.replace('#', &(max_num + 1).to_string());
+    Ok(hostname)
+}
+
+/// Resolve the template name for a device (for job metadata).
+/// Returns "template_name" or "template_name (role-variant)" or empty string.
+async fn resolve_job_template_name(state: &AppState, device: &Device) -> String {
+    let template_id: i64 = if !device.config_template.is_empty() {
+        match device.config_template.parse::<i64>() {
+            Ok(id) => id,
+            Err(_) => return String::new(),
+        }
+    } else if let Some(ref vendor_str) = device.vendor {
+        let vendor_id = match vendor_str.parse::<i64>() {
+            Ok(id) => id,
+            Err(_) => return String::new(),
+        };
+        match state.store.get_vendor(vendor_id).await {
+            Ok(Some(v)) if !v.default_template.is_empty() => {
+                match v.default_template.parse::<i64>() {
+                    Ok(id) => id,
+                    Err(_) => return String::new(),
+                }
+            }
+            _ => return String::new(),
+        }
+    } else {
+        return String::new();
+    };
+
+    let template_name = match state.store.get_template(template_id).await {
+        Ok(Some(t)) => t.name,
+        _ => return template_id.to_string(),
+    };
+
+    // Check for role-specific variant by name convention
+    if let Some(ref role) = device.topology_role {
+        let capitalized_role = format!("{}{}", &role[..1].to_uppercase(), &role[1..]);
+        let role_name = if template_name.ends_with(" Default") {
+            format!("{} {}", template_name.trim_end_matches(" Default"), capitalized_role)
+        } else {
+            format!("{} {}", template_name, capitalized_role)
+        };
+        if let Ok(Some(role_tmpl)) = state.store.get_template_by_name(&role_name).await {
+            return format!("{} ({})", template_name, role_tmpl.name);
+        }
+    }
+
+    template_name
 }

@@ -22,7 +22,7 @@ export const THEME_OPTIONS: ThemeConfig[] = [
   { value: 'nord', icon: 'ac_unit', label: 'Nord', description: 'Arctic, north-bluish color palette' },
   { value: 'evergreen-dark', icon: 'forest', label: 'Evergreen Dark', description: 'Deep forest greens, dark mode' },
   { value: 'evergreen-light', icon: 'park', label: 'Evergreen Light', description: 'Fresh forest greens, light mode' },
-  { value: 'ocean-dark', icon: 'water', label: 'Ocean Dark', description: 'Deep sea blues, dark mode' },
+  { value: 'ocean-dark', icon: 'water', label: 'Ocean Dark', description: 'Deep sea blues, dark mode (I\'m blue da ba dee)' },
   { value: 'ocean-light', icon: 'waves', label: 'Ocean Light', description: 'Coastal blues, light mode' },
   { value: 'nautical-dark', icon: 'sailing', label: 'Nautical Dark', description: 'Maritime brass & navy, dark mode' },
   { value: 'nautical-light', icon: 'anchor', label: 'Nautical Light', description: 'Sandy coastal daylight, light mode' },

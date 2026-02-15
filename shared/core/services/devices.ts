@@ -64,6 +64,13 @@ export class DeviceService extends BaseService {
     return this.get<Device>(`/devices/${encodeURIComponent(id)}`);
   }
 
+  async nextHostname(role: string, datacenter?: string): Promise<string> {
+    const params = new URLSearchParams({ role });
+    if (datacenter) params.set('datacenter', datacenter);
+    const res = await this.get<{ hostname: string }>(`/devices/next-hostname?${params}`);
+    return res.hostname;
+  }
+
   async create(device: Partial<Device>): Promise<Device> {
     return this.post<Device>('/devices', device);
   }
@@ -108,8 +115,13 @@ export class DeviceService extends BaseService {
     return this.post<Job>(`/devices/${encodeURIComponent(id)}/deploy-config`);
   }
 
+  async diffConfig(id: number): Promise<Job> {
+    return this.post<Job>(`/devices/${encodeURIComponent(id)}/diff-config`);
+  }
+
   async exec(id: number, command: string, actionId?: string): Promise<Job> {
-    const body: { command: string; action_id?: string } = { command };
+    const body: { command?: string; action_id?: string } = {};
+    if (command) body.command = command;
     if (actionId) body.action_id = actionId;
     return this.post<Job>(`/devices/${encodeURIComponent(id)}/exec`, body);
   }

@@ -7,12 +7,12 @@ use crate::models::*;
 use super::row_helpers::map_vendor_row;
 
 const SELECT_VENDOR: &str = r#"
-    SELECT v.id, v.name, v.backup_command, v.deploy_command, v.ssh_port, v.ssh_user, v.ssh_pass,
+    SELECT v.id, v.name, v.backup_command, v.deploy_command, v.diff_command, v.ssh_port, v.ssh_user, v.ssh_pass,
            v.mac_prefixes, v.vendor_class, v.default_template,
            v.created_at, v.updated_at,
            COALESCE(COUNT(d.mac), 0) as device_count
     FROM vendors v
-    LEFT JOIN devices d ON d.vendor = v.id
+    LEFT JOIN devices d ON d.vendor = CAST(v.id AS TEXT)
 "#;
 
 /// Vendor database operations
@@ -27,9 +27,18 @@ impl VendorRepo {
         Ok(rows.iter().map(map_vendor_row).collect())
     }
 
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<Vendor>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<Vendor>> {
         let row = sqlx::query(&format!("{} WHERE v.id = ? GROUP BY v.id", SELECT_VENDOR))
             .bind(id)
+            .fetch_optional(pool)
+            .await?;
+
+        Ok(row.as_ref().map(map_vendor_row))
+    }
+
+    pub async fn get_by_name(pool: &Pool<Sqlite>, name: &str) -> Result<Option<Vendor>> {
+        let row = sqlx::query(&format!("{} WHERE LOWER(v.name) = LOWER(?) GROUP BY v.id", SELECT_VENDOR))
+            .bind(name)
             .fetch_optional(pool)
             .await?;
 
@@ -40,17 +49,17 @@ impl VendorRepo {
         let now = Utc::now();
         let mac_prefixes_json = serde_json::to_string(&req.mac_prefixes)?;
 
-        sqlx::query(
+        let result = sqlx::query(
             r#"
-            INSERT INTO vendors (id, name, backup_command, deploy_command, ssh_port, ssh_user, ssh_pass,
+            INSERT INTO vendors (name, backup_command, deploy_command, diff_command, ssh_port, ssh_user, ssh_pass,
                                  mac_prefixes, vendor_class, default_template, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
-        .bind(&req.id)
         .bind(&req.name)
         .bind(&req.backup_command)
         .bind(&req.deploy_command)
+        .bind(&req.diff_command)
         .bind(req.ssh_port)
         .bind(&req.ssh_user)
         .bind(&req.ssh_pass)
@@ -62,18 +71,19 @@ impl VendorRepo {
         .execute(pool)
         .await?;
 
-        Self::get(pool, &req.id)
+        let new_id = result.last_insert_rowid();
+        Self::get(pool, new_id)
             .await?
             .context("Vendor not found after creation")
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateVendorRequest) -> Result<Vendor> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateVendorRequest) -> Result<Vendor> {
         let now = Utc::now();
         let mac_prefixes_json = serde_json::to_string(&req.mac_prefixes)?;
 
         let result = sqlx::query(
             r#"
-            UPDATE vendors SET name = ?, backup_command = ?, deploy_command = ?, ssh_port = ?, ssh_user = ?, ssh_pass = ?,
+            UPDATE vendors SET name = ?, backup_command = ?, deploy_command = ?, diff_command = ?, ssh_port = ?, ssh_user = ?, ssh_pass = ?,
                               mac_prefixes = ?, vendor_class = ?, default_template = ?, updated_at = ?
             WHERE id = ?
             "#,
@@ -81,6 +91,7 @@ impl VendorRepo {
         .bind(&req.name)
         .bind(&req.backup_command)
         .bind(&req.deploy_command)
+        .bind(&req.diff_command)
         .bind(req.ssh_port)
         .bind(&req.ssh_user)
         .bind(&req.ssh_pass)
@@ -93,7 +104,7 @@ impl VendorRepo {
         .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Vendor", id).into());
+            return Err(super::NotFoundError::new("Vendor", &id.to_string()).into());
         }
 
         Self::get(pool, id)
@@ -101,14 +112,14 @@ impl VendorRepo {
             .context("Vendor not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM vendors WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Vendor", id).into());
+            return Err(super::NotFoundError::new("Vendor", &id.to_string()).into());
         }
         Ok(())
     }

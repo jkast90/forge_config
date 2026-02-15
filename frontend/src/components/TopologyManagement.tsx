@@ -14,6 +14,7 @@ import {
   navigateAction,
   EMPTY_TOPOLOGY_FORM,
   slugify,
+  isPatchPanel,
 } from '@core';
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
@@ -36,6 +37,7 @@ import type { TableColumn, TableAction } from './Table';
 import { VendorBadge } from './VendorBadge';
 import { Icon, PlusIcon, SpinnerIcon, TrashIcon, loadingIcon } from './Icon';
 import { TopologyDiagramViewer } from './TopologyDiagram';
+import type { TopologyDiagramViewerHandle } from './TopologyDiagram';
 import { useConfirm } from './ConfirmDialog';
 
 export function TopologyManagement() {
@@ -51,7 +53,7 @@ export function TopologyManagement() {
   const { devices, refresh: refreshDevices } = useDevices();
   const { templates } = useTemplates();
   const ipam = useIpam();
-  const { regions, campuses, datacenters } = ipam;
+  const { regions, campuses, datacenters, halls, rows: ipamRows, racks } = ipam;
   const [addingNode, setAddingNode] = useState<string | null>(null); // "topologyId:role" while spawning
   const [addMenuOpen, setAddMenuOpen] = useState<string | null>(null); // "topologyId:role" for popover
   const [commandDevice, setCommandDevice] = useState<Device | null>(null);
@@ -61,9 +63,10 @@ export function TopologyManagement() {
   const [portsDevice, setPortsDevice] = useState<Device | null>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const { confirm, ConfirmDialogRenderer } = useConfirm();
+  const diagramRef = useRef<TopologyDiagramViewerHandle>(null);
   const [buildingVirtualClos, setBuildingVirtualClos] = useState(false);
   const [showVirtualClosDialog, setShowVirtualClosDialog] = useState(false);
-  const [virtualClosConfig, setVirtualClosConfig] = useState({ spines: 2, leaves: 16, region_id: '', campus_id: '', datacenter_id: '', halls: 1, rows_per_hall: 4, racks_per_row: 8, leaves_per_rack: 1, external_devices: 2, uplinks_per_spine: 2, external_names: [] as string[] });
+  const [virtualClosConfig, setVirtualClosConfig] = useState({ spines: 2, leaves: 16, region_id: '', campus_id: '', datacenter_id: '', halls: 1, rows_per_hall: 4, racks_per_row: 8, leaves_per_rack: 1, external_devices: 2, uplinks_per_spine: 2, links_per_leaf: 2, external_names: [] as string[] });
 
   const hasVirtualClos = useMemo(
     () => devices.some(d => d.topology_id === 'dc1-virtual'),
@@ -153,6 +156,19 @@ export function TopologyManagement() {
     }
   };
 
+  const handleDiffConfig = async () => {
+    if (!previewModal.item) return;
+    const hostname = previewModal.item.hostname;
+    previewModal.close();
+    try {
+      await getServices().devices.diffConfig(previewModal.item.id);
+      addNotification('success', `Diff queued for ${hostname}`, navigateAction('View Jobs', 'jobs', 'history'));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Diff failed';
+      addNotification('error', `Diff failed for ${hostname}: ${msg}`, navigateAction('View Jobs', 'jobs', 'history'));
+    }
+  };
+
   const handleClosePreview = () => {
     previewModal.close();
     setDeployJob(null);
@@ -160,6 +176,7 @@ export function TopologyManagement() {
   };
 
   const [generatingCutsheet, setGeneratingCutsheet] = useState(false);
+  const [generatingConnectionSheet, setGeneratingConnectionSheet] = useState(false);
 
   const handleGenerateCutsheet = async (topology: Topology) => {
     const topoDevices = devicesByTopology[topology.id] || [];
@@ -268,6 +285,271 @@ export function TopologyManagement() {
     }
   };
 
+  const handleGenerateConnectionSheet = async (topology: Topology) => {
+    const topoDevices = devicesByTopology[topology.id] || [];
+    if (topoDevices.length === 0) {
+      addNotification('error', 'No devices in this topology');
+      return;
+    }
+
+    setGeneratingConnectionSheet(true);
+    try {
+      const XLSX = await import('xlsx');
+
+      // Fetch port assignments for all topology devices
+      const assignmentsByDevice: Record<number, PortAssignment[]> = {};
+      await Promise.all(
+        topoDevices.map(async (d) => {
+          try {
+            assignmentsByDevice[d.id] = await getServices().portAssignments.list(d.id);
+          } catch {
+            assignmentsByDevice[d.id] = [];
+          }
+        })
+      );
+
+      // Build location lookup maps
+      const hallMap = new Map(halls.map(h => [h.id, h]));
+      const rowMap = new Map(ipamRows.map(r => [r.id, r]));
+      const rackMap = new Map(racks.map(r => [r.id, r]));
+      const dcMap = new Map(datacenters.map(d => [d.id, d]));
+      const campusMap = new Map(campuses.map(c => [c.id, c]));
+      const regionMap = new Map(regions.map(r => [r.id, r]));
+
+      // Derive location breadcrumb for the topology
+      const dc = topology.datacenter_id ? dcMap.get(topology.datacenter_id) : undefined;
+      const campus = dc?.campus_id ? campusMap.get(dc.campus_id) : undefined;
+      const region = campus?.region_id ? regionMap.get(campus.region_id) : undefined;
+      const locationBreadcrumb = [region?.name, campus?.name, dc?.name].filter(Boolean).join(' > ') || '—';
+
+      // Group devices by rack_id
+      const devicesByRack: Record<string, Device[]> = {};
+      const unrackedDevices: Device[] = [];
+      for (const d of topoDevices) {
+        if (d.rack_id) {
+          (devicesByRack[d.rack_id] ??= []).push(d);
+        } else {
+          unrackedDevices.push(d);
+        }
+      }
+
+      // Sort rack IDs for consistent tab ordering
+      const rackIds = Object.keys(devicesByRack).sort();
+
+      const wb = XLSX.utils.book_new();
+
+      // --- Summary sheet ---
+      const summaryData: (string | number)[][] = [
+        ['Topology', topology.name],
+        ['Location', locationBreadcrumb],
+        ['Total Devices', topoDevices.length],
+        ['Racks', rackIds.length],
+        [],
+        ['Rack', 'Hall', 'Row', 'Devices', 'Spines', 'Leaves', 'Patch Panels'],
+      ];
+      for (const rackId of rackIds) {
+        const rack = rackMap.get(rackId);
+        const row = rack?.row_id ? rowMap.get(rack.row_id) : undefined;
+        const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
+        const rDevices = devicesByRack[rackId];
+        summaryData.push([
+          rack?.name || rackId,
+          hall?.name || '—',
+          row?.name || '—',
+          rDevices.length,
+          rDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine').length,
+          rDevices.filter(d => d.topology_role === 'leaf').length,
+          rDevices.filter(d => d.vendor === 'patch-panel').length,
+        ]);
+      }
+      if (unrackedDevices.length > 0) {
+        summaryData.push(['Unracked', '—', '—', unrackedDevices.length, 0, 0, unrackedDevices.filter(d => d.vendor === 'patch-panel').length]);
+      }
+      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+      summaryWs['!cols'] = [{ wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }];
+      XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+      // --- Helper to build a rack sheet ---
+      const buildRackSheet = (sheetDevices: Device[], rackName: string, hallName: string, rowName: string) => {
+        const data: (string | number)[][] = [];
+
+        // Header section
+        data.push(['Topology:', topology.name]);
+        data.push(['Location:', locationBreadcrumb]);
+        data.push(['Hall:', hallName, 'Row:', rowName, 'Rack:', rackName]);
+        data.push([]); // separator
+
+        // Rack elevation
+        data.push(['RU', '│', 'Device', 'Role', 'Model', '│']);
+        const maxRU = 42;
+        // Build RU occupancy map (rack_position is 1-based from bottom)
+        const ruMap = new Map<number, Device>();
+        for (const d of sheetDevices) {
+          if (d.rack_position && d.rack_position > 0) {
+            ruMap.set(d.rack_position, d);
+          }
+        }
+        // Render top-down (highest RU first)
+        for (let ru = maxRU; ru >= 1; ru--) {
+          const dev = ruMap.get(ru);
+          if (dev) {
+            const role = dev.vendor === 'patch-panel' ? 'patch-panel' : dev.topology_role || dev.device_type || '';
+            data.push([ru, '│', dev.hostname || String(dev.id), role, dev.model || '', '│']);
+          } else {
+            data.push([ru, '│', '', '', '', '│']);
+          }
+        }
+        data.push([]); // separator
+
+        // Connection table
+        data.push(['Device', 'Port', 'PP-A', 'PP-A Port', 'Remote Device', 'Remote Port', 'PP-B', 'PP-B Port']);
+        const seen = new Set<string>();
+        for (const device of sheetDevices) {
+          const assignments = assignmentsByDevice[device.id] || [];
+          for (const pa of assignments) {
+            if (!pa.remote_device_id) continue;
+            const linkKey = [device.id, pa.port_name, pa.remote_device_id, pa.remote_port_name].sort().join('|');
+            if (seen.has(linkKey)) continue;
+            seen.add(linkKey);
+
+            const remoteDevice = topoDevices.find(d => d.id === pa.remote_device_id);
+            data.push([
+              device.hostname || String(device.id),
+              pa.port_name,
+              pa.patch_panel_a_hostname || '',
+              pa.patch_panel_a_port || '',
+              pa.remote_device_hostname || remoteDevice?.hostname || String(pa.remote_device_id),
+              pa.remote_port_name || '',
+              pa.patch_panel_b_hostname || '',
+              pa.patch_panel_b_port || '',
+            ]);
+          }
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        ws['!cols'] = [
+          { wch: 6 },  // RU / Device
+          { wch: 3 },  // │ / Port
+          { wch: 22 }, // Device / PP-A
+          { wch: 14 }, // Role / PP-A Port
+          { wch: 22 }, // Model / Remote Device
+          { wch: 14 }, // │ / Remote Port
+          { wch: 14 }, // PP-B
+          { wch: 14 }, // PP-B Port
+        ];
+        return ws;
+      };
+
+      // --- Rack sheets ---
+      for (const rackId of rackIds) {
+        const rack = rackMap.get(rackId);
+        const row = rack?.row_id ? rowMap.get(rack.row_id) : undefined;
+        const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
+
+        const rackName = rack?.name || rackId;
+        const hallName = hall?.name || '—';
+        const rowName = row?.name || '—';
+
+        // Sheet name: truncated to 31 chars (Excel limit), sanitize invalid chars
+        let sheetName = `${hallName}-${rowName}-${rackName}`.replace(/[[\]*?/\\:]/g, '-').slice(0, 31);
+        // Ensure unique sheet name
+        const existingNames = wb.SheetNames;
+        if (existingNames.includes(sheetName)) {
+          sheetName = sheetName.slice(0, 28) + `-${existingNames.length}`;
+        }
+
+        const ws = buildRackSheet(devicesByRack[rackId], rackName, hallName, rowName);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      }
+
+      // --- Unracked sheet ---
+      if (unrackedDevices.length > 0) {
+        // Group by row for organization
+        const byRow: Record<string, Device[]> = {};
+        const noRow: Device[] = [];
+        for (const d of unrackedDevices) {
+          if (d.row_id) {
+            (byRow[d.row_id] ??= []).push(d);
+          } else {
+            noRow.push(d);
+          }
+        }
+
+        const data: (string | number)[][] = [
+          ['Topology:', topology.name],
+          ['Location:', locationBreadcrumb],
+          ['', '', '', 'Unracked Devices'],
+          [],
+        ];
+
+        const addDeviceRows = (devs: Device[], groupLabel: string) => {
+          data.push([groupLabel]);
+          data.push(['Device', 'Role', 'Model', 'Hall', 'Row']);
+          for (const d of devs) {
+            const hall = d.hall_id ? hallMap.get(d.hall_id) : undefined;
+            const row = d.row_id ? rowMap.get(d.row_id) : undefined;
+            const role = d.vendor === 'patch-panel' ? 'patch-panel' : d.topology_role || d.device_type || '';
+            data.push([d.hostname || String(d.id), role, d.model || '', hall?.name || '—', row?.name || '—']);
+          }
+          data.push([]);
+        };
+
+        for (const rowId of Object.keys(byRow).sort()) {
+          const row = rowMap.get(rowId);
+          const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
+          addDeviceRows(byRow[rowId], `${hall?.name || '—'} / ${row?.name || rowId}`);
+        }
+        if (noRow.length > 0) {
+          addDeviceRows(noRow, 'No Row Assignment');
+        }
+
+        // Connection table for unracked devices
+        data.push(['Connections']);
+        data.push(['Device', 'Port', 'PP-A', 'PP-A Port', 'Remote Device', 'Remote Port', 'PP-B', 'PP-B Port']);
+        const seen = new Set<string>();
+        for (const device of unrackedDevices) {
+          const assignments = assignmentsByDevice[device.id] || [];
+          for (const pa of assignments) {
+            if (!pa.remote_device_id) continue;
+            const linkKey = [device.id, pa.port_name, pa.remote_device_id, pa.remote_port_name].sort().join('|');
+            if (seen.has(linkKey)) continue;
+            seen.add(linkKey);
+            const remoteDevice = topoDevices.find(d => d.id === pa.remote_device_id);
+            data.push([
+              device.hostname || String(device.id),
+              pa.port_name,
+              pa.patch_panel_a_hostname || '',
+              pa.patch_panel_a_port || '',
+              pa.remote_device_hostname || remoteDevice?.hostname || String(pa.remote_device_id),
+              pa.remote_port_name || '',
+              pa.patch_panel_b_hostname || '',
+              pa.patch_panel_b_port || '',
+            ]);
+          }
+        }
+
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
+        XLSX.utils.book_append_sheet(wb, ws, 'Unracked');
+      }
+
+      // Download
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${topology.id}-rack-connections.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to generate connection sheet: ${msg}`);
+    } finally {
+      setGeneratingConnectionSheet(false);
+    }
+  };
+
   const handleSpawnNode = async (topologyId: string, role: string) => {
     const key = `${topologyId}:${role}`;
     setAddingNode(key);
@@ -280,7 +562,7 @@ export function TopologyManagement() {
         topology_role: role,
         hostname: `${roleLabel}-${Date.now() % 10000}`,
       });
-      addNotification('success', `Spawned ${roleLabel} and added to topology`);
+      addNotification('success', `Spawned ${roleLabel} and added to topology`, navigateAction('View Topology', 'topologies'));
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -298,7 +580,7 @@ export function TopologyManagement() {
         topology_id: assignTarget.topologyId,
         topology_role: assignTarget.role,
       });
-      addNotification('success', `Assigned ${device.hostname || device.mac || String(device.id)} as ${assignTarget.role}`);
+      addNotification('success', `Assigned ${device.hostname || device.mac || String(device.id)} as ${assignTarget.role}`, navigateAction('View Topology', 'topologies'));
       setAssignTarget(null);
       refreshDevices();
     } catch (err) {
@@ -324,7 +606,7 @@ export function TopologyManagement() {
         topology_id: topoId,
         topology_role: role,
       });
-      addNotification('success', `Swapped ${swapDevice.hostname || swapDevice.mac || String(swapDevice.id)} with ${replacement.hostname || replacement.mac || String(replacement.id)}`);
+      addNotification('success', `Swapped ${swapDevice.hostname || swapDevice.mac || String(swapDevice.id)} with ${replacement.hostname || replacement.mac || String(replacement.id)}`, navigateAction('View Topology', 'topologies'));
       setSwapDevice(null);
       refreshDevices();
     } catch (err) {
@@ -348,11 +630,12 @@ export function TopologyManagement() {
         rows_per_hall: virtualClosConfig.datacenter_id ? virtualClosConfig.rows_per_hall : undefined,
         racks_per_row: virtualClosConfig.datacenter_id ? virtualClosConfig.racks_per_row : undefined,
         leaves_per_rack: virtualClosConfig.datacenter_id ? virtualClosConfig.leaves_per_rack : undefined,
+        links_per_leaf: virtualClosConfig.links_per_leaf,
         external_devices: virtualClosConfig.external_devices || undefined,
         uplinks_per_spine: virtualClosConfig.external_devices ? virtualClosConfig.uplinks_per_spine : undefined,
         external_names: virtualClosConfig.external_devices ? virtualClosConfig.external_names.filter(n => n) : undefined,
       });
-      addNotification('success', `Virtual CLOS ready: ${result.devices.length} Arista switches in ${result.topology_name}`);
+      addNotification('success', `Virtual CLOS ready: ${result.devices.length} Arista switches in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -365,7 +648,7 @@ export function TopologyManagement() {
   const handleTeardownVirtualClos = async () => {
     try {
       await getServices().testContainers.teardownVirtualClos();
-      addNotification('success', 'Virtual CLOS topology torn down');
+      addNotification('success', 'Virtual CLOS topology torn down', navigateAction('View Topologies', 'topologies'));
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -464,7 +747,7 @@ export function TopologyManagement() {
         external_devices: 0,
         spawn_containers: true,
       });
-      addNotification('success', `Lab CLOS ready: ${result.devices.length} devices with cEOS containers`);
+      addNotification('success', `Lab CLOS ready: ${result.devices.length} devices with cEOS containers`, navigateAction('View Topology', 'topologies'));
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -495,7 +778,7 @@ export function TopologyManagement() {
         uplinks_per_spine: virtualClosConfig.external_devices ? virtualClosConfig.uplinks_per_spine : undefined,
         external_names: virtualClosConfig.external_devices ? virtualClosConfig.external_names.filter(n => n) : undefined,
       });
-      addNotification('success', `Rebuilt: ${result.devices.length} devices in ${result.topology_name}`);
+      addNotification('success', `Rebuilt: ${result.devices.length} devices in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -681,7 +964,7 @@ export function TopologyManagement() {
       if (spines === 0 && leaves === 0) {
         // No fabric, just create empty topology
         form.close();
-        addNotification('success', `Topology "${data.name}" created`);
+        addNotification('success', `Topology "${data.name}" created`, navigateAction('View Topologies', 'topologies'));
         return;
       }
 
@@ -829,7 +1112,7 @@ export function TopologyManagement() {
 
       form.close();
       refreshDevices();
-      addNotification('success', `Topology "${data.name}" created with ${spines} spines, ${leaves} leaves, ${hallAssignments.length} hall(s)`);
+      addNotification('success', `Topology "${data.name}" created with ${spines} spines, ${leaves} leaves, ${hallAssignments.length} hall(s)`, navigateAction('View Topologies', 'topologies'));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       addNotification('error', `Failed to create topology: ${msg}`);
@@ -959,6 +1242,32 @@ export function TopologyManagement() {
               tooltip: 'Download connection cutsheet (CSV)',
               disabled: (t) => generatingCutsheet || !t.spine_count || !t.leaf_count,
             },
+            {
+              icon: generatingConnectionSheet ? <SpinnerIcon size={14} /> : <Icon name="grid_on" size={14} />,
+              label: 'Rack Sheet',
+              onClick: handleGenerateConnectionSheet,
+              variant: 'secondary',
+              tooltip: 'Download rack connection sheet (XLSX)',
+              disabled: (t) => generatingConnectionSheet || !(t.device_count && t.device_count > 0),
+            },
+            {
+              icon: <Icon name="image" size={14} />,
+              label: 'Export SVG',
+              onClick: (t) => {
+                // Ensure diagram is expanded so the SVG ref is mounted
+                if (expandedDiagram !== t.id) setExpandedDiagram(t.id);
+                // Allow a tick for render, then export
+                setTimeout(() => diagramRef.current?.exportSvg(), 100);
+              },
+              variant: 'secondary',
+              tooltip: 'Export fabric diagram as SVG',
+              disabled: (t) => {
+                const td = devicesByTopology[t.id] || [];
+                const hasSpines = td.some(d => d.topology_role === 'spine' || d.topology_role === 'super-spine');
+                const hasLeaves = td.some(d => d.topology_role === 'leaf');
+                return !hasSpines || !hasLeaves;
+              },
+            },
           ] as TableAction<Topology>[]}
           renderExpandedRow={(t) => {
             const topoDevices = devicesByTopology[t.id] || [];
@@ -976,7 +1285,8 @@ export function TopologyManagement() {
 
             const spines = topoDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine');
             const leaves = topoDevices.filter(d => d.topology_role === 'leaf');
-            const extDevices = topoDevices.filter(d => d.device_type === 'external');
+            const ppDevices = topoDevices.filter(d => isPatchPanel(d));
+            const extDevices = topoDevices.filter(d => d.device_type === 'external' && !isPatchPanel(d));
             const hasDiagram = spines.length > 0 && leaves.length > 0;
             const diagramOpen = expandedDiagram === t.id;
 
@@ -1048,7 +1358,7 @@ export function TopologyManagement() {
                       <span>Fabric Diagram</span>
                     </button>
                     {diagramOpen && (
-                      <TopologyDiagramViewer spines={spines} leaves={leaves} externals={extDevices} />
+                      <TopologyDiagramViewer ref={diagramRef} spines={spines} leaves={leaves} externals={extDevices} patchPanels={ppDevices} />
                     )}
                   </div>
                 )}
@@ -1308,10 +1618,16 @@ export function TopologyManagement() {
           footer={
             <DialogActions>
               {previewModal.result && (!deployJob || deployJob.status === 'queued' || deployJob.status === 'running') && (
-                <Button onClick={handleDeployConfig} disabled={deploying}>
-                  {deploying ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
-                  {deploying ? 'Deploying...' : 'Deploy to Device'}
-                </Button>
+                <>
+                  <Button onClick={handleDiffConfig} disabled={deploying} variant="secondary">
+                    {deploying ? <SpinnerIcon size={14} /> : <Icon name="compare_arrows" size={14} />}
+                    {deploying ? 'Diffing...' : 'Diff'}
+                  </Button>
+                  <Button onClick={handleDeployConfig} disabled={deploying}>
+                    {deploying ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
+                    {deploying ? 'Deploying...' : 'Deploy to Device'}
+                  </Button>
+                </>
               )}
               <Button variant="secondary" onClick={handleClosePreview}>
                 Close
@@ -1451,6 +1767,14 @@ export function TopologyManagement() {
               type="number"
               value={String(virtualClosConfig.leaves)}
               onChange={(e) => setVirtualClosConfig(c => ({ ...c, leaves: Math.max(1, parseInt(e.target.value) || 1) }))}
+            />
+            <FormField
+              label="Links / Leaf"
+              name="links_per_leaf"
+              type="number"
+              value={String(virtualClosConfig.links_per_leaf)}
+              onChange={(e) => setVirtualClosConfig(c => ({ ...c, links_per_leaf: Math.max(1, parseInt(e.target.value) || 1) }))}
+              min={1}
             />
             <FormField
               label="External Devices"

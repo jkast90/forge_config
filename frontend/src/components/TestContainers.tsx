@@ -12,6 +12,7 @@ import {
   getVendorClassForVendor,
   getServices,
   addNotification,
+  navigateAction,
 } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
@@ -143,7 +144,7 @@ export function TestContainers() {
         ceos_image: image || '',
       });
       const type_ = image?.includes('frr') ? 'FRR' : 'cEOS';
-      addNotification('success', `CLOS lab ready: ${result.devices.length} ${type_} switches in ${result.topology_name}`);
+      addNotification('success', `CLOS lab ready: ${result.devices.length} ${type_} switches in ${result.topology_name}`, navigateAction('View Containers', 'devices', 'containers'));
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -156,7 +157,7 @@ export function TestContainers() {
   const handleTeardownClosLab = async () => {
     try {
       await getServices().testContainers.teardownVirtualClos();
-      addNotification('success', 'CLOS lab torn down');
+      addNotification('success', 'CLOS lab torn down', navigateAction('View Containers', 'devices', 'containers'));
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

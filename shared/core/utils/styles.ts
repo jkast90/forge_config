@@ -122,6 +122,8 @@ export function getJobTypeBadgeVariant(jobType: string): BadgeVariant {
     case 'deploy':
     case 'apply_template':
       return 'info';
+    case 'diff':
+      return 'info';
     case 'webhook':
       return 'warning';
     default:

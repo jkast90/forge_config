@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
-  title: ZTP Server API
-  description: Zero Touch Provisioning Server — REST API for managing network device provisioning, configuration, backups, IPAM, and more.
-  version: 0.1.0
+  title: ForgeConfig API
+  description: ForgeConfig — REST API for managing network device provisioning, configuration, backups, IPAM, and more.
+  version: 0.2.0
   license:
     name: MIT
 
@@ -20,12 +20,18 @@ tags:
     description: Device CRUD and operations
   - name: Device Variables
     description: Per-device key-value variables
+  - name: Port Assignments
+    description: Per-port configuration on devices
   - name: Groups
     description: Hierarchical device groups with variable inheritance
   - name: Templates
     description: Configuration template management
   - name: Vendors
     description: Vendor profiles and actions
+  - name: Device Models
+    description: Hardware model definitions with port layouts
+  - name: Device Roles
+    description: Role-based template assignment
   - name: Topologies
     description: CLOS fabric topology management
   - name: DHCP Options
@@ -36,18 +42,42 @@ tags:
     description: Automatic device discovery via DHCP
   - name: Jobs
     description: Async job queue
+  - name: Job Templates
+    description: Reusable job definitions with scheduling
+  - name: Credentials
+    description: SSH and API key credential storage
+  - name: Output Parsers
+    description: Regex-based output extraction
   - name: Docker
     description: Test container and CLOS lab management
   - name: IPAM
     description: IP Address Management
+  - name: Locations
+    description: Physical location hierarchy (regions, campuses, datacenters, halls, rows, racks)
   - name: NetBox
     description: NetBox integration and sync
+  - name: Users
+    description: User management
   - name: Settings
-    description: Global server settings
+    description: Global server settings and branding
   - name: Benchmarks
     description: Performance benchmarks
 
 paths:
+  # ── Health ───────────────────────────────────────────────────────
+  /api/health:
+    get:
+      tags: [Settings]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
   # ── Auth ────────────────────────────────────────────────────────
   /api/auth/login:
     post:
@@ -106,9 +136,40 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
-  /api/devices/{mac}:
+  /api/devices/next-hostname:
+    get:
+      tags: [Devices]
+      summary: Generate next hostname from pattern
+      description: |
+        Uses the global hostname_pattern setting to generate the next available hostname.
+        Replaces $datacenter, $role, and # (auto-incrementing number) in the pattern.
+      parameters:
+        - name: role
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Device role (e.g. spine, leaf, external)
+        - name: datacenter
+          in: query
+          schema:
+            type: string
+          description: Datacenter identifier
+      responses:
+        "200":
+          description: Generated hostname
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [hostname]
+                properties:
+                  hostname:
+                    type: string
+
+  /api/devices/{id}:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     get:
       tags: [Devices]
       summary: Get device
@@ -148,9 +209,9 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/devices/{mac}/connect:
+  /api/devices/{id}/connect:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     post:
       tags: [Devices]
       summary: Test SSH connectivity to device
@@ -180,9 +241,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/ConnectResult"
 
-  /api/devices/{mac}/config:
+  /api/devices/{id}/config:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     get:
       tags: [Devices]
       summary: Get rendered configuration
@@ -194,9 +255,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeviceConfigResponse"
 
-  /api/devices/{mac}/preview-config:
+  /api/devices/{id}/preview-config:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     post:
       tags: [Devices]
       summary: Preview config with variables
@@ -208,9 +269,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeviceConfigPreviewResponse"
 
-  /api/devices/{mac}/deploy-config:
+  /api/devices/{id}/deploy-config:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     post:
       tags: [Devices]
       summary: Deploy config to device over SSH
@@ -222,9 +283,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/Job"
 
-  /api/devices/{mac}/exec:
+  /api/devices/{id}/diff-config:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
+    post:
+      tags: [Devices]
+      summary: Diff current running config vs. rendered config
+      responses:
+        "202":
+          description: Diff job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+
+  /api/devices/{id}/exec:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
     post:
       tags: [Devices]
       summary: Execute command on device
@@ -243,9 +318,9 @@ paths:
                 $ref: "#/components/schemas/Job"
 
   # ── Device Variables ────────────────────────────────────────────
-  /api/devices/{mac}/variables:
+  /api/devices/{id}/variables:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     get:
       tags: [Device Variables]
       summary: List device variables
@@ -277,9 +352,9 @@ paths:
                 items:
                   $ref: "#/components/schemas/DeviceVariable"
 
-  /api/devices/{mac}/variables/{key}:
+  /api/devices/{id}/variables/{key}:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
       - name: key
         in: path
         required: true
@@ -375,6 +450,64 @@ paths:
                   count:
                     type: integer
 
+  # ── Port Assignments ────────────────────────────────────────────
+  /api/devices/{id}/port-assignments:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+    get:
+      tags: [Port Assignments]
+      summary: List port assignments for a device
+      responses:
+        "200":
+          description: Array of port assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PortAssignment"
+    put:
+      tags: [Port Assignments]
+      summary: Bulk set port assignments (replace all)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "#/components/schemas/SetPortAssignmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Message"
+
+  /api/devices/{id}/port-assignments/{port_name}:
+    parameters:
+      - $ref: "#/components/parameters/DeviceId"
+      - name: port_name
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags: [Port Assignments]
+      summary: Set a single port assignment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetPortAssignmentRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Message"
+    delete:
+      tags: [Port Assignments]
+      summary: Delete a port assignment
+      responses:
+        "200":
+          $ref: "#/components/responses/Message"
+
   # ── Groups ──────────────────────────────────────────────────────
   /api/groups:
     get:
@@ -408,7 +541,7 @@ paths:
 
   /api/groups/{id}:
     parameters:
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/IntId"
     get:
       tags: [Groups]
       summary: Get group
@@ -444,7 +577,7 @@ paths:
 
   /api/groups/{id}/variables:
     parameters:
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/IntId"
     get:
       tags: [Groups]
       summary: List group variables
@@ -460,7 +593,7 @@ paths:
 
   /api/groups/{id}/variables/{key}:
     parameters:
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/IntId"
       - name: key
         in: path
         required: true
@@ -487,19 +620,20 @@ paths:
 
   /api/groups/{id}/members:
     parameters:
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/IntId"
     get:
       tags: [Groups]
       summary: List group members
       responses:
         "200":
-          description: Array of MAC addresses
+          description: Array of device IDs
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  type: string
+                  type: integer
+                  format: int64
     put:
       tags: [Groups]
       summary: Set all group members (replace)
@@ -513,10 +647,10 @@ paths:
         "200":
           $ref: "#/components/responses/Message"
 
-  /api/groups/{id}/members/{mac}:
+  /api/groups/{id}/members/{device_id}:
     parameters:
-      - $ref: "#/components/parameters/Id"
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/IntId"
+      - $ref: "#/components/parameters/DeviceId"
     put:
       tags: [Groups]
       summary: Add member to group
@@ -530,9 +664,9 @@ paths:
         "200":
           $ref: "#/components/responses/Message"
 
-  /api/devices/{mac}/groups:
+  /api/devices/{id}/groups:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     get:
       tags: [Groups]
       summary: List groups for a device
@@ -558,9 +692,9 @@ paths:
         "200":
           $ref: "#/components/responses/Message"
 
-  /api/devices/{mac}/resolved-variables:
+  /api/devices/{id}/resolved-variables:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     get:
       tags: [Groups]
       summary: Get resolved variables with inheritance
@@ -829,6 +963,165 @@ paths:
         "204":
           description: Deleted
 
+  /api/vendor-actions/{id}/run:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Vendors]
+      summary: Execute vendor action on a device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_id]
+              properties:
+                device_id:
+                  type: integer
+                  format: int64
+      responses:
+        "202":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+
+  # ── Device Models ───────────────────────────────────────────────
+  /api/device-models:
+    get:
+      tags: [Device Models]
+      summary: List device models
+      responses:
+        "200":
+          description: Array of device models
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DeviceModel"
+    post:
+      tags: [Device Models]
+      summary: Create device model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeviceModelRequest"
+      responses:
+        "201":
+          description: Created device model
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceModel"
+
+  /api/device-models/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Device Models]
+      summary: Get device model
+      responses:
+        "200":
+          description: Device model details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceModel"
+    put:
+      tags: [Device Models]
+      summary: Update device model
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeviceModelRequest"
+      responses:
+        "200":
+          description: Updated device model
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceModel"
+    delete:
+      tags: [Device Models]
+      summary: Delete device model
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Device Roles ────────────────────────────────────────────────
+  /api/device-roles:
+    get:
+      tags: [Device Roles]
+      summary: List device roles
+      responses:
+        "200":
+          description: Array of device roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DeviceRole"
+    post:
+      tags: [Device Roles]
+      summary: Create device role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeviceRoleRequest"
+      responses:
+        "201":
+          description: Created device role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRole"
+
+  /api/device-roles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Device Roles]
+      summary: Get device role
+      responses:
+        "200":
+          description: Device role details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRole"
+    put:
+      tags: [Device Roles]
+      summary: Update device role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDeviceRoleRequest"
+      responses:
+        "200":
+          description: Updated device role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceRole"
+    delete:
+      tags: [Device Roles]
+      summary: Delete device role
+      responses:
+        "204":
+          description: Deleted
+
   # ── Topologies ──────────────────────────────────────────────────
   /api/topologies:
     get:
@@ -978,9 +1271,9 @@ paths:
           description: Deleted
 
   # ── Backups ─────────────────────────────────────────────────────
-  /api/devices/{mac}/backup:
+  /api/devices/{id}/backup:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     post:
       tags: [Backups]
       summary: Trigger manual backup
@@ -992,9 +1285,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
 
-  /api/devices/{mac}/backups:
+  /api/devices/{id}/backups:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - $ref: "#/components/parameters/DeviceId"
     get:
       tags: [Backups]
       summary: List backups for device
@@ -1089,7 +1382,11 @@ paths:
 
   /api/discovery/{mac}:
     parameters:
-      - $ref: "#/components/parameters/Mac"
+      - name: mac
+        in: path
+        required: true
+        schema:
+          type: string
     delete:
       tags: [Discovery]
       summary: Dismiss a discovered device
@@ -1103,10 +1400,11 @@ paths:
       tags: [Jobs]
       summary: List jobs
       parameters:
-        - name: device_mac
+        - name: device_id
           in: query
           schema:
-            type: string
+            type: integer
+            format: int64
         - name: limit
           in: query
           schema:
@@ -1124,7 +1422,11 @@ paths:
 
   /api/jobs/{id}:
     parameters:
-      - $ref: "#/components/parameters/Id"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
       tags: [Jobs]
       summary: Get job status and output
@@ -1135,6 +1437,290 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Job"
+
+  # ── Job Templates ───────────────────────────────────────────────
+  /api/job-templates:
+    get:
+      tags: [Job Templates]
+      summary: List job templates
+      responses:
+        "200":
+          description: Array of job templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/JobTemplate"
+    post:
+      tags: [Job Templates]
+      summary: Create job template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobTemplateRequest"
+      responses:
+        "201":
+          description: Created job template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobTemplate"
+
+  /api/job-templates/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Job Templates]
+      summary: Get job template
+      responses:
+        "200":
+          description: Job template details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobTemplate"
+    put:
+      tags: [Job Templates]
+      summary: Update job template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobTemplateRequest"
+      responses:
+        "200":
+          description: Updated job template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobTemplate"
+    delete:
+      tags: [Job Templates]
+      summary: Delete job template
+      responses:
+        "204":
+          description: Deleted
+
+  /api/job-templates/{id}/run:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Job Templates]
+      summary: Execute job template
+      responses:
+        "202":
+          description: Jobs queued
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Job"
+
+  # ── Credentials ─────────────────────────────────────────────────
+  /api/credentials:
+    get:
+      tags: [Credentials]
+      summary: List credentials
+      responses:
+        "200":
+          description: Array of credentials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Credential"
+    post:
+      tags: [Credentials]
+      summary: Create credential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCredentialRequest"
+      responses:
+        "201":
+          description: Created credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+
+  /api/credentials/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Credentials]
+      summary: Get credential
+      responses:
+        "200":
+          description: Credential details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+    put:
+      tags: [Credentials]
+      summary: Update credential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCredentialRequest"
+      responses:
+        "200":
+          description: Updated credential
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Credential"
+    delete:
+      tags: [Credentials]
+      summary: Delete credential
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Output Parsers ──────────────────────────────────────────────
+  /api/output-parsers:
+    get:
+      tags: [Output Parsers]
+      summary: List output parsers
+      responses:
+        "200":
+          description: Array of output parsers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OutputParser"
+    post:
+      tags: [Output Parsers]
+      summary: Create output parser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOutputParserRequest"
+      responses:
+        "201":
+          description: Created output parser
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutputParser"
+
+  /api/output-parsers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IntId"
+    get:
+      tags: [Output Parsers]
+      summary: Get output parser
+      responses:
+        "200":
+          description: Output parser details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutputParser"
+    put:
+      tags: [Output Parsers]
+      summary: Update output parser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOutputParserRequest"
+      responses:
+        "200":
+          description: Updated output parser
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutputParser"
+    delete:
+      tags: [Output Parsers]
+      summary: Delete output parser
+      responses:
+        "204":
+          description: Deleted
+
+  # ── Users ───────────────────────────────────────────────────────
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List users
+      responses:
+        "200":
+          description: Array of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      tags: [Users]
+      summary: Create user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /api/users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Users]
+      summary: Get user
+      responses:
+        "200":
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    put:
+      tags: [Users]
+      summary: Update user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      tags: [Users]
+      summary: Delete user
+      responses:
+        "204":
+          description: Deleted
 
   # ── Docker / Lab ────────────────────────────────────────────────
   /api/docker/containers:
@@ -1169,7 +1755,11 @@ paths:
 
   /api/docker/containers/{id}:
     parameters:
-      - $ref: "#/components/parameters/Id"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     delete:
       tags: [Docker]
       summary: Remove container
@@ -1179,7 +1769,11 @@ paths:
 
   /api/docker/containers/{id}/start:
     parameters:
-      - $ref: "#/components/parameters/Id"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     post:
       tags: [Docker]
       summary: Start container
@@ -1189,7 +1783,11 @@ paths:
 
   /api/docker/containers/{id}/restart:
     parameters:
-      - $ref: "#/components/parameters/Id"
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     post:
       tags: [Docker]
       summary: Restart container
@@ -1200,16 +1798,12 @@ paths:
   /api/docker/clos-lab:
     post:
       tags: [Docker]
-      summary: Build a CLOS lab topology
+      summary: Build a CLOS lab topology with containers
       requestBody:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                image:
-                  type: string
-                  description: Docker image to use
+              $ref: "#/components/schemas/VirtualClosRequest"
       responses:
         "201":
           description: CLOS lab created
@@ -1224,205 +1818,31 @@ paths:
         "200":
           $ref: "#/components/responses/Message"
 
+  /api/virtual-clos:
+    post:
+      tags: [Docker]
+      summary: Build virtual CLOS topology (device records only, no containers)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VirtualClosRequest"
+      responses:
+        "201":
+          description: Virtual CLOS created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClosLabResponse"
+    delete:
+      tags: [Docker]
+      summary: Tear down virtual CLOS topology
+      responses:
+        "200":
+          $ref: "#/components/responses/Message"
+
   # ── IPAM ────────────────────────────────────────────────────────
-  /api/ipam/regions:
-    get:
-      tags: [IPAM]
-      summary: List regions
-      responses:
-        "200":
-          description: Array of regions
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/IpamRegion"
-    post:
-      tags: [IPAM]
-      summary: Create region
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateIpamRegionRequest"
-      responses:
-        "201":
-          description: Created region
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IpamRegion"
-
-  /api/ipam/regions/{id}:
-    parameters:
-      - $ref: "#/components/parameters/Id"
-    get:
-      tags: [IPAM]
-      summary: Get region
-      responses:
-        "200":
-          description: Region details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IpamRegion"
-    put:
-      tags: [IPAM]
-      summary: Update region
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateIpamRegionRequest"
-      responses:
-        "200":
-          description: Updated region
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IpamRegion"
-    delete:
-      tags: [IPAM]
-      summary: Delete region
-      responses:
-        "204":
-          description: Deleted
-
-  /api/ipam/locations:
-    get:
-      tags: [IPAM]
-      summary: List locations
-      responses:
-        "200":
-          description: Array of locations
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/IpamLocation"
-    post:
-      tags: [IPAM]
-      summary: Create location
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateIpamLocationRequest"
-      responses:
-        "201":
-          description: Created location
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IpamLocation"
-
-  /api/ipam/locations/{id}:
-    parameters:
-      - $ref: "#/components/parameters/Id"
-    get:
-      tags: [IPAM]
-      summary: Get location
-      responses:
-        "200":
-          description: Location details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IpamLocation"
-    put:
-      tags: [IPAM]
-      summary: Update location
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateIpamLocationRequest"
-      responses:
-        "200":
-          description: Updated location
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IpamLocation"
-    delete:
-      tags: [IPAM]
-      summary: Delete location
-      responses:
-        "204":
-          description: Deleted
-
-  /api/ipam/datacenters:
-    get:
-      tags: [IPAM]
-      summary: List datacenters
-      responses:
-        "200":
-          description: Array of datacenters
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/IpamDatacenter"
-    post:
-      tags: [IPAM]
-      summary: Create datacenter
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateIpamDatacenterRequest"
-      responses:
-        "201":
-          description: Created datacenter
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IpamDatacenter"
-
-  /api/ipam/datacenters/{id}:
-    parameters:
-      - $ref: "#/components/parameters/Id"
-    get:
-      tags: [IPAM]
-      summary: Get datacenter
-      responses:
-        "200":
-          description: Datacenter details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IpamDatacenter"
-    put:
-      tags: [IPAM]
-      summary: Update datacenter
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateIpamDatacenterRequest"
-      responses:
-        "200":
-          description: Updated datacenter
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/IpamDatacenter"
-    delete:
-      tags: [IPAM]
-      summary: Delete datacenter
-      responses:
-        "204":
-          description: Deleted
-
   /api/ipam/roles:
     get:
       tags: [IPAM]
@@ -1599,7 +2019,6 @@ paths:
               properties:
                 prefix_length:
                   type: integer
-                  description: Desired prefix length
                 description:
                   type: string
                 status:
@@ -1785,6 +2204,403 @@ paths:
         "200":
           $ref: "#/components/responses/Message"
 
+  # ── Locations ───────────────────────────────────────────────────
+  /api/ipam/regions:
+    get:
+      tags: [Locations]
+      summary: List regions
+      responses:
+        "200":
+          description: Array of regions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IpamRegion"
+    post:
+      tags: [Locations]
+      summary: Create region
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamRegionRequest"
+      responses:
+        "201":
+          description: Created region
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamRegion"
+
+  /api/ipam/regions/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Locations]
+      summary: Get region
+      responses:
+        "200":
+          description: Region details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamRegion"
+    put:
+      tags: [Locations]
+      summary: Update region
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamRegionRequest"
+      responses:
+        "200":
+          description: Updated region
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamRegion"
+    delete:
+      tags: [Locations]
+      summary: Delete region
+      responses:
+        "204":
+          description: Deleted
+
+  /api/ipam/campuses:
+    get:
+      tags: [Locations]
+      summary: List campuses
+      responses:
+        "200":
+          description: Array of campuses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IpamCampus"
+    post:
+      tags: [Locations]
+      summary: Create campus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamCampusRequest"
+      responses:
+        "201":
+          description: Created campus
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamCampus"
+
+  /api/ipam/campuses/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Locations]
+      summary: Get campus
+      responses:
+        "200":
+          description: Campus details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamCampus"
+    put:
+      tags: [Locations]
+      summary: Update campus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamCampusRequest"
+      responses:
+        "200":
+          description: Updated campus
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamCampus"
+    delete:
+      tags: [Locations]
+      summary: Delete campus
+      responses:
+        "204":
+          description: Deleted
+
+  /api/ipam/datacenters:
+    get:
+      tags: [Locations]
+      summary: List datacenters
+      responses:
+        "200":
+          description: Array of datacenters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IpamDatacenter"
+    post:
+      tags: [Locations]
+      summary: Create datacenter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamDatacenterRequest"
+      responses:
+        "201":
+          description: Created datacenter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamDatacenter"
+
+  /api/ipam/datacenters/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Locations]
+      summary: Get datacenter
+      responses:
+        "200":
+          description: Datacenter details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamDatacenter"
+    put:
+      tags: [Locations]
+      summary: Update datacenter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamDatacenterRequest"
+      responses:
+        "200":
+          description: Updated datacenter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamDatacenter"
+    delete:
+      tags: [Locations]
+      summary: Delete datacenter
+      responses:
+        "204":
+          description: Deleted
+
+  /api/ipam/halls:
+    get:
+      tags: [Locations]
+      summary: List halls
+      responses:
+        "200":
+          description: Array of halls
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IpamHall"
+    post:
+      tags: [Locations]
+      summary: Create hall
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamHallRequest"
+      responses:
+        "201":
+          description: Created hall
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamHall"
+
+  /api/ipam/halls/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Locations]
+      summary: Get hall
+      responses:
+        "200":
+          description: Hall details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamHall"
+    put:
+      tags: [Locations]
+      summary: Update hall
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamHallRequest"
+      responses:
+        "200":
+          description: Updated hall
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamHall"
+    delete:
+      tags: [Locations]
+      summary: Delete hall
+      responses:
+        "204":
+          description: Deleted
+
+  /api/ipam/rows:
+    get:
+      tags: [Locations]
+      summary: List rows
+      responses:
+        "200":
+          description: Array of rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IpamRow"
+    post:
+      tags: [Locations]
+      summary: Create row
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamRowRequest"
+      responses:
+        "201":
+          description: Created row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamRow"
+
+  /api/ipam/rows/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Locations]
+      summary: Get row
+      responses:
+        "200":
+          description: Row details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamRow"
+    put:
+      tags: [Locations]
+      summary: Update row
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamRowRequest"
+      responses:
+        "200":
+          description: Updated row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamRow"
+    delete:
+      tags: [Locations]
+      summary: Delete row
+      responses:
+        "204":
+          description: Deleted
+
+  /api/ipam/racks:
+    get:
+      tags: [Locations]
+      summary: List racks
+      responses:
+        "200":
+          description: Array of racks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/IpamRack"
+    post:
+      tags: [Locations]
+      summary: Create rack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamRackRequest"
+      responses:
+        "201":
+          description: Created rack
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamRack"
+
+  /api/ipam/racks/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Locations]
+      summary: Get rack
+      responses:
+        "200":
+          description: Rack details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamRack"
+    put:
+      tags: [Locations]
+      summary: Update rack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIpamRackRequest"
+      responses:
+        "200":
+          description: Updated rack
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IpamRack"
+    delete:
+      tags: [Locations]
+      summary: Delete rack
+      responses:
+        "204":
+          description: Deleted
+
   # ── NetBox ──────────────────────────────────────────────────────
   /api/netbox/status:
     get:
@@ -1916,7 +2732,7 @@ paths:
                 items:
                   $ref: "#/components/schemas/NetBoxItem"
 
-  # ── Settings ────────────────────────────────────────────────────
+  # ── Settings & Branding ─────────────────────────────────────────
   /api/settings:
     get:
       tags: [Settings]
@@ -1966,6 +2782,57 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/NetworkInterface"
+
+  /api/branding:
+    get:
+      tags: [Settings]
+      summary: Get branding info (public)
+      security: []
+      responses:
+        "200":
+          description: Branding info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Branding"
+
+  /api/branding/logo:
+    get:
+      tags: [Settings]
+      summary: Get logo image (public)
+      security: []
+      responses:
+        "200":
+          description: Logo image
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Settings]
+      summary: Upload logo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          $ref: "#/components/responses/Message"
+    delete:
+      tags: [Settings]
+      summary: Delete logo
+      responses:
+        "200":
+          $ref: "#/components/responses/Message"
 
   # ── WebSocket ───────────────────────────────────────────────────
   /api/ws:
@@ -2111,20 +2978,30 @@ components:
       bearerFormat: JWT
 
   parameters:
-    Mac:
-      name: mac
+    DeviceId:
+      name: id
       in: path
       required: true
       schema:
-        type: string
-      description: Device MAC address (colon-separated, e.g. 00:11:22:33:44:55)
+        type: integer
+        format: int64
+      description: Device ID (integer)
 
     Id:
       name: id
       in: path
       required: true
       schema:
-        type: string
+        type: integer
+        format: int64
+
+    IntId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
 
     Limit:
       name: limit
@@ -2210,8 +3087,11 @@ components:
     # ── Device ──────────────────────────────────────────────────
     Device:
       type: object
-      required: [mac, ip, hostname, config_template, status, created_at, updated_at]
+      required: [id, ip, hostname, config_template, status, device_type, created_at, updated_at]
       properties:
+        id:
+          type: integer
+          format: int64
         mac:
           type: string
         ip:
@@ -2231,9 +3111,24 @@ components:
         ssh_pass:
           type: string
         topology_id:
-          type: string
+          type: integer
+          format: int64
         topology_role:
-          $ref: "#/components/schemas/TopologyRole"
+          type: string
+        hall_id:
+          type: integer
+          format: int64
+        row_id:
+          type: integer
+          format: int64
+        rack_id:
+          type: integer
+          format: int64
+        rack_position:
+          type: integer
+        device_type:
+          type: string
+          enum: [internal, external, host]
         status:
           $ref: "#/components/schemas/DeviceStatus"
         last_seen:
@@ -2255,13 +3150,9 @@ components:
       type: string
       enum: [online, offline, provisioning, unknown]
 
-    TopologyRole:
-      type: string
-      enum: [super-spine, spine, leaf]
-
     CreateDeviceRequest:
       type: object
-      required: [mac, ip, hostname, config_template]
+      required: [ip, hostname]
       properties:
         mac:
           type: string
@@ -2282,14 +3173,20 @@ components:
         ssh_pass:
           type: string
         topology_id:
-          type: string
+          type: integer
+          format: int64
         topology_role:
-          $ref: "#/components/schemas/TopologyRole"
+          type: string
+        device_type:
+          type: string
+          enum: [internal, external, host]
 
     UpdateDeviceRequest:
       type: object
-      required: [ip, hostname, config_template]
+      required: [ip, hostname]
       properties:
+        mac:
+          type: string
         ip:
           type: string
         hostname:
@@ -2307,9 +3204,13 @@ components:
         ssh_pass:
           type: string
         topology_id:
-          type: string
+          type: integer
+          format: int64
         topology_role:
-          $ref: "#/components/schemas/TopologyRole"
+          type: string
+        device_type:
+          type: string
+          enum: [internal, external, host]
 
     ConnectResult:
       type: object
@@ -2359,10 +3260,8 @@ components:
 
     DeviceConfigResponse:
       type: object
-      required: [mac, hostname, filename, content, exists]
+      required: [hostname, filename, content, exists]
       properties:
-        mac:
-          type: string
         hostname:
           type: string
         filename:
@@ -2374,14 +3273,13 @@ components:
 
     DeviceConfigPreviewResponse:
       type: object
-      required: [mac, hostname, template_id, template_name, content]
+      required: [hostname, template_id, template_name, content]
       properties:
-        mac:
-          type: string
         hostname:
           type: string
         template_id:
-          type: string
+          type: integer
+          format: int64
         template_name:
           type: string
         content:
@@ -2397,12 +3295,13 @@ components:
     # ── Device Variables ────────────────────────────────────────
     DeviceVariable:
       type: object
-      required: [id, device_mac, key, value, created_at, updated_at]
+      required: [id, device_id, key, value, created_at, updated_at]
       properties:
         id:
           type: integer
-        device_mac:
-          type: string
+        device_id:
+          type: integer
+          format: int64
         key:
           type: string
         value:
@@ -2448,14 +3347,92 @@ components:
           type: array
           items:
             type: object
-            required: [mac, key, value]
+            required: [device_id, key, value]
             properties:
-              mac:
-                type: string
+              device_id:
+                type: integer
+                format: int64
               key:
                 type: string
               value:
                 type: string
+
+    # ── Port Assignments ────────────────────────────────────────
+    PortAssignment:
+      type: object
+      required: [id, device_id, port_name, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        device_id:
+          type: integer
+          format: int64
+        port_name:
+          type: string
+        remote_device_id:
+          type: integer
+          format: int64
+        remote_port_name:
+          type: string
+        description:
+          type: string
+        patch_panel_a_id:
+          type: integer
+          format: int64
+        patch_panel_a_port:
+          type: string
+        patch_panel_b_id:
+          type: integer
+          format: int64
+        patch_panel_b_port:
+          type: string
+        remote_device_hostname:
+          type: string
+        remote_device_type:
+          type: string
+        patch_panel_a_hostname:
+          type: string
+        patch_panel_b_hostname:
+          type: string
+        vrf_id:
+          type: integer
+          format: int64
+        vrf_name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    SetPortAssignmentRequest:
+      type: object
+      required: [port_name]
+      properties:
+        port_name:
+          type: string
+        remote_device_id:
+          type: integer
+          format: int64
+        remote_port_name:
+          type: string
+        description:
+          type: string
+        patch_panel_a_id:
+          type: integer
+          format: int64
+        patch_panel_a_port:
+          type: string
+        patch_panel_b_id:
+          type: integer
+          format: int64
+        patch_panel_b_port:
+          type: string
+        vrf_id:
+          type: integer
+          format: int64
 
     # ── Groups ──────────────────────────────────────────────────
     Group:
@@ -2463,13 +3440,15 @@ components:
       required: [id, name, precedence, created_at, updated_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         name:
           type: string
         description:
           type: string
         parent_id:
-          type: string
+          type: integer
+          format: int64
         precedence:
           type: integer
         device_count:
@@ -2485,16 +3464,15 @@ components:
 
     CreateGroupRequest:
       type: object
-      required: [id, name, precedence]
+      required: [name, precedence]
       properties:
-        id:
-          type: string
         name:
           type: string
         description:
           type: string
         parent_id:
-          type: string
+          type: integer
+          format: int64
         precedence:
           type: integer
 
@@ -2505,7 +3483,8 @@ components:
         id:
           type: integer
         group_id:
-          type: string
+          type: integer
+          format: int64
         key:
           type: string
         value:
@@ -2519,12 +3498,13 @@ components:
 
     SetMembersRequest:
       type: object
-      required: [macs]
+      required: [device_ids]
       properties:
-        macs:
+        device_ids:
           type: array
           items:
-            type: string
+            type: integer
+            format: int64
 
     SetDeviceGroupsRequest:
       type: object
@@ -2533,7 +3513,8 @@ components:
         group_ids:
           type: array
           items:
-            type: string
+            type: integer
+            format: int64
 
     ResolvedVariablesResponse:
       type: object
@@ -2592,13 +3573,15 @@ components:
       required: [id, name, content, created_at, updated_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         name:
           type: string
         description:
           type: string
         vendor_id:
-          type: string
+          type: integer
+          format: int64
         content:
           type: string
         device_count:
@@ -2612,16 +3595,15 @@ components:
 
     CreateTemplateRequest:
       type: object
-      required: [id, name, content]
+      required: [name, content]
       properties:
-        id:
-          type: string
         name:
           type: string
         description:
           type: string
         vendor_id:
-          type: string
+          type: integer
+          format: int64
         content:
           type: string
 
@@ -2631,7 +3613,7 @@ components:
       properties:
         device:
           type: object
-          required: [mac, ip, hostname]
+          required: [ip, hostname]
           properties:
             mac:
               type: string
@@ -2648,7 +3630,8 @@ components:
             ssh_pass:
               type: string
             topology_id:
-              type: string
+              type: integer
+              format: int64
             topology_role:
               type: string
         subnet:
@@ -2673,7 +3656,8 @@ components:
       required: [id, name, backup_command, deploy_command, ssh_port, mac_prefixes]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         name:
           type: string
         backup_command:
@@ -2706,10 +3690,8 @@ components:
 
     CreateVendorRequest:
       type: object
-      required: [id, name, backup_command, deploy_command, ssh_port, mac_prefixes]
+      required: [name, backup_command, deploy_command, ssh_port, mac_prefixes]
       properties:
-        id:
-          type: string
         name:
           type: string
         backup_command:
@@ -2733,36 +3715,160 @@ components:
 
     VendorAction:
       type: object
-      required: [id, vendor_id, label, command, sort_order, created_at]
+      required: [id, vendor_id, label, command, sort_order, action_type, created_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         vendor_id:
-          type: string
+          type: integer
+          format: int64
         label:
           type: string
         command:
           type: string
         sort_order:
           type: integer
+        action_type:
+          type: string
+          enum: [ssh, webhook]
+        webhook_url:
+          type: string
+        webhook_method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE]
+        webhook_headers:
+          type: string
+          description: JSON string of headers
+        webhook_body:
+          type: string
+          description: Request body template
+        output_parser_id:
+          type: integer
+          format: int64
         created_at:
           type: string
           format: date-time
 
     CreateVendorActionRequest:
       type: object
-      required: [id, vendor_id, label, command, sort_order]
+      required: [vendor_id, label, command, sort_order, action_type]
       properties:
-        id:
-          type: string
         vendor_id:
-          type: string
+          type: integer
+          format: int64
         label:
           type: string
         command:
           type: string
         sort_order:
           type: integer
+        action_type:
+          type: string
+          enum: [ssh, webhook]
+        webhook_url:
+          type: string
+        webhook_method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE]
+        webhook_headers:
+          type: string
+        webhook_body:
+          type: string
+        output_parser_id:
+          type: integer
+          format: int64
+
+    # ── Device Models ───────────────────────────────────────────
+    DeviceModel:
+      type: object
+      required: [id, vendor_id, model, display_name, rack_units, layout, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        vendor_id:
+          type: integer
+          format: int64
+        model:
+          type: string
+        display_name:
+          type: string
+        rack_units:
+          type: integer
+        layout:
+          type: string
+          description: JSON string defining port layout
+        device_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateDeviceModelRequest:
+      type: object
+      required: [vendor_id, model, display_name, rack_units, layout]
+      properties:
+        vendor_id:
+          type: integer
+          format: int64
+        model:
+          type: string
+        display_name:
+          type: string
+        rack_units:
+          type: integer
+        layout:
+          type: string
+
+    # ── Device Roles ────────────────────────────────────────────
+    DeviceRole:
+      type: object
+      required: [id, name, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+        template_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        template_names:
+          type: array
+          items:
+            type: string
+        group_names:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateDeviceRoleRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        template_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
 
     # ── Topologies ──────────────────────────────────────────────
     Topology:
@@ -2770,7 +3876,8 @@ components:
       required: [id, name, created_at, updated_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         name:
           type: string
         description:
@@ -2792,10 +3899,8 @@ components:
 
     CreateTopologyRequest:
       type: object
-      required: [id, name]
+      required: [name]
       properties:
-        id:
-          type: string
         name:
           type: string
         description:
@@ -2807,7 +3912,8 @@ components:
       required: [id, option_number, name, value, type, enabled]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         option_number:
           type: integer
         name:
@@ -2817,7 +3923,8 @@ components:
         type:
           $ref: "#/components/schemas/DhcpOptionType"
         vendor_id:
-          type: string
+          type: integer
+          format: int64
           description: If set, option only applies to this vendor
         description:
           type: string
@@ -2836,10 +3943,8 @@ components:
 
     CreateDhcpOptionRequest:
       type: object
-      required: [id, option_number, name, value, type, enabled]
+      required: [option_number, name, value, type, enabled]
       properties:
-        id:
-          type: string
         option_number:
           type: integer
         name:
@@ -2849,7 +3954,8 @@ components:
         type:
           $ref: "#/components/schemas/DhcpOptionType"
         vendor_id:
-          type: string
+          type: integer
+          format: int64
         description:
           type: string
         enabled:
@@ -2858,13 +3964,14 @@ components:
     # ── Backups ─────────────────────────────────────────────────
     Backup:
       type: object
-      required: [id, device_mac, filename, size, created_at]
+      required: [id, device_id, filename, size, created_at]
       properties:
         id:
           type: integer
           format: int64
-        device_mac:
-          type: string
+        device_id:
+          type: integer
+          format: int64
         filename:
           type: string
         size:
@@ -2958,15 +4065,16 @@ components:
     # ── Jobs ────────────────────────────────────────────────────
     Job:
       type: object
-      required: [id, job_type, device_mac, command, status, created_at]
+      required: [id, job_type, device_id, command, status, created_at]
       properties:
         id:
           type: string
         job_type:
           type: string
-          enum: [command, deploy]
-        device_mac:
-          type: string
+          enum: [command, deploy, diff]
+        device_id:
+          type: integer
+          format: int64
         command:
           type: string
         status:
@@ -2985,6 +4093,200 @@ components:
         completed_at:
           type: string
           format: date-time
+
+    # ── Job Templates ───────────────────────────────────────────
+    JobTemplate:
+      type: object
+      required: [id, name, description, job_type, command, target_mode, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+        job_type:
+          type: string
+        command:
+          type: string
+        action_id:
+          type: integer
+          format: int64
+        target_mode:
+          type: string
+          enum: [devices, group]
+        target_device_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        target_group_id:
+          type: integer
+          format: int64
+        schedule:
+          type: string
+          description: Cron expression
+        enabled:
+          type: boolean
+        credential_id:
+          type: integer
+          format: int64
+        last_run_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateJobTemplateRequest:
+      type: object
+      required: [name, job_type, command, target_mode]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        job_type:
+          type: string
+        command:
+          type: string
+        action_id:
+          type: integer
+          format: int64
+        target_mode:
+          type: string
+          enum: [devices, group]
+        target_device_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        target_group_id:
+          type: integer
+          format: int64
+        schedule:
+          type: string
+        enabled:
+          type: boolean
+        credential_id:
+          type: integer
+          format: int64
+
+    # ── Credentials ─────────────────────────────────────────────
+    Credential:
+      type: object
+      required: [id, name, cred_type, username, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+        cred_type:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateCredentialRequest:
+      type: object
+      required: [name, cred_type, username, password]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        cred_type:
+          type: string
+        username:
+          type: string
+        password:
+          type: string
+
+    # ── Output Parsers ──────────────────────────────────────────
+    OutputParser:
+      type: object
+      required: [id, name, pattern, extract_names, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+        pattern:
+          type: string
+          description: Regex pattern for extraction
+        extract_names:
+          type: string
+          description: Comma-separated capture group names
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateOutputParserRequest:
+      type: object
+      required: [name, pattern, extract_names, enabled]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        pattern:
+          type: string
+        extract_names:
+          type: string
+        enabled:
+          type: boolean
+
+    # ── Users ───────────────────────────────────────────────────
+    User:
+      type: object
+      required: [id, username, enabled, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateUserRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        enabled:
+          type: boolean
 
     # ── Docker ──────────────────────────────────────────────────
     TestContainer:
@@ -3020,13 +4322,52 @@ components:
         config_method:
           type: string
           enum: [tftp, http, both]
-          description: Config fetch method
         image:
           type: string
           description: Docker image to use
         topology_id:
-          type: string
+          type: integer
+          format: int64
         topology_role:
+          type: string
+
+    VirtualClosRequest:
+      type: object
+      properties:
+        spines:
+          type: integer
+          description: Number of spine switches
+        leaves:
+          type: integer
+          description: Number of leaf switches
+        region_id:
+          type: integer
+          format: int64
+        campus_id:
+          type: integer
+          format: int64
+        datacenter_id:
+          type: integer
+          format: int64
+        halls:
+          type: integer
+        rows_per_hall:
+          type: integer
+        racks_per_row:
+          type: integer
+        leaves_per_rack:
+          type: integer
+        external_devices:
+          type: integer
+        uplinks_per_spine:
+          type: integer
+        external_names:
+          type: array
+          items:
+            type: string
+        spawn_containers:
+          type: boolean
+        ceos_image:
           type: string
 
     ClosLabResponse:
@@ -3034,14 +4375,15 @@ components:
       required: [topology_id, topology_name, devices, fabric_links]
       properties:
         topology_id:
-          type: string
+          type: integer
+          format: int64
         topology_name:
           type: string
         devices:
           type: array
           items:
             type: object
-            required: [hostname, role, mac, ip, container_name]
+            required: [hostname, role, ip]
             properties:
               hostname:
                 type: string
@@ -3068,12 +4410,13 @@ components:
       required: [id, name, created_at, updated_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         name:
           type: string
         description:
           type: string
-        location_count:
+        campus_count:
           type: integer
         created_at:
           type: string
@@ -3084,27 +4427,27 @@ components:
 
     CreateIpamRegionRequest:
       type: object
-      required: [id, name]
+      required: [name]
       properties:
-        id:
-          type: string
         name:
           type: string
         description:
           type: string
 
-    IpamLocation:
+    IpamCampus:
       type: object
       required: [id, name, region_id, created_at, updated_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         name:
           type: string
         description:
           type: string
         region_id:
-          type: string
+          type: integer
+          format: int64
         region_name:
           type: string
         datacenter_count:
@@ -3116,35 +4459,38 @@ components:
           type: string
           format: date-time
 
-    CreateIpamLocationRequest:
+    CreateIpamCampusRequest:
       type: object
-      required: [id, name, region_id]
+      required: [name, region_id]
       properties:
-        id:
-          type: string
         name:
           type: string
         description:
           type: string
         region_id:
-          type: string
+          type: integer
+          format: int64
 
     IpamDatacenter:
       type: object
-      required: [id, name, location_id, created_at, updated_at]
+      required: [id, name, campus_id, created_at, updated_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         name:
           type: string
         description:
           type: string
-        location_id:
-          type: string
-        location_name:
+        campus_id:
+          type: integer
+          format: int64
+        campus_name:
           type: string
         region_name:
           type: string
+        hall_count:
+          type: integer
         prefix_count:
           type: integer
         created_at:
@@ -3156,23 +4502,134 @@ components:
 
     CreateIpamDatacenterRequest:
       type: object
-      required: [id, name, location_id]
+      required: [name, campus_id]
       properties:
-        id:
-          type: string
         name:
           type: string
         description:
           type: string
-        location_id:
+        campus_id:
+          type: integer
+          format: int64
+
+    IpamHall:
+      type: object
+      required: [id, name, datacenter_id, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
           type: string
+        description:
+          type: string
+        datacenter_id:
+          type: integer
+          format: int64
+        datacenter_name:
+          type: string
+        row_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateIpamHallRequest:
+      type: object
+      required: [name, datacenter_id]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        datacenter_id:
+          type: integer
+          format: int64
+
+    IpamRow:
+      type: object
+      required: [id, name, hall_id, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+        hall_id:
+          type: integer
+          format: int64
+        hall_name:
+          type: string
+        rack_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateIpamRowRequest:
+      type: object
+      required: [name, hall_id]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        hall_id:
+          type: integer
+          format: int64
+
+    IpamRack:
+      type: object
+      required: [id, name, row_id, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+        row_id:
+          type: integer
+          format: int64
+        row_name:
+          type: string
+        device_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateIpamRackRequest:
+      type: object
+      required: [name, row_id]
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        row_id:
+          type: integer
+          format: int64
 
     IpamRole:
       type: object
       required: [id, name, created_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         name:
           type: string
         description:
@@ -3183,10 +4640,8 @@ components:
 
     CreateIpamRoleRequest:
       type: object
-      required: [id, name]
+      required: [name]
       properties:
-        id:
-          type: string
         name:
           type: string
         description:
@@ -3197,7 +4652,8 @@ components:
       required: [id, name, created_at, updated_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         name:
           type: string
         rd:
@@ -3216,15 +4672,12 @@ components:
 
     CreateIpamVrfRequest:
       type: object
-      required: [id, name]
+      required: [name]
       properties:
-        id:
-          type: string
         name:
           type: string
         rd:
           type: string
-          description: Route Distinguisher
         description:
           type: string
 
@@ -3233,7 +4686,8 @@ components:
       required: [id, prefix, network_int, broadcast_int, prefix_length, status, is_supernet, created_at, updated_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         prefix:
           type: string
           description: CIDR notation (e.g. 10.0.0.0/24)
@@ -3251,18 +4705,30 @@ components:
           $ref: "#/components/schemas/IpamStatus"
         is_supernet:
           type: boolean
+        role_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        role_names:
+          type: array
+          items:
+            type: string
         parent_id:
-          type: string
+          type: integer
+          format: int64
         parent_prefix:
           type: string
         datacenter_id:
-          type: string
+          type: integer
+          format: int64
         datacenter_name:
           type: string
         vlan_id:
           type: integer
         vrf_id:
-          type: string
+          type: integer
+          format: int64
         vrf_name:
           type: string
         child_prefix_count:
@@ -3281,10 +4747,8 @@ components:
 
     CreateIpamPrefixRequest:
       type: object
-      required: [id, prefix, status]
+      required: [prefix, status]
       properties:
-        id:
-          type: string
         prefix:
           type: string
         description:
@@ -3293,28 +4757,38 @@ components:
           $ref: "#/components/schemas/IpamStatus"
         is_supernet:
           type: boolean
+        role_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
         parent_id:
-          type: string
+          type: integer
+          format: int64
         datacenter_id:
-          type: string
+          type: integer
+          format: int64
         vlan_id:
           type: integer
         vrf_id:
-          type: string
+          type: integer
+          format: int64
 
     IpamIpAddress:
       type: object
       required: [id, address, address_int, prefix_id, status, created_at, updated_at]
       properties:
         id:
-          type: string
+          type: integer
+          format: int64
         address:
           type: string
         address_int:
           type: integer
           format: int64
         prefix_id:
-          type: string
+          type: integer
+          format: int64
         prefix:
           type: string
         description:
@@ -3324,21 +4798,24 @@ components:
         role_ids:
           type: array
           items:
-            type: string
+            type: integer
+            format: int64
         role_names:
           type: array
           items:
             type: string
         dns_name:
           type: string
-        device_mac:
-          type: string
+        device_id:
+          type: integer
+          format: int64
         device_hostname:
           type: string
         interface_name:
           type: string
         vrf_id:
-          type: string
+          type: integer
+          format: int64
         vrf_name:
           type: string
         created_at:
@@ -3350,28 +4827,32 @@ components:
 
     CreateIpamIpAddressRequest:
       type: object
-      required: [id, address, prefix_id, status]
+      required: [address, prefix_id, status]
       properties:
-        id:
-          type: string
         address:
           type: string
         prefix_id:
-          type: string
+          type: integer
+          format: int64
         description:
           type: string
         status:
           $ref: "#/components/schemas/IpamStatus"
-        role_id:
-          type: string
+        role_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
         dns_name:
           type: string
-        device_mac:
-          type: string
+        device_id:
+          type: integer
+          format: int64
         interface_name:
           type: string
         vrf_id:
-          type: string
+          type: integer
+          format: int64
 
     IpamTag:
       type: object
@@ -3457,6 +4938,7 @@ components:
         - dhcp_subnet
         - dhcp_gateway
         - tftp_server_ip
+        - hostname_pattern
       properties:
         default_ssh_user:
           type: string
@@ -3481,6 +4963,24 @@ components:
         opengear_enroll_bundle:
           type: string
         opengear_enroll_password:
+          type: string
+        app_name:
+          type: string
+          description: Custom application name for branding
+        logo_url:
+          type: string
+          description: URL of uploaded logo
+        hostname_pattern:
+          type: string
+          description: "Pattern for auto-generated hostnames. Variables: $datacenter, $role, # (auto-increment)"
+          default: "$datacenter-$role-#"
+
+    Branding:
+      type: object
+      properties:
+        app_name:
+          type: string
+        logo_url:
           type: string
 
     NetworkInterface:

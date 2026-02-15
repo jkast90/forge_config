@@ -230,6 +230,19 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
     }
   };
 
+  const handleDiffConfig = async () => {
+    if (!previewModal.item) return;
+    const hostname = previewModal.item.hostname;
+    previewModal.close();
+    try {
+      await getServices().devices.diffConfig(previewModal.item.id);
+      addNotification('success', `Diff queued for ${hostname}`, navigateAction('View Jobs', 'jobs', 'history'));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Diff failed';
+      addNotification('error', `Diff failed for ${hostname}: ${msg}`, navigateAction('View Jobs', 'jobs', 'history'));
+    }
+  };
+
   const handleClosePreview = () => {
     previewModal.close();
     modalRoute.closeModal();
@@ -245,7 +258,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
         topology_id: topoAssign.topologyId,
         topology_role: topoAssign.role,
       });
-      addNotification('success', `Assigned ${topoAssign.device.hostname} as ${topoAssign.role} in topology`);
+      addNotification('success', `Assigned ${topoAssign.device.hostname} as ${topoAssign.role} in topology`, navigateAction('View Topologies', 'topologies'));
       setTopoAssign(null);
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -526,10 +539,16 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
           footer={
             <DialogActions>
               {previewModal.result && (!deployJob || deployJob.status === 'queued' || deployJob.status === 'running') && (
-                <Button onClick={handleDeployConfig} disabled={deploying}>
-                  {deploying ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
-                  {deploying ? 'Deploying...' : 'Deploy to Device'}
-                </Button>
+                <>
+                  <Button onClick={handleDiffConfig} disabled={deploying} variant="secondary">
+                    {deploying ? <SpinnerIcon size={14} /> : <Icon name="compare_arrows" size={14} />}
+                    {deploying ? 'Diffing...' : 'Diff'}
+                  </Button>
+                  <Button onClick={handleDeployConfig} disabled={deploying}>
+                    {deploying ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
+                    {deploying ? 'Deploying...' : 'Deploy to Device'}
+                  </Button>
+                </>
               )}
               <Button variant="secondary" onClick={handleClosePreview}>
                 Close

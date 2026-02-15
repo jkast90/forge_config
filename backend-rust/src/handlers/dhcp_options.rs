@@ -31,11 +31,11 @@ pub async fn get_default_dhcp_options(
 pub async fn get_dhcp_option(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<DhcpOption>, ApiError> {
     let option = state
         .store
-        .get_dhcp_option(&id)
+        .get_dhcp_option(id)
         .await?
         .ok_or_else(|| ApiError::not_found("dhcp option"))?;
     Ok(Json(option))
@@ -47,13 +47,8 @@ pub async fn create_dhcp_option(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateDhcpOptionRequest>,
 ) -> Result<(axum::http::StatusCode, Json<DhcpOption>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() {
-        return Err(ApiError::bad_request("id and name are required"));
-    }
-
-    // Check for duplicate
-    if state.store.get_dhcp_option(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("dhcp option with this ID already exists"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
 
     let option = state.store.create_dhcp_option(&req).await?;
@@ -65,11 +60,10 @@ pub async fn create_dhcp_option(
 pub async fn update_dhcp_option(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateDhcpOptionRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateDhcpOptionRequest>,
 ) -> Result<Json<DhcpOption>, ApiError> {
-    req.id = id.clone();
-    let option = state.store.update_dhcp_option(&id, &req).await?;
+    let option = state.store.update_dhcp_option(id, &req).await?;
     trigger_reload(&state).await;
     Ok(Json(option))
 }
@@ -78,9 +72,9 @@ pub async fn update_dhcp_option(
 pub async fn delete_dhcp_option(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    state.store.delete_dhcp_option(&id).await?;
+    state.store.delete_dhcp_option(id).await?;
     trigger_reload(&state).await;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

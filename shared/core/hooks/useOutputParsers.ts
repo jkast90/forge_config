@@ -8,6 +8,7 @@ import {
   deleteOutputParser as deleteOutputParserThunk,
 } from '../store/slices/outputParsersSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseOutputParsersReturn {
@@ -35,7 +36,7 @@ export function useOutputParsers(): UseOutputParsersReturn {
   const createOutputParser = useCallback(async (data: OutputParserFormData): Promise<boolean> => {
     try {
       await dispatch(createOutputParserThunk(data)).unwrap();
-      addNotification('success', 'Output parser created');
+      addNotification('success', 'Output parser created', navigateAction('View Parsers', 'jobs', 'parsers'));
       dispatch(fetchOutputParsers());
       return true;
     } catch (err) {
@@ -47,7 +48,7 @@ export function useOutputParsers(): UseOutputParsersReturn {
   const updateOutputParser = useCallback(async (id: number, data: OutputParserFormData): Promise<boolean> => {
     try {
       await dispatch(updateOutputParserThunk({ id, data })).unwrap();
-      addNotification('success', 'Output parser updated');
+      addNotification('success', 'Output parser updated', navigateAction('View Parsers', 'jobs', 'parsers'));
       dispatch(fetchOutputParsers());
       return true;
     } catch (err) {
@@ -59,7 +60,7 @@ export function useOutputParsers(): UseOutputParsersReturn {
   const deleteOutputParser = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(deleteOutputParserThunk(id)).unwrap();
-      addNotification('success', 'Output parser deleted');
+      addNotification('success', 'Output parser deleted', navigateAction('View Parsers', 'jobs', 'parsers'));
       dispatch(fetchOutputParsers());
       return true;
     } catch (err) {

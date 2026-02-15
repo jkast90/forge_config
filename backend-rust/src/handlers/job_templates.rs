@@ -23,11 +23,11 @@ pub async fn list_job_templates(
 pub async fn get_job_template(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<JobTemplate>, ApiError> {
     let template = state
         .store
-        .get_job_template(&id)
+        .get_job_template(id)
         .await?
         .ok_or_else(|| ApiError::not_found("job template"))?;
     Ok(Json(template))
@@ -50,10 +50,10 @@ pub async fn create_job_template(
 pub async fn update_job_template(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<CreateJobTemplateRequest>,
 ) -> Result<Json<JobTemplate>, ApiError> {
-    let template = state.store.update_job_template(&id, &req).await?;
+    let template = state.store.update_job_template(id, &req).await?;
     Ok(Json(template))
 }
 
@@ -61,9 +61,9 @@ pub async fn update_job_template(
 pub async fn delete_job_template(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_job_template(&id).await?;
+    state.store.delete_job_template(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -71,11 +71,11 @@ pub async fn delete_job_template(
 pub async fn run_job_template(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Vec<Job>>, ApiError> {
     let template = state
         .store
-        .get_job_template(&id)
+        .get_job_template(id)
         .await?
         .ok_or_else(|| ApiError::not_found("job template"))?;
 
@@ -91,6 +91,7 @@ pub async fn run_job_template(
     let is_webhook = template.job_type == job_type::WEBHOOK;
     let is_static_webhook = is_webhook && device_ids.is_empty();
 
+    let credential_id_str = template.credential_id.to_string();
     let mut jobs = Vec::new();
 
     if is_static_webhook {
@@ -99,8 +100,8 @@ pub async fn run_job_template(
         let req = CreateJobRequest {
             device_id: 0,
             job_type: template.job_type.clone(),
-            command: template.action_id.clone(),
-            credential_id: template.credential_id.clone(),
+            command: template.action_id.to_string(),
+            credential_id: credential_id_str.clone(),
         };
         let job = state.store.create_job(&job_id, &req).await
             .map_err(|e| ApiError::internal(e.to_string()))?;
@@ -117,10 +118,10 @@ pub async fn run_job_template(
         for device_id in &device_ids {
             let job_id = uuid::Uuid::new_v4().to_string();
             let command = if is_webhook {
-                template.action_id.clone()
-            } else if !template.action_id.is_empty() {
+                template.action_id.to_string()
+            } else if template.action_id != 0 {
                 // SSH action — resolve the action's command
-                match state.store.get_vendor_action(&template.action_id).await {
+                match state.store.get_vendor_action(template.action_id).await {
                     Ok(Some(action)) => action.command.clone(),
                     _ => template.command.clone(),
                 }
@@ -138,7 +139,7 @@ pub async fn run_job_template(
                 device_id: *device_id,
                 job_type: jt,
                 command,
-                credential_id: template.credential_id.clone(),
+                credential_id: credential_id_str.clone(),
             };
 
             match state.store.create_job(&job_id, &req).await {
@@ -159,7 +160,7 @@ pub async fn run_job_template(
     }
 
     // Update last_run_at
-    let _ = state.store.update_job_template_last_run(&id).await;
+    let _ = state.store.update_job_template_last_run(id).await;
 
     Ok(Json(jobs))
 }

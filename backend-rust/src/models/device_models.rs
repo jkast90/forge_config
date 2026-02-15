@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceModel {
-    pub id: String,
-    pub vendor_id: String,
+    pub id: i64,
+    pub vendor_id: i64,
     pub model: String,
     pub display_name: String,
     pub rack_units: i32,
@@ -17,8 +17,7 @@ pub struct DeviceModel {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateDeviceModelRequest {
-    pub id: String,
-    pub vendor_id: String,
+    pub vendor_id: i64,
     pub model: String,
     pub display_name: String,
     #[serde(default = "default_rack_units")]

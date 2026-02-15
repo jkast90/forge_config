@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Icon } from './Icon';
 
-const STORAGE_KEY = 'ztp_scratchpad';
-const POS_KEY = 'ztp_scratchpad_pos';
+const STORAGE_KEY = 'fc_scratchpad';
+const POS_KEY = 'fc_scratchpad_pos';
 const MIN_WIDTH = 280;
 const MIN_HEIGHT = 200;
 const PAD = 8;

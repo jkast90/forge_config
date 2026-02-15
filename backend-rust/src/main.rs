@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "ztp_server=info,tower_http=debug".into()),
+                .unwrap_or_else(|_| "forge_config=info,tower_http=debug".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!("JWT_SECRET not set - generating random secret (tokens will be invalidated on restart)");
         cfg.jwt_secret = uuid::Uuid::new_v4().to_string();
     }
-    tracing::info!("Starting ZTP Server (Rust)");
+    tracing::info!("Starting ForgeConfig Server");
     tracing::info!("Database: {}", cfg.db_path);
     tracing::info!("TFTP Dir: {}", cfg.tftp_dir);
     tracing::info!("Listen: {}", cfg.listen_addr);
@@ -160,13 +160,13 @@ async fn main() -> anyhow::Result<()> {
 
     // Start server
     let listener = tokio::net::TcpListener::bind(&cfg.listen_addr).await?;
-    tracing::info!("ZTP Server listening on {}", cfg.listen_addr);
+    tracing::info!("ForgeConfig listening on {}", cfg.listen_addr);
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
-    tracing::info!("ZTP Server shutting down");
+    tracing::info!("ForgeConfig shutting down");
     Ok(())
 }
 

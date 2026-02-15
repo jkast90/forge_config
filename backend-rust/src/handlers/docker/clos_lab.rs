@@ -102,8 +102,8 @@ pub async fn build_clos_lab(
         let serial = format!("SN-CLOS-{}", node.hostname);
 
         let mut labels = HashMap::new();
-        labels.insert("ztp-test-client".to_string(), "true".to_string());
-        labels.insert("ztp-clos".to_string(), CLOS_TOPOLOGY_ID.to_string());
+        labels.insert("fc-test-client".to_string(), "true".to_string());
+        labels.insert("fc-clos".to_string(), CLOS_TOPOLOGY_ID.to_string());
 
         let mut endpoints = HashMap::new();
         endpoints.insert(
@@ -116,7 +116,7 @@ pub async fn build_clos_lab(
 
         let config = if use_frr {
             // FRR container config
-            labels.insert("ztp-frr".to_string(), "true".to_string());
+            labels.insert("fc-frr".to_string(), "true".to_string());
 
             let env = vec![
                 format!("DEVICE_HOSTNAME={}", node.hostname),
@@ -148,7 +148,7 @@ pub async fn build_clos_lab(
             }
         } else {
             // cEOS container config
-            labels.insert("ztp-ceos".to_string(), "true".to_string());
+            labels.insert("fc-ceos".to_string(), "true".to_string());
 
             let env = vec![
                 "CEOS=1".to_string(),
@@ -295,18 +295,21 @@ pub async fn build_clos_lab(
     tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
     // ── Create topology ──────────────────────────────────────────
-    let _ = state.store.delete_topology(CLOS_TOPOLOGY_ID).await;
+    let _ = state.store.delete_topology_by_name(CLOS_TOPOLOGY_NAME).await;
     let topo_req = crate::models::CreateTopologyRequest {
-        id: CLOS_TOPOLOGY_ID.to_string(),
         name: CLOS_TOPOLOGY_NAME.to_string(),
         description: Some(format!("2-spine 2-leaf CLOS lab with {}", image)),
         region_id: None,
         campus_id: None,
         datacenter_id: None,
     };
-    if let Err(e) = state.store.create_topology(&topo_req).await {
-        tracing::warn!("Failed to create topology: {}", e);
-    }
+    let topo_id_str = match state.store.create_topology(&topo_req).await {
+        Ok(t) => t.id.to_string(),
+        Err(e) => {
+            tracing::warn!("Failed to create topology: {}", e);
+            String::new()
+        }
+    };
 
     // ── Register devices ─────────────────────────────────────────
     let mut result_devices = Vec::new();
@@ -342,7 +345,7 @@ pub async fn build_clos_lab(
                 config_template: String::new(),
                 ssh_user: Some("admin".to_string()),
                 ssh_pass: Some("admin".to_string()),
-                topology_id: Some(CLOS_TOPOLOGY_ID.to_string()),
+                topology_id: Some(topo_id_str.clone()),
                 topology_role: Some(node.role.to_string()),
                 device_type: None,
                 hall_id: None,
@@ -444,7 +447,7 @@ pub async fn build_clos_lab(
     }
 
     Ok(Json(ClosLabResponse {
-        topology_id: CLOS_TOPOLOGY_ID.to_string(),
+        topology_id: topo_id_str,
         topology_name: CLOS_TOPOLOGY_NAME.to_string(),
         devices: result_devices,
         fabric_links,
@@ -563,5 +566,5 @@ pub(super) async fn teardown_clos_lab_inner(docker: &bollard::Docker, state: &Ar
     }
 
     // Delete topology
-    let _ = state.store.delete_topology(CLOS_TOPOLOGY_ID).await;
+    let _ = state.store.delete_topology_by_name(CLOS_TOPOLOGY_NAME).await;
 }

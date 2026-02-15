@@ -13,12 +13,12 @@ interface Slide {
 
 const SLIDES: Slide[] = [
   {
-    title: 'Welcome to ZTP Manager',
+    title: 'Welcome to ForgeConfig',
     icon: 'waving_hand',
     content: (
       <>
         <p>
-          ZTP Manager is a Zero Touch Provisioning tool for network devices.
+          ForgeConfig is a network device provisioning tool.
           It automates device discovery, configuration templating, and deployment.
         </p>
         <div className="help-tour-tips">
@@ -41,7 +41,7 @@ const SLIDES: Slide[] = [
     content: (
       <>
         <p>
-          The Dashboard gives you an at-a-glance overview of your ZTP environment.
+          The Dashboard gives you an at-a-glance overview of your environment.
         </p>
         <div className="help-tour-tips">
           <h4>Features</h4>

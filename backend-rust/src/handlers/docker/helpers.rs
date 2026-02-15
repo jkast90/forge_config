@@ -46,11 +46,11 @@ pub struct VirtualClosRequest {
     #[serde(default = "default_leaf_count")]
     pub leaves: usize,
     #[serde(default)]
-    pub region_id: Option<String>,
+    pub region_id: Option<i64>,
     #[serde(default)]
-    pub campus_id: Option<String>,
+    pub campus_id: Option<i64>,
     #[serde(default)]
-    pub datacenter_id: Option<String>,
+    pub datacenter_id: Option<i64>,
     #[serde(default = "default_hall_count")]
     pub halls: usize,
     #[serde(default = "default_rows_per_hall")]
@@ -63,6 +63,8 @@ pub struct VirtualClosRequest {
     pub external_devices: usize,
     #[serde(default = "default_uplinks_per_spine")]
     pub uplinks_per_spine: usize,
+    #[serde(default = "default_links_per_leaf")]
+    pub links_per_leaf: usize,
     /// Custom hostnames for external devices (one per external device)
     #[serde(default)]
     pub external_names: Vec<String>,
@@ -80,6 +82,7 @@ fn default_rows_per_hall() -> usize { 1 }
 fn default_racks_per_row() -> usize { 2 }
 fn default_leaves_per_rack() -> usize { 2 }
 fn default_uplinks_per_spine() -> usize { 2 }
+fn default_links_per_leaf() -> usize { 2 }
 fn default_external_devices() -> usize { 2 }
 
 /// Response from the CLOS lab build endpoint
@@ -101,11 +104,11 @@ pub struct ClosLabDevice {
 }
 
 pub(super) fn get_network_name() -> String {
-    std::env::var("DOCKER_NETWORK").unwrap_or_else(|_| "ztp-server_ztp-net".to_string())
+    std::env::var("DOCKER_NETWORK").unwrap_or_else(|_| "forge-config_fc-net".to_string())
 }
 
 pub(super) fn get_image_name() -> String {
-    std::env::var("TEST_CLIENT_IMAGE").unwrap_or_else(|_| "ztp-server-test-client".to_string())
+    std::env::var("TEST_CLIENT_IMAGE").unwrap_or_else(|_| "forge-config-test-client".to_string())
 }
 
 /// Generate a random MAC address with the locally administered bit set

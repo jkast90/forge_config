@@ -10,6 +10,7 @@ import {
   deleteTopology as deleteTopologyThunk,
 } from '../store/slices/topologiesSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseTopologiesOptions {
@@ -51,7 +52,7 @@ export function useTopologies(options: UseTopologiesOptions = {}): UseTopologies
   const createTopology = useCallback(async (data: Partial<Topology>): Promise<boolean> => {
     try {
       await dispatch(createTopologyThunk(data)).unwrap();
-      addNotification('success', 'Topology created successfully');
+      addNotification('success', 'Topology created successfully', navigateAction('View Topologies', 'topologies'));
       dispatch(fetchTopologies());
       return true;
     } catch (err) {
@@ -63,7 +64,7 @@ export function useTopologies(options: UseTopologiesOptions = {}): UseTopologies
   const updateTopology = useCallback(async (id: string, data: Partial<Topology>): Promise<boolean> => {
     try {
       await dispatch(updateTopologyThunk({ id, data })).unwrap();
-      addNotification('success', 'Topology updated successfully');
+      addNotification('success', 'Topology updated successfully', navigateAction('View Topologies', 'topologies'));
       dispatch(fetchTopologies());
       return true;
     } catch (err) {
@@ -75,7 +76,7 @@ export function useTopologies(options: UseTopologiesOptions = {}): UseTopologies
   const deleteTopology = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteTopologyThunk(id)).unwrap();
-      addNotification('success', 'Topology deleted (devices unassigned)');
+      addNotification('success', 'Topology deleted (devices unassigned)', navigateAction('View Topologies', 'topologies'));
       dispatch(fetchTopologies());
       return true;
     } catch (err) {

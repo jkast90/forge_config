@@ -9,7 +9,7 @@ const SELECT_DEVICE_MODEL: &str = r#"
            dm.created_at, dm.updated_at,
            COALESCE(COUNT(d.id), 0) as device_count
     FROM device_models dm
-    LEFT JOIN devices d ON d.model = dm.model AND d.vendor = dm.vendor_id
+    LEFT JOIN devices d ON d.model = dm.model AND d.vendor = CAST(dm.vendor_id AS TEXT)
 "#;
 
 fn map_device_model_row(row: &SqliteRow) -> DeviceModel {
@@ -40,7 +40,7 @@ impl DeviceModelRepo {
         Ok(rows.iter().map(map_device_model_row).collect())
     }
 
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<DeviceModel>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<DeviceModel>> {
         let row = sqlx::query(&format!(
             "{} WHERE dm.id = ? GROUP BY dm.id",
             SELECT_DEVICE_MODEL
@@ -55,14 +55,13 @@ impl DeviceModelRepo {
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateDeviceModelRequest) -> Result<DeviceModel> {
         let now = Utc::now();
 
-        sqlx::query(
+        let result = sqlx::query(
             r#"
-            INSERT INTO device_models (id, vendor_id, model, display_name, rack_units, layout, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO device_models (vendor_id, model, display_name, rack_units, layout, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             "#,
         )
-        .bind(&req.id)
-        .bind(&req.vendor_id)
+        .bind(req.vendor_id)
         .bind(&req.model)
         .bind(&req.display_name)
         .bind(req.rack_units)
@@ -72,12 +71,13 @@ impl DeviceModelRepo {
         .execute(pool)
         .await?;
 
-        Self::get(pool, &req.id)
+        let new_id = result.last_insert_rowid();
+        Self::get(pool, new_id)
             .await?
             .context("Device model not found after creation")
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateDeviceModelRequest) -> Result<DeviceModel> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateDeviceModelRequest) -> Result<DeviceModel> {
         let now = Utc::now();
 
         let result = sqlx::query(
@@ -87,7 +87,7 @@ impl DeviceModelRepo {
             WHERE id = ?
             "#,
         )
-        .bind(&req.vendor_id)
+        .bind(req.vendor_id)
         .bind(&req.model)
         .bind(&req.display_name)
         .bind(req.rack_units)
@@ -98,7 +98,7 @@ impl DeviceModelRepo {
         .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Device model", id).into());
+            return Err(super::NotFoundError::new("Device model", &id.to_string()).into());
         }
 
         Self::get(pool, id)
@@ -106,14 +106,14 @@ impl DeviceModelRepo {
             .context("Device model not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM device_models WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Device model", id).into());
+            return Err(super::NotFoundError::new("Device model", &id.to_string()).into());
         }
         Ok(())
     }

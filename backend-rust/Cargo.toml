@@ -1,9 +1,9 @@
 [package]
-name = "ztp-server"
+name = "forge-config"
 version = "0.1.0"
 edition = "2021"
-authors = ["ZTP Server Team"]
-description = "Zero Touch Provisioning Server - Rust Backend"
+authors = ["ForgeConfig Team"]
+description = "ForgeConfig - Network Device Provisioning Server"
 
 [dependencies]
 # Web framework

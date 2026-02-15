@@ -6,6 +6,7 @@ import type { NotificationAction } from './notifications';
 export interface NavigationTarget {
   page: string;
   tab?: string;
+  dialog?: string;
 }
 
 type NavigationHandler = (target: NavigationTarget) => void;
@@ -51,5 +52,13 @@ export function navigateAction(label: string, page: string, tab?: string): Notif
   return {
     label,
     onClick: () => navigateTo({ page, tab }),
+  };
+}
+
+/** Create a NotificationAction that opens a dialog */
+export function dialogAction(label: string, dialog: string): NotificationAction {
+  return {
+    label,
+    onClick: () => navigateTo({ page: '', dialog }),
   };
 }

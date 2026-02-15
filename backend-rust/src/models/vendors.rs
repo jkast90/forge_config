@@ -4,10 +4,11 @@ use serde::{Deserialize, Serialize};
 /// Vendor represents a network device vendor configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vendor {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     pub backup_command: String,
     pub deploy_command: String,
+    pub diff_command: String,
     pub ssh_port: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ssh_user: Option<String>,
@@ -25,12 +26,13 @@ pub struct Vendor {
 /// CreateVendorRequest for creating new vendors
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateVendorRequest {
-    pub id: String,
     pub name: String,
     #[serde(default = "default_backup_command")]
     pub backup_command: String,
     #[serde(default)]
     pub deploy_command: String,
+    #[serde(default)]
+    pub diff_command: String,
     #[serde(default = "default_ssh_port")]
     pub ssh_port: i32,
     #[serde(default)]
@@ -56,14 +58,14 @@ fn default_ssh_port() -> i32 {
 /// DhcpOption represents a DHCP option configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DhcpOption {
-    pub id: String,
+    pub id: i64,
     pub option_number: i32,
     pub name: String,
     pub value: String,
     #[serde(rename = "type")]
     pub option_type: String, // string, ip, hex, number
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub vendor_id: Option<String>,
+    pub vendor_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub enabled: bool,
@@ -74,7 +76,6 @@ pub struct DhcpOption {
 /// CreateDhcpOptionRequest for creating new DHCP options
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateDhcpOptionRequest {
-    pub id: String,
     pub option_number: i32,
     pub name: String,
     #[serde(default)]
@@ -82,7 +83,7 @@ pub struct CreateDhcpOptionRequest {
     #[serde(rename = "type", default = "default_option_type")]
     pub option_type: String,
     #[serde(default)]
-    pub vendor_id: Option<String>,
+    pub vendor_id: Option<i64>,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default = "default_enabled")]
@@ -100,8 +101,8 @@ fn default_enabled() -> bool {
 /// VendorAction represents a quick-action command associated with a vendor
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VendorAction {
-    pub id: String,
-    pub vendor_id: String,
+    pub id: i64,
+    pub vendor_id: i64,
     pub label: String,
     pub command: String,
     pub sort_order: i32,
@@ -118,8 +119,7 @@ pub struct VendorAction {
 /// CreateVendorActionRequest for creating/updating vendor actions
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateVendorActionRequest {
-    pub id: String,
-    pub vendor_id: String,
+    pub vendor_id: i64,
     pub label: String,
     #[serde(default)]
     pub command: String,
@@ -157,7 +157,7 @@ pub struct ExecRequest {
     #[serde(default)]
     pub command: String,
     #[serde(default)]
-    pub action_id: Option<String>,
+    pub action_id: Option<i64>,
 }
 
 /// ExecResponse returned after executing a command

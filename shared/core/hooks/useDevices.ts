@@ -54,7 +54,7 @@ export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
   const createDevice = useCallback(async (data: Partial<Device>): Promise<boolean> => {
     try {
       await dispatch(createDeviceThunk(data)).unwrap();
-      addNotification('success', `Device added: ${data.hostname || 'unknown'}`);
+      addNotification('success', `Device added: ${data.hostname || 'unknown'}`, navigateAction('View Devices', 'devices'));
       dispatch(fetchDevices());
       return true;
     } catch (err) {
@@ -67,7 +67,7 @@ export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
     const name = data.hostname || devices.find((d) => d.id === id)?.hostname || 'unknown';
     try {
       await dispatch(updateDeviceThunk({ id, data })).unwrap();
-      addNotification('success', `Device updated: ${name}`);
+      addNotification('success', `Device updated: ${name}`, navigateAction('View Devices', 'devices'));
       dispatch(fetchDevices());
       return true;
     } catch (err) {
@@ -80,7 +80,7 @@ export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
     const name = devices.find((d) => d.id === id)?.hostname || 'unknown';
     try {
       await dispatch(deleteDeviceThunk(id)).unwrap();
-      addNotification('success', `Device deleted: ${name}`);
+      addNotification('success', `Device deleted: ${name}`, navigateAction('View Devices', 'devices'));
       dispatch(fetchDevices());
       return true;
     } catch (err) {

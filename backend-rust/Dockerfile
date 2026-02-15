@@ -39,7 +39,7 @@ RUN apk add --no-cache \
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /app/target/release/ztp-server /app/ztp-server
+COPY --from=builder /app/target/release/forge-config /app/forge-config
 
 # Copy dhcp-script for vendor class capture
 COPY scripts/dhcp-notify.sh /scripts/dhcp-notify.sh
@@ -49,7 +49,7 @@ RUN chmod +x /scripts/dhcp-notify.sh
 RUN mkdir -p /data /tftp /backups /dnsmasq /configs/templates /var/lib/misc
 
 # Set default environment variables
-ENV DB_PATH=/data/ztp.db
+ENV DB_PATH=/data/forge-config.db
 ENV DNSMASQ_CONFIG=/dnsmasq/dnsmasq.conf
 ENV TFTP_DIR=/tftp
 ENV TEMPLATES_DIR=/configs/templates
@@ -72,4 +72,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget -q --spider http://127.0.0.1:8080/api/settings || exit 1
 
 # Run the server
-CMD ["/app/ztp-server"]
+CMD ["/app/forge-config"]

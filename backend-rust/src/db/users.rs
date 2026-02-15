@@ -27,7 +27,7 @@ impl UserRepo {
         Ok(rows.iter().map(map_user_row).collect())
     }
 
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<User>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<User>> {
         let row = sqlx::query("SELECT * FROM users WHERE id = ?")
             .bind(id)
             .fetch_optional(pool)
@@ -45,14 +45,12 @@ impl UserRepo {
 
     pub async fn create(
         pool: &Pool<Sqlite>,
-        id: &str,
         username: &str,
         password_hash: &str,
     ) -> Result<()> {
         sqlx::query(
-            "INSERT OR IGNORE INTO users (id, username, password_hash, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            "INSERT OR IGNORE INTO users (username, password_hash, created_at, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
         )
-        .bind(id)
         .bind(username)
         .bind(password_hash)
         .execute(pool)
@@ -60,14 +58,13 @@ impl UserRepo {
         Ok(())
     }
 
-    pub async fn create_full(pool: &Pool<Sqlite>, id: &str, req: &CreateUserRequest) -> Result<User> {
+    pub async fn create_full(pool: &Pool<Sqlite>, req: &CreateUserRequest) -> Result<User> {
         let now = Utc::now();
         let password_hash = bcrypt::hash(&req.password, bcrypt::DEFAULT_COST)
             .map_err(|e| anyhow::anyhow!("password hash error: {}", e))?;
-        sqlx::query(
-            "INSERT INTO users (id, username, password_hash, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+        let result = sqlx::query(
+            "INSERT INTO users (username, password_hash, enabled, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
         )
-        .bind(id)
         .bind(&req.username)
         .bind(&password_hash)
         .bind(req.enabled as i32)
@@ -75,10 +72,11 @@ impl UserRepo {
         .bind(now)
         .execute(pool)
         .await?;
-        Self::get(pool, id).await?.context("User not found after creation")
+        let new_id = result.last_insert_rowid();
+        Self::get(pool, new_id).await?.context("User not found after creation")
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &UpdateUserRequest) -> Result<User> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &UpdateUserRequest) -> Result<User> {
         let now = Utc::now();
         if let Some(ref password) = req.password {
             if !password.is_empty() {
@@ -95,7 +93,7 @@ impl UserRepo {
                 .execute(pool)
                 .await?;
                 if result.rows_affected() == 0 {
-                    return Err(super::NotFoundError::new("User", id).into());
+                    return Err(super::NotFoundError::new("User", &id.to_string()).into());
                 }
                 return Self::get(pool, id).await?.context("User not found after update");
             }
@@ -110,18 +108,18 @@ impl UserRepo {
         .execute(pool)
         .await?;
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("User", id).into());
+            return Err(super::NotFoundError::new("User", &id.to_string()).into());
         }
         Self::get(pool, id).await?.context("User not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM users WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("User", id).into());
+            return Err(super::NotFoundError::new("User", &id.to_string()).into());
         }
         Ok(())
     }

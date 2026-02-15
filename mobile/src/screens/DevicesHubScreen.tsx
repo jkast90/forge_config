@@ -134,7 +134,7 @@ export function DevicesHubScreen() {
       headerTitle: () => (
         <View style={styles.headerTitle}>
           <LogoIcon size={20} />
-          <Text style={[styles.headerTitleText, { color: colors.textPrimary }]}>ZTP Server</Text>
+          <Text style={[styles.headerTitleText, { color: colors.textPrimary }]}>ForgeConfig</Text>
         </View>
       ),
       headerRight: () => (

@@ -11,6 +11,7 @@ import {
   removeContainer as removeContainerThunk,
 } from '../store/slices/containersSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 
 export interface UseTestContainersOptions {
   autoRefresh?: boolean;
@@ -52,7 +53,7 @@ export function useTestContainers(options: UseTestContainersOptions = {}): UseTe
   const spawn = useCallback(async (request: SpawnContainerRequest): Promise<TestContainer | null> => {
     try {
       const container = await dispatch(spawnContainerThunk(request)).unwrap();
-      addNotification('success', `Container ${container.hostname} spawned successfully`);
+      addNotification('success', `Container ${container.hostname} spawned successfully`, navigateAction('View Containers', 'devices', 'containers'));
       dispatch(fetchContainers());
       return container;
     } catch (err) {
@@ -66,7 +67,7 @@ export function useTestContainers(options: UseTestContainersOptions = {}): UseTe
     const name = containers.find((c) => c.id === id)?.hostname || id;
     try {
       await dispatch(startContainerThunk(id)).unwrap();
-      addNotification('success', `Container started: ${name}`);
+      addNotification('success', `Container started: ${name}`, navigateAction('View Containers', 'devices', 'containers'));
       dispatch(fetchContainers());
       return true;
     } catch (err) {
@@ -80,7 +81,7 @@ export function useTestContainers(options: UseTestContainersOptions = {}): UseTe
     const name = containers.find((c) => c.id === id)?.hostname || id;
     try {
       await dispatch(restartContainerThunk(id)).unwrap();
-      addNotification('success', `Container restarted: ${name}`);
+      addNotification('success', `Container restarted: ${name}`, navigateAction('View Containers', 'devices', 'containers'));
       dispatch(fetchContainers());
       return true;
     } catch (err) {
@@ -94,7 +95,7 @@ export function useTestContainers(options: UseTestContainersOptions = {}): UseTe
     const name = containers.find((c) => c.id === id)?.hostname || id;
     try {
       await dispatch(removeContainerThunk(id)).unwrap();
-      addNotification('success', `Container removed: ${name}`);
+      addNotification('success', `Container removed: ${name}`, navigateAction('View Containers', 'devices', 'containers'));
       dispatch(fetchContainers());
       return true;
     } catch (err) {

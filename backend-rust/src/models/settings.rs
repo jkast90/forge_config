@@ -24,6 +24,13 @@ pub struct Settings {
     pub app_name: Option<String>,
     #[serde(default)]
     pub logo_url: Option<String>,
+    // Device naming
+    #[serde(default = "default_hostname_pattern")]
+    pub hostname_pattern: String,
+}
+
+fn default_hostname_pattern() -> String {
+    "$datacenter-$role-#".to_string()
 }
 
 impl Default for Settings {
@@ -43,6 +50,7 @@ impl Default for Settings {
             opengear_enroll_password: None,
             app_name: None,
             logo_url: None,
+            hostname_pattern: default_hostname_pattern(),
         }
     }
 }

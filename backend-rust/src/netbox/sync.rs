@@ -57,7 +57,8 @@ pub async fn sync_push(store: &Store, nb: &NetBoxClient, config: &NetBoxConfig) 
         let vendor = device
             .vendor
             .as_ref()
-            .and_then(|v| vendors.iter().find(|vd| &vd.id == v));
+            .and_then(|v| v.parse::<i64>().ok())
+            .and_then(|vid| vendors.iter().find(|vd| vd.id == vid));
 
         let vendor_name = vendor.map(|v| v.name.as_str()).unwrap_or("Generic");
         let vendor_slug = slugify(vendor_name);
@@ -92,7 +93,7 @@ pub async fn sync_push(store: &Store, nb: &NetBoxClient, config: &NetBoxConfig) 
         // Build custom fields
         let mut custom_fields = HashMap::new();
         custom_fields.insert("mac_address".to_string(), serde_json::json!(device.mac));
-        custom_fields.insert("ztp_managed".to_string(), serde_json::json!(true));
+        custom_fields.insert("fc_managed".to_string(), serde_json::json!(true));
 
         let nb_device = DeviceCreate {
             name: device.hostname.clone(),
@@ -247,7 +248,7 @@ pub async fn sync_vendors_push(store: &Store, nb: &NetBoxClient) -> Result<SyncR
     let mut errors: Vec<String> = Vec::new();
 
     for vendor in &vendors {
-        let slug = slugify(&vendor.id);
+        let slug = slugify(&vendor.name);
 
         match nb.get_manufacturer_by_slug(&slug).await {
             Ok(Some(_)) => {
@@ -277,18 +278,16 @@ pub async fn sync_vendors_pull(store: &Store, nb: &NetBoxClient) -> Result<SyncR
     let mut errors: Vec<String> = Vec::new();
 
     for mfr in &manufacturers {
-        let vendor_id = slugify(&mfr.slug);
-
-        match store.get_vendor(&vendor_id).await {
+        match store.get_vendor_by_name(&mfr.name).await {
             Ok(Some(_)) => {
                 updated += 1;
             }
             Ok(None) => {
                 let req = CreateVendorRequest {
-                    id: vendor_id.clone(),
                     name: mfr.name.clone(),
                     backup_command: "show running-config".to_string(),
                     deploy_command: String::new(),
+                    diff_command: String::new(),
                     ssh_port: 22,
                     ssh_user: String::new(),
                     ssh_pass: String::new(),

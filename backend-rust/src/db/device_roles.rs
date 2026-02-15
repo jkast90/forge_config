@@ -45,10 +45,10 @@ impl DeviceRoleRepo {
         .fetch_all(pool).await?;
 
         // Build a map of role_id -> (template_ids, template_names)
-        let mut template_map: HashMap<String, (Vec<String>, Vec<String>)> = HashMap::new();
+        let mut template_map: HashMap<i64, (Vec<i64>, Vec<String>)> = HashMap::new();
         for row in &assoc_rows {
-            let role_id: String = row.get("role_id");
-            let template_id: String = row.get("template_id");
+            let role_id: i64 = row.get("role_id");
+            let template_id: i64 = row.get("template_id");
             let template_name: String = row.get("template_name");
             let entry = template_map.entry(role_id).or_insert_with(|| (Vec::new(), Vec::new()));
             entry.0.push(template_id);
@@ -66,7 +66,7 @@ impl DeviceRoleRepo {
         Ok(roles)
     }
 
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<DeviceRole>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<DeviceRole>> {
         let row = sqlx::query("SELECT * FROM device_roles WHERE id = ?")
             .bind(id).fetch_optional(pool).await?;
         let mut role = match row.as_ref().map(map_device_role_row) {
@@ -101,13 +101,44 @@ impl DeviceRoleRepo {
         Ok(Some(role))
     }
 
+    pub async fn find_by_name(pool: &Pool<Sqlite>, name: &str) -> Result<Option<DeviceRole>> {
+        let row = sqlx::query("SELECT * FROM device_roles WHERE name = ?")
+            .bind(name).fetch_optional(pool).await?;
+        let mut role = match row.as_ref().map(map_device_role_row) {
+            Some(r) => r,
+            None => return Ok(None),
+        };
+
+        let assoc_rows = sqlx::query(
+            r#"SELECT drt.template_id, t.name as template_name
+            FROM device_role_templates drt
+            JOIN templates t ON t.id = drt.template_id
+            WHERE drt.role_id = ?
+            ORDER BY drt.sort_order"#,
+        )
+        .bind(role.id)
+        .fetch_all(pool).await?;
+
+        let mut template_ids = Vec::new();
+        let mut template_names = Vec::new();
+        for row in &assoc_rows {
+            template_ids.push(row.get("template_id"));
+            template_names.push(row.get("template_name"));
+        }
+        if !template_ids.is_empty() {
+            role.template_ids = Some(template_ids);
+            role.template_names = Some(template_names);
+        }
+
+        Ok(Some(role))
+    }
+
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
         let now = Utc::now();
         let group_names_json = serde_json::to_string(&req.group_names).unwrap_or_else(|_| "[]".to_string());
-        sqlx::query(
-            "INSERT INTO device_roles (id, name, description, group_names, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
+        let result = sqlx::query(
+            "INSERT INTO device_roles (name, description, group_names, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
         )
-        .bind(&req.id)
         .bind(&req.name)
         .bind(&req.description)
         .bind(&group_names_json)
@@ -115,11 +146,12 @@ impl DeviceRoleRepo {
         .bind(now)
         .execute(pool).await?;
 
-        Self::set_templates(pool, &req.id, &req.template_ids).await?;
-        Self::get(pool, &req.id).await?.context("DeviceRole not found after creation")
+        let new_id = result.last_insert_rowid();
+        Self::set_templates(pool, new_id, &req.template_ids).await?;
+        Self::get(pool, new_id).await?.context("DeviceRole not found after creation")
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
         let now = Utc::now();
         let group_names_json = serde_json::to_string(&req.group_names).unwrap_or_else(|_| "[]".to_string());
         let result = sqlx::query(
@@ -132,23 +164,23 @@ impl DeviceRoleRepo {
         .bind(id)
         .execute(pool).await?;
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("DeviceRole", id).into());
+            return Err(super::NotFoundError::new("DeviceRole", &id.to_string()).into());
         }
 
         Self::set_templates(pool, id, &req.template_ids).await?;
         Self::get(pool, id).await?.context("DeviceRole not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM device_roles WHERE id = ?")
             .bind(id).execute(pool).await?;
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("DeviceRole", id).into());
+            return Err(super::NotFoundError::new("DeviceRole", &id.to_string()).into());
         }
         Ok(())
     }
 
-    pub async fn set_templates(pool: &Pool<Sqlite>, role_id: &str, template_ids: &[String]) -> Result<()> {
+    pub async fn set_templates(pool: &Pool<Sqlite>, role_id: i64, template_ids: &[i64]) -> Result<()> {
         // Delete all existing associations
         sqlx::query("DELETE FROM device_role_templates WHERE role_id = ?")
             .bind(role_id)

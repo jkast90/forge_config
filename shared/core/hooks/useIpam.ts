@@ -28,6 +28,7 @@ import {
   fetchIpAddresses, createIpAddress as createIpAddressThunk, updateIpAddress as updateIpAddressThunk, deleteIpAddress as deleteIpAddressThunk,
 } from '../store/slices/ipamSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getServices } from '../services';
 import { getErrorMessage } from '../utils/errors';
 
@@ -152,7 +153,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createRegion = useCallback(async (data: IpamRegionFormData): Promise<boolean> => {
     try {
       await dispatch(createRegionThunk(data)).unwrap();
-      addNotification('success', 'Region created');
+      addNotification('success', 'Region created', navigateAction('View Locations', 'locations'));
       dispatch(fetchRegions());
       return true;
     } catch (err) {
@@ -164,7 +165,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const updateRegion = useCallback(async (id: string, data: IpamRegionFormData): Promise<boolean> => {
     try {
       await dispatch(updateRegionThunk({ id, data })).unwrap();
-      addNotification('success', 'Region updated');
+      addNotification('success', 'Region updated', navigateAction('View Locations', 'locations'));
       dispatch(fetchRegions());
       return true;
     } catch (err) {
@@ -176,7 +177,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteRegion = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteRegionThunk(id)).unwrap();
-      addNotification('success', 'Region deleted');
+      addNotification('success', 'Region deleted', navigateAction('View Locations', 'locations'));
       dispatch(fetchRegions());
       dispatch(fetchCampuses());
       return true;
@@ -190,7 +191,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createCampus = useCallback(async (data: IpamCampusFormData): Promise<boolean> => {
     try {
       await dispatch(createCampusThunk(data)).unwrap();
-      addNotification('success', 'Campus created');
+      addNotification('success', 'Campus created', navigateAction('View Locations', 'locations'));
       dispatch(fetchCampuses());
       dispatch(fetchRegions());
       return true;
@@ -203,7 +204,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const updateCampus = useCallback(async (id: string, data: IpamCampusFormData): Promise<boolean> => {
     try {
       await dispatch(updateCampusThunk({ id, data })).unwrap();
-      addNotification('success', 'Campus updated');
+      addNotification('success', 'Campus updated', navigateAction('View Locations', 'locations'));
       dispatch(fetchCampuses());
       return true;
     } catch (err) {
@@ -215,7 +216,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteCampus = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteCampusThunk(id)).unwrap();
-      addNotification('success', 'Campus deleted');
+      addNotification('success', 'Campus deleted', navigateAction('View Locations', 'locations'));
       dispatch(fetchCampuses());
       dispatch(fetchRegions());
       dispatch(fetchDatacenters());
@@ -230,7 +231,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createDatacenter = useCallback(async (data: IpamDatacenterFormData): Promise<boolean> => {
     try {
       await dispatch(createDatacenterThunk(data)).unwrap();
-      addNotification('success', 'Datacenter created');
+      addNotification('success', 'Datacenter created', navigateAction('View Locations', 'locations'));
       dispatch(fetchDatacenters());
       dispatch(fetchCampuses());
       return true;
@@ -243,7 +244,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const updateDatacenter = useCallback(async (id: string, data: IpamDatacenterFormData): Promise<boolean> => {
     try {
       await dispatch(updateDatacenterThunk({ id, data })).unwrap();
-      addNotification('success', 'Datacenter updated');
+      addNotification('success', 'Datacenter updated', navigateAction('View Locations', 'locations'));
       dispatch(fetchDatacenters());
       return true;
     } catch (err) {
@@ -255,7 +256,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteDatacenter = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteDatacenterThunk(id)).unwrap();
-      addNotification('success', 'Datacenter deleted');
+      addNotification('success', 'Datacenter deleted', navigateAction('View Locations', 'locations'));
       dispatch(fetchDatacenters());
       dispatch(fetchCampuses());
       return true;
@@ -269,7 +270,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createHall = useCallback(async (data: IpamHallFormData): Promise<boolean> => {
     try {
       await dispatch(createHallThunk(data)).unwrap();
-      addNotification('success', 'Hall created');
+      addNotification('success', 'Hall created', navigateAction('View Locations', 'locations'));
       dispatch(fetchHalls());
       dispatch(fetchDatacenters());
       return true;
@@ -282,7 +283,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const updateHall = useCallback(async (id: string, data: IpamHallFormData): Promise<boolean> => {
     try {
       await dispatch(updateHallThunk({ id, data })).unwrap();
-      addNotification('success', 'Hall updated');
+      addNotification('success', 'Hall updated', navigateAction('View Locations', 'locations'));
       dispatch(fetchHalls());
       return true;
     } catch (err) {
@@ -294,7 +295,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteHall = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteHallThunk(id)).unwrap();
-      addNotification('success', 'Hall deleted');
+      addNotification('success', 'Hall deleted', navigateAction('View Locations', 'locations'));
       dispatch(fetchHalls());
       dispatch(fetchDatacenters());
       return true;
@@ -308,7 +309,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createRow = useCallback(async (data: IpamRowFormData): Promise<boolean> => {
     try {
       await dispatch(createRowThunk(data)).unwrap();
-      addNotification('success', 'Row created');
+      addNotification('success', 'Row created', navigateAction('View Locations', 'locations'));
       dispatch(fetchRows());
       dispatch(fetchHalls());
       return true;
@@ -321,7 +322,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const updateRow = useCallback(async (id: string, data: IpamRowFormData): Promise<boolean> => {
     try {
       await dispatch(updateRowThunk({ id, data })).unwrap();
-      addNotification('success', 'Row updated');
+      addNotification('success', 'Row updated', navigateAction('View Locations', 'locations'));
       dispatch(fetchRows());
       return true;
     } catch (err) {
@@ -333,7 +334,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteRow = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteRowThunk(id)).unwrap();
-      addNotification('success', 'Row deleted');
+      addNotification('success', 'Row deleted', navigateAction('View Locations', 'locations'));
       dispatch(fetchRows());
       dispatch(fetchHalls());
       return true;
@@ -347,7 +348,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createRack = useCallback(async (data: IpamRackFormData): Promise<boolean> => {
     try {
       await dispatch(createRackThunk(data)).unwrap();
-      addNotification('success', 'Rack created');
+      addNotification('success', 'Rack created', navigateAction('View Locations', 'locations'));
       dispatch(fetchRacks());
       dispatch(fetchRows());
       return true;
@@ -360,7 +361,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const updateRack = useCallback(async (id: string, data: IpamRackFormData): Promise<boolean> => {
     try {
       await dispatch(updateRackThunk({ id, data })).unwrap();
-      addNotification('success', 'Rack updated');
+      addNotification('success', 'Rack updated', navigateAction('View Locations', 'locations'));
       dispatch(fetchRacks());
       return true;
     } catch (err) {
@@ -372,7 +373,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteRack = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteRackThunk(id)).unwrap();
-      addNotification('success', 'Rack deleted');
+      addNotification('success', 'Rack deleted', navigateAction('View Locations', 'locations'));
       dispatch(fetchRacks());
       dispatch(fetchRows());
       return true;
@@ -386,7 +387,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createRole = useCallback(async (data: { id: string; name: string; description?: string }): Promise<boolean> => {
     try {
       await dispatch(createRoleThunk(data)).unwrap();
-      addNotification('success', 'Role created');
+      addNotification('success', 'Role created', navigateAction('View Roles', 'ipam', 'roles'));
       dispatch(fetchRoles());
       return true;
     } catch (err) {
@@ -398,7 +399,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteRole = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteRoleThunk(id)).unwrap();
-      addNotification('success', 'Role deleted');
+      addNotification('success', 'Role deleted', navigateAction('View Roles', 'ipam', 'roles'));
       dispatch(fetchRoles());
       return true;
     } catch (err) {
@@ -411,7 +412,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createVrf = useCallback(async (data: { id: string; name: string; rd?: string; description?: string }): Promise<boolean> => {
     try {
       await dispatch(createVrfThunk(data)).unwrap();
-      addNotification('success', 'VRF created');
+      addNotification('success', 'VRF created', navigateAction('View VRFs', 'ipam', 'vrfs'));
       dispatch(fetchVrfs());
       return true;
     } catch (err) {
@@ -423,7 +424,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteVrf = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteVrfThunk(id)).unwrap();
-      addNotification('success', 'VRF deleted');
+      addNotification('success', 'VRF deleted', navigateAction('View VRFs', 'ipam', 'vrfs'));
       dispatch(fetchVrfs());
       dispatch(fetchPrefixes());
       return true;
@@ -437,7 +438,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createPrefix = useCallback(async (data: IpamPrefixFormData): Promise<boolean> => {
     try {
       await dispatch(createPrefixThunk(data)).unwrap();
-      addNotification('success', 'Prefix created');
+      addNotification('success', 'Prefix created', navigateAction('View Prefixes', 'ipam', 'prefixes'));
       dispatch(fetchPrefixes());
       return true;
     } catch (err) {
@@ -449,7 +450,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const updatePrefix = useCallback(async (id: number, data: IpamPrefixFormData): Promise<boolean> => {
     try {
       await dispatch(updatePrefixThunk({ id, data })).unwrap();
-      addNotification('success', 'Prefix updated');
+      addNotification('success', 'Prefix updated', navigateAction('View Prefixes', 'ipam', 'prefixes'));
       dispatch(fetchPrefixes());
       return true;
     } catch (err) {
@@ -461,7 +462,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deletePrefix = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(deletePrefixThunk(id)).unwrap();
-      addNotification('success', 'Prefix deleted');
+      addNotification('success', 'Prefix deleted', navigateAction('View Prefixes', 'ipam', 'prefixes'));
       dispatch(fetchPrefixes());
       dispatch(fetchIpAddresses());
       return true;
@@ -474,7 +475,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const nextAvailablePrefix = useCallback(async (parentId: number, prefixLength: number, opts?: { description?: string; status?: string; datacenter_id?: string }): Promise<IpamPrefix | null> => {
     try {
       const prefix = await getServices().ipam.nextAvailablePrefix(parentId, { prefix_length: prefixLength, ...opts });
-      addNotification('success', `Allocated prefix ${prefix.prefix}`);
+      addNotification('success', `Allocated prefix ${prefix.prefix}`, navigateAction('View Prefixes', 'ipam', 'prefixes'));
       dispatch(fetchPrefixes());
       return prefix;
     } catch (err) {
@@ -486,7 +487,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const nextAvailableIp = useCallback(async (prefixId: number, opts?: { description?: string; status?: string; role_ids?: string[]; dns_name?: string; device_id?: number; interface_name?: string }): Promise<IpamIpAddress | null> => {
     try {
       const ip = await getServices().ipam.nextAvailableIp(prefixId, opts || {});
-      addNotification('success', `Allocated IP ${ip.address}`);
+      addNotification('success', `Allocated IP ${ip.address}`, navigateAction('View IPs', 'ipam', 'ips'));
       dispatch(fetchIpAddresses());
       dispatch(fetchPrefixes());
       return ip;
@@ -500,7 +501,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const createIpAddress = useCallback(async (data: IpamIpAddressFormData): Promise<boolean> => {
     try {
       await dispatch(createIpAddressThunk(data)).unwrap();
-      addNotification('success', 'IP address created');
+      addNotification('success', 'IP address created', navigateAction('View IPs', 'ipam', 'ips'));
       dispatch(fetchIpAddresses());
       dispatch(fetchPrefixes());
       return true;
@@ -513,7 +514,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const updateIpAddress = useCallback(async (id: string, data: IpamIpAddressFormData): Promise<boolean> => {
     try {
       await dispatch(updateIpAddressThunk({ id, data })).unwrap();
-      addNotification('success', 'IP address updated');
+      addNotification('success', 'IP address updated', navigateAction('View IPs', 'ipam', 'ips'));
       dispatch(fetchIpAddresses());
       return true;
     } catch (err) {
@@ -525,7 +526,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteIpAddress = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteIpAddressThunk(id)).unwrap();
-      addNotification('success', 'IP address deleted');
+      addNotification('success', 'IP address deleted', navigateAction('View IPs', 'ipam', 'ips'));
       dispatch(fetchIpAddresses());
       dispatch(fetchPrefixes());
       return true;
@@ -560,7 +561,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const setTag = useCallback(async (resourceType: string, resourceId: string, key: string, value: string): Promise<boolean> => {
     try {
       await getServices().ipam.setTag(resourceType, resourceId, key, value);
-      addNotification('success', `Tag "${key}" set`);
+      addNotification('success', `Tag "${key}" set`, navigateAction('View IPAM', 'ipam'));
       await fetchTags(resourceType, resourceId);
       fetchTagKeys();
       return true;
@@ -573,7 +574,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const deleteTag = useCallback(async (resourceType: string, resourceId: string, key: string): Promise<boolean> => {
     try {
       await getServices().ipam.deleteTag(resourceType, resourceId, key);
-      addNotification('success', `Tag "${key}" deleted`);
+      addNotification('success', `Tag "${key}" deleted`, navigateAction('View IPAM', 'ipam'));
       await fetchTags(resourceType, resourceId);
       return true;
     } catch (err) {

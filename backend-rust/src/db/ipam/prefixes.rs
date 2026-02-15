@@ -36,26 +36,27 @@ impl IpamPrefixRepo {
         Ok(rows.iter().map(map_prefix_row).collect())
     }
 
-    pub async fn list_by_parent(pool: &Pool<Sqlite>, parent_id: i64) -> Result<Vec<IpamPrefix>> {
-        let rows = sqlx::query(&format!("{} WHERE p.parent_id = ? ORDER BY p.network_int", SELECT_PREFIX))
-            .bind(parent_id).fetch_all(pool).await?;
-        Ok(rows.iter().map(map_prefix_row).collect())
-    }
-
     pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<IpamPrefix>> {
         let row = sqlx::query(&format!("{} WHERE p.id = ?", SELECT_PREFIX))
             .bind(id).fetch_optional(pool).await?;
         Ok(row.as_ref().map(map_prefix_row))
     }
 
-    pub async fn find_by_cidr(pool: &Pool<Sqlite>, cidr: &str, vrf_id: Option<&str>) -> Result<Option<IpamPrefix>> {
+    pub async fn find_by_cidr(pool: &Pool<Sqlite>, cidr: &str, vrf_id: Option<i64>) -> Result<Option<IpamPrefix>> {
         let (network, broadcast, _) = utils::parse_cidr(cidr)
             .map_err(|e| anyhow::anyhow!("{}", e))?;
-        let row = sqlx::query(&format!("{} WHERE p.network_int = ? AND p.broadcast_int = ? AND COALESCE(p.vrf_id, '') = COALESCE(?, '')", SELECT_PREFIX))
-            .bind(network as i64)
-            .bind(broadcast as i64)
-            .bind(vrf_id.unwrap_or(""))
-            .fetch_optional(pool).await?;
+        let row = if let Some(vid) = vrf_id {
+            sqlx::query(&format!("{} WHERE p.network_int = ? AND p.broadcast_int = ? AND p.vrf_id = ?", SELECT_PREFIX))
+                .bind(network as i64)
+                .bind(broadcast as i64)
+                .bind(vid)
+                .fetch_optional(pool).await?
+        } else {
+            sqlx::query(&format!("{} WHERE p.network_int = ? AND p.broadcast_int = ? AND (p.vrf_id IS NULL OR p.vrf_id = 0)", SELECT_PREFIX))
+                .bind(network as i64)
+                .bind(broadcast as i64)
+                .fetch_optional(pool).await?
+        };
         Ok(row.as_ref().map(map_prefix_row))
     }
 
@@ -65,13 +66,22 @@ impl IpamPrefixRepo {
             .map_err(|e| anyhow::anyhow!("{}", e))?;
 
         // Check for duplicate CIDR within same VRF (NULL vrf_id = global)
-        let existing: Option<SqliteRow> = sqlx::query(
-            "SELECT id, prefix FROM ipam_prefixes WHERE network_int = ? AND broadcast_int = ? AND COALESCE(vrf_id, '') = COALESCE(?, '')"
-        )
-        .bind(network as i64)
-        .bind(broadcast as i64)
-        .bind(&req.vrf_id)
-        .fetch_optional(pool).await?;
+        let existing: Option<SqliteRow> = if let Some(vid) = req.vrf_id {
+            sqlx::query(
+                "SELECT id, prefix FROM ipam_prefixes WHERE network_int = ? AND broadcast_int = ? AND vrf_id = ?"
+            )
+            .bind(network as i64)
+            .bind(broadcast as i64)
+            .bind(vid)
+            .fetch_optional(pool).await?
+        } else {
+            sqlx::query(
+                "SELECT id, prefix FROM ipam_prefixes WHERE network_int = ? AND broadcast_int = ? AND (vrf_id IS NULL OR vrf_id = 0)"
+            )
+            .bind(network as i64)
+            .bind(broadcast as i64)
+            .fetch_optional(pool).await?
+        };
 
         if let Some(row) = existing {
             let existing_id: i64 = row.get("id");
@@ -122,11 +132,9 @@ impl IpamPrefixRepo {
 
         // Insert role associations
         for role_id in &req.role_ids {
-            if !role_id.is_empty() {
-                sqlx::query("INSERT OR IGNORE INTO ipam_prefix_roles (prefix_id, role_id) VALUES (?, ?)")
-                    .bind(new_id).bind(role_id)
-                    .execute(pool).await?;
-            }
+            sqlx::query("INSERT OR IGNORE INTO ipam_prefix_roles (prefix_id, role_id) VALUES (?, ?)")
+                .bind(new_id).bind(role_id)
+                .execute(pool).await?;
         }
 
         Self::get(pool, new_id).await?.context("Prefix not found after creation")
@@ -137,14 +145,24 @@ impl IpamPrefixRepo {
             .map_err(|e| anyhow::anyhow!("{}", e))?;
 
         // Check for duplicate CIDR within same VRF (exclude self)
-        let existing: Option<SqliteRow> = sqlx::query(
-            "SELECT id, prefix FROM ipam_prefixes WHERE network_int = ? AND broadcast_int = ? AND COALESCE(vrf_id, '') = COALESCE(?, '') AND id != ?"
-        )
-        .bind(network as i64)
-        .bind(broadcast as i64)
-        .bind(&req.vrf_id)
-        .bind(id)
-        .fetch_optional(pool).await?;
+        let existing: Option<SqliteRow> = if let Some(vid) = req.vrf_id {
+            sqlx::query(
+                "SELECT id, prefix FROM ipam_prefixes WHERE network_int = ? AND broadcast_int = ? AND vrf_id = ? AND id != ?"
+            )
+            .bind(network as i64)
+            .bind(broadcast as i64)
+            .bind(vid)
+            .bind(id)
+            .fetch_optional(pool).await?
+        } else {
+            sqlx::query(
+                "SELECT id, prefix FROM ipam_prefixes WHERE network_int = ? AND broadcast_int = ? AND (vrf_id IS NULL OR vrf_id = 0) AND id != ?"
+            )
+            .bind(network as i64)
+            .bind(broadcast as i64)
+            .bind(id)
+            .fetch_optional(pool).await?
+        };
 
         if let Some(row) = existing {
             let existing_id: i64 = row.get("id");
@@ -184,11 +202,9 @@ impl IpamPrefixRepo {
         sqlx::query("DELETE FROM ipam_prefix_roles WHERE prefix_id = ?")
             .bind(id).execute(pool).await?;
         for role_id in &req.role_ids {
-            if !role_id.is_empty() {
-                sqlx::query("INSERT OR IGNORE INTO ipam_prefix_roles (prefix_id, role_id) VALUES (?, ?)")
-                    .bind(id).bind(role_id)
-                    .execute(pool).await?;
-            }
+            sqlx::query("INSERT OR IGNORE INTO ipam_prefix_roles (prefix_id, role_id) VALUES (?, ?)")
+                .bind(id).bind(role_id)
+                .execute(pool).await?;
         }
 
         Self::get(pool, id).await?.context("Prefix not found after update")
@@ -238,7 +254,7 @@ impl IpamPrefixRepo {
             is_supernet: false,
             role_ids: vec![],
             parent_id: Some(parent_id),
-            datacenter_id: req.datacenter_id.clone(),
+            datacenter_id: req.datacenter_id,
             vlan_id: None,
             vrf_id: parent.vrf_id.clone(),
         };

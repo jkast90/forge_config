@@ -8,6 +8,7 @@ import {
   deleteUser as deleteUserThunk,
 } from '../store/slices/usersSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseUsersReturn {
@@ -35,7 +36,7 @@ export function useUsers(): UseUsersReturn {
   const createUser = useCallback(async (data: UserFormData): Promise<boolean> => {
     try {
       await dispatch(createUserThunk(data)).unwrap();
-      addNotification('success', 'User created');
+      addNotification('success', 'User created', navigateAction('View Users', 'system', 'users'));
       dispatch(fetchUsers());
       return true;
     } catch (err) {
@@ -47,7 +48,7 @@ export function useUsers(): UseUsersReturn {
   const updateUser = useCallback(async (id: string, data: Partial<UserFormData>): Promise<boolean> => {
     try {
       await dispatch(updateUserThunk({ id, data })).unwrap();
-      addNotification('success', 'User updated');
+      addNotification('success', 'User updated', navigateAction('View Users', 'system', 'users'));
       dispatch(fetchUsers());
       return true;
     } catch (err) {
@@ -59,7 +60,7 @@ export function useUsers(): UseUsersReturn {
   const deleteUser = useCallback(async (id: string): Promise<boolean> => {
     try {
       await dispatch(deleteUserThunk(id)).unwrap();
-      addNotification('success', 'User deleted');
+      addNotification('success', 'User deleted', navigateAction('View Users', 'system', 'users'));
       dispatch(fetchUsers());
       return true;
     } catch (err) {

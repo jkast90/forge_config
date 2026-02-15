@@ -151,7 +151,7 @@ pub fn created<T: Serialize>(item: T) -> (StatusCode, Json<T>) {
 pub async fn healthcheck() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "ok",
-        "service": "ztp-server",
+        "service": "forge-config",
         "timestamp": chrono::Utc::now().to_rfc3339(),
     }))
 }

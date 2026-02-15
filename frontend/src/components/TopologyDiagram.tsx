@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import type { Device } from '@core';
 import { IconButton } from './IconButton';
 import { Icon } from './Icon';
@@ -7,15 +7,40 @@ interface DiagramProps {
   spines: Device[];
   leaves: Device[];
   externals?: Device[];
+  patchPanels?: Device[];
+}
+
+export interface TopologyDiagramViewerHandle {
+  exportSvg: () => void;
 }
 
 /** Interactive diagram viewer with zoom and pan controls */
-export function TopologyDiagramViewer({ spines, leaves, externals = [] }: DiagramProps) {
+export const TopologyDiagramViewer = forwardRef<TopologyDiagramViewerHandle, DiagramProps>(function TopologyDiagramViewer({ spines, leaves, externals = [], patchPanels = [] }, ref) {
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, ox: 0, oy: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  const handleExportSvg = useCallback(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.style.fontFamily = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    clone.style.backgroundColor = '#1a1a2e';
+    const svgString = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([svgString], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'fabric-diagram.svg';
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  useImperativeHandle(ref, () => ({ exportSvg: handleExportSvg }), [handleExportSvg]);
 
   const handleZoomIn = () => setZoom(z => Math.min(z + 0.25, 4));
   const handleZoomOut = () => setZoom(z => Math.max(z - 0.25, 0.25));
@@ -24,7 +49,7 @@ export function TopologyDiagramViewer({ spines, leaves, externals = [] }: Diagra
     if (!containerRef.current) return;
     const nodeW = 140;
     const hGap = 20;
-    const maxCount = Math.max(spines.length, leaves.length, externals.length);
+    const maxCount = Math.max(spines.length, leaves.length, externals.length, patchPanels.length);
     const svgW = maxCount * (nodeW + hGap) - hGap + 40;
     const containerW = containerRef.current.clientWidth - 32;
     const fitZoom = Math.min(containerW / svgW, 2);
@@ -100,17 +125,18 @@ export function TopologyDiagramViewer({ spines, leaves, externals = [] }: Diagra
             display: 'inline-block',
           }}
         >
-          <TopologyDiagram spines={spines} leaves={leaves} externals={externals} />
+          <TopologyDiagram ref={svgRef} spines={spines} leaves={leaves} externals={externals} patchPanels={patchPanels} />
         </div>
       </div>
     </div>
   );
-}
+});
 
-/** SVG network diagram showing CLOS spine-leaf topology with dual links and optional external tier */
-export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps) {
+/** SVG network diagram showing CLOS spine-leaf topology with dual links, optional external tier, and patch panel layer */
+export const TopologyDiagram = forwardRef<SVGSVGElement, DiagramProps>(function TopologyDiagram({ spines, leaves, externals = [], patchPanels = [] }, ref) {
   const nodeW = 140;
   const nodeH = 48;
+  const ppNodeH = 32; // Shorter height for patch panels (passive devices)
   const hGap = 20;
   const linksPerPair = 2;
   const linkSpacing = 6;
@@ -119,6 +145,7 @@ export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps
   const padX = 20;
   const padY = 20;
   const hasExternals = externals.length > 0;
+  const hasPatchPanels = patchPanels.length > 0;
 
   // Interface counts for spacing
   const spineDownIfCount = leaves.length * linksPerPair;
@@ -132,15 +159,21 @@ export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps
   const extIfBlockH = extIfCount > 0 ? extIfCount * ifLabelH + ifBlockPad : 0;
 
   // Vertical gaps between tiers
-  const spineLeafGap = 40 + spineDownIfBlockH + leafIfBlockH;
+  const ppGap = hasPatchPanels ? 30 : 0; // Gap above and below patch panel tier
+  const spineToNextGap = 40 + spineDownIfBlockH;
+  const leafFromPrevGap = 40 + leafIfBlockH;
+  const spineLeafGap = hasPatchPanels
+    ? spineToNextGap + ppGap + ppNodeH + ppGap + leafFromPrevGap
+    : 40 + spineDownIfBlockH + leafIfBlockH;
   const extSpineGap = hasExternals ? 40 + extIfBlockH + spineUpIfBlockH : 0;
 
-  const maxCount = Math.max(spines.length, leaves.length, externals.length);
+  const maxCount = Math.max(spines.length, leaves.length, externals.length, patchPanels.length);
   const totalW = maxCount * (nodeW + hGap) - hGap + padX * 2;
 
-  // Y positions for each tier (external at top, spine in middle, leaf at bottom)
+  // Y positions for each tier (external at top, spine, patch panels, leaf at bottom)
   const extY = padY;
   const spineY = hasExternals ? extY + nodeH + extSpineGap : padY;
+  const ppY = spineY + nodeH + spineToNextGap + ppGap;
   const leafY = spineY + nodeH + spineLeafGap;
   const totalH = leafY + nodeH + padY;
 
@@ -148,10 +181,12 @@ export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps
   const tierStartX = (count: number) => padX + (totalW - padX * 2 - (count * (nodeW + hGap) - hGap)) / 2;
   const extStartX = tierStartX(externals.length);
   const spineStartX = tierStartX(spines.length);
+  const ppStartX = tierStartX(patchPanels.length);
   const leafStartX = tierStartX(leaves.length);
 
   const extPositions = externals.map((_, i) => ({ x: extStartX + i * (nodeW + hGap), y: extY }));
   const spinePositions = spines.map((_, i) => ({ x: spineStartX + i * (nodeW + hGap), y: spineY }));
+  const ppPositions = patchPanels.map((_, i) => ({ x: ppStartX + i * (nodeW + hGap), y: ppY }));
   const leafPositions = leaves.map((_, i) => ({ x: leafStartX + i * (nodeW + hGap), y: leafY }));
 
   const statusColor = (d: Device) =>
@@ -199,18 +234,29 @@ export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps
     }
   }
 
-  const renderNode = (d: Device, pos: { x: number; y: number }, borderColor?: string) => (
-    <g key={d.id}>
-      <rect x={pos.x} y={pos.y} width={nodeW} height={nodeH} rx={6} fill="var(--color-bg-primary, #1a1a2e)" stroke={borderColor || statusColor(d)} strokeWidth={2} />
-      <text x={pos.x + nodeW / 2} y={pos.y + 18} textAnchor="middle" fill="var(--color-text, #e0e0e0)" fontSize={12} fontWeight={600}>
-        {d.hostname || d.mac?.slice(-8) || String(d.id)}
-      </text>
-      <text x={pos.x + nodeW / 2} y={pos.y + 34} textAnchor="middle" fill="var(--color-text-muted, #888)" fontSize={10}>
-        {d.ip || '—'}
-      </text>
-      <circle cx={pos.x + 10} cy={pos.y + 10} r={4} fill={statusColor(d)} />
-    </g>
-  );
+  const renderNode = (d: Device, pos: { x: number; y: number }, opts?: { borderColor?: string; height?: number; dashed?: boolean }) => {
+    const h = opts?.height || nodeH;
+    return (
+      <g key={d.id}>
+        <rect
+          x={pos.x} y={pos.y} width={nodeW} height={h} rx={6}
+          fill="var(--color-bg-primary, #1a1a2e)"
+          stroke={opts?.borderColor || statusColor(d)}
+          strokeWidth={opts?.dashed ? 1.5 : 2}
+          strokeDasharray={opts?.dashed ? '4 2' : undefined}
+        />
+        <text x={pos.x + nodeW / 2} y={pos.y + (h < 40 ? h / 2 + 4 : 18)} textAnchor="middle" fill="var(--color-text, #e0e0e0)" fontSize={h < 40 ? 10 : 12} fontWeight={600}>
+          {d.hostname || d.mac?.slice(-8) || String(d.id)}
+        </text>
+        {h >= 40 && (
+          <text x={pos.x + nodeW / 2} y={pos.y + 34} textAnchor="middle" fill="var(--color-text-muted, #888)" fontSize={10}>
+            {d.ip || '—'}
+          </text>
+        )}
+        {!opts?.dashed && <circle cx={pos.x + 10} cy={pos.y + 10} r={4} fill={statusColor(d)} />}
+      </g>
+    );
+  };
 
   const renderIfLabelsBelow = (pos: { x: number; y: number }, labels: IfLabel[]) =>
     labels.map((ifl, j) => (
@@ -242,18 +288,32 @@ export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps
       </text>
     ));
 
+  // For patch panels: compute a midpoint X that routes through the nearest panel
+  const ppMidX = (spineX: number, leafX: number, _si: number, _li: number, linkOffset: number) => {
+    if (!hasPatchPanels) return null;
+    // Find the nearest patch panel horizontally to the midpoint of spine-leaf
+    const mid = (spineX + leafX) / 2;
+    let bestPp = 0;
+    let bestDist = Infinity;
+    for (let pi = 0; pi < ppPositions.length; pi++) {
+      const dist = Math.abs(ppPositions[pi].x + nodeW / 2 - mid);
+      if (dist < bestDist) { bestDist = dist; bestPp = pi; }
+    }
+    return ppPositions[bestPp].x + nodeW / 2 + linkOffset;
+  };
+
   return (
-    <svg width={totalW} height={totalH} viewBox={`0 0 ${totalW} ${totalH}`} className="topo-diagram-svg">
+    <svg ref={ref} width={totalW} height={totalH} viewBox={`0 0 ${totalW} ${totalH}`} className="topo-diagram-svg">
       {/* Uplink lines: external <-> spine */}
       {uplinkData.map(({ ei, si, link }) => {
         const ep = extPositions[ei];
         const sp = spinePositions[si];
-        const offset = (link - (linksPerPair - 1) / 2) * linkSpacing;
+        const off = (link - (linksPerPair - 1) / 2) * linkSpacing;
         return (
           <line
             key={`uplink-${ei}-${si}-${link}`}
-            x1={ep.x + nodeW / 2 + offset} y1={ep.y + nodeH}
-            x2={sp.x + nodeW / 2 + offset} y2={sp.y}
+            x1={ep.x + nodeW / 2 + off} y1={ep.y + nodeH}
+            x2={sp.x + nodeW / 2 + off} y2={sp.y}
             stroke="var(--color-accent-purple, #a855f7)"
             strokeWidth={1.5}
             opacity={0.5}
@@ -262,16 +322,43 @@ export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps
         );
       })}
 
-      {/* Fabric links: spine <-> leaf */}
+      {/* Fabric links: spine <-> leaf (routing through patch panels if present) */}
       {linkData.map(({ si, li, link }) => {
         const sp = spinePositions[si];
         const lp = leafPositions[li];
-        const offset = (link - (linksPerPair - 1) / 2) * linkSpacing;
+        const off = (link - (linksPerPair - 1) / 2) * linkSpacing;
+        const spX = sp.x + nodeW / 2 + off;
+        const lpX = lp.x + nodeW / 2 + off;
+
+        if (hasPatchPanels) {
+          const mx = ppMidX(sp.x, lp.x, si, li, off)!;
+          return (
+            <g key={`link-${si}-${li}-${link}`}>
+              {/* Spine → Patch Panel */}
+              <line
+                x1={spX} y1={sp.y + nodeH}
+                x2={mx} y2={ppY}
+                stroke="var(--color-border, #444)"
+                strokeWidth={1.5}
+                opacity={0.4}
+              />
+              {/* Patch Panel → Leaf */}
+              <line
+                x1={mx} y1={ppY + ppNodeH}
+                x2={lpX} y2={lp.y}
+                stroke="var(--color-border, #444)"
+                strokeWidth={1.5}
+                opacity={0.4}
+              />
+            </g>
+          );
+        }
+
         return (
           <line
             key={`link-${si}-${li}-${link}`}
-            x1={sp.x + nodeW / 2 + offset} y1={sp.y + nodeH}
-            x2={lp.x + nodeW / 2 + offset} y2={lp.y}
+            x1={spX} y1={sp.y + nodeH}
+            x2={lpX} y2={lp.y}
             stroke="var(--color-border, #444)"
             strokeWidth={1.5}
             opacity={0.4}
@@ -282,7 +369,7 @@ export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps
       {/* External nodes + interface labels below */}
       {externals.map((d, i) => (
         <g key={`ext-${d.id}`}>
-          {renderNode(d, extPositions[i], 'var(--color-accent-purple, #a855f7)')}
+          {renderNode(d, extPositions[i], { borderColor: 'var(--color-accent-purple, #a855f7)' })}
           {renderIfLabelsBelow(extPositions[i], extIfs[i])}
         </g>
       ))}
@@ -293,6 +380,13 @@ export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps
           {renderNode(d, spinePositions[i])}
           {spineUpIfs[i].length > 0 && renderIfLabelsAbove(spinePositions[i], spineUpIfs[i])}
           {renderIfLabelsBelow(spinePositions[i], spineDownIfs[i])}
+        </g>
+      ))}
+
+      {/* Patch panel nodes */}
+      {patchPanels.map((d, i) => (
+        <g key={`pp-${d.id}`}>
+          {renderNode(d, ppPositions[i], { borderColor: 'var(--color-warning, #f59e0b)', height: ppNodeH, dashed: true })}
         </g>
       ))}
 
@@ -313,9 +407,14 @@ export function TopologyDiagram({ spines, leaves, externals = [] }: DiagramProps
       <text x={8} y={spineY + nodeH / 2 + 4} fill="var(--color-text-muted, #888)" fontSize={9} fontWeight={600} transform={`rotate(-90, 8, ${spineY + nodeH / 2})`} textAnchor="middle">
         SPINE
       </text>
+      {hasPatchPanels && (
+        <text x={8} y={ppY + ppNodeH / 2 + 4} fill="var(--color-warning, #f59e0b)" fontSize={9} fontWeight={600} transform={`rotate(-90, 8, ${ppY + ppNodeH / 2})`} textAnchor="middle">
+          PATCH
+        </text>
+      )}
       <text x={8} y={leafY + nodeH / 2 + 4} fill="var(--color-text-muted, #888)" fontSize={9} fontWeight={600} transform={`rotate(-90, 8, ${leafY + nodeH / 2})`} textAnchor="middle">
         LEAF
       </text>
     </svg>
   );
-}
+});

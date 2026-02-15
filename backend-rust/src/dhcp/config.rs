@@ -84,10 +84,10 @@ impl ConfigManager {
             // Substitute variables in the value
             opt.value = self.substitute_option_variables(&opt.value, settings);
 
-            if opt.vendor_id.is_none() || opt.vendor_id.as_ref().map(|s| s.is_empty()).unwrap_or(true) {
+            if opt.vendor_id.is_none() || opt.vendor_id == Some(0) {
                 global_options.push(opt);
             } else {
-                let vendor_id = opt.vendor_id.clone().unwrap();
+                let vendor_id = opt.vendor_id.unwrap().to_string();
                 vendor_options
                     .entry(vendor_id)
                     .or_default()
@@ -250,7 +250,7 @@ log-queries
         // Resolve template ID: explicit config_template, or vendor's default_template
         let resolved_template_id = if !device.config_template.is_empty() {
             Some(device.config_template.clone())
-        } else if let Some(ref vendor_id) = device.vendor {
+        } else if let Some(vendor_id) = device.vendor.as_deref().and_then(|v| v.parse::<i64>().ok()) {
             if let Ok(Some(vendor)) = self.store.get_vendor(vendor_id).await {
                 if !vendor.default_template.is_empty() {
                     Some(vendor.default_template)
@@ -267,7 +267,12 @@ log-queries
         // Determine which template to use
         let template_content = if let Some(ref tid) = resolved_template_id {
             // Try to load from database
-            if let Ok(Some(template)) = self.store.get_template(tid).await {
+            let template_opt = if let Ok(template_id) = tid.parse::<i64>() {
+                self.store.get_template(template_id).await.ok().flatten()
+            } else {
+                None
+            };
+            if let Some(template) = template_opt {
                 template.content
             } else {
                 // Fallback to file-based template

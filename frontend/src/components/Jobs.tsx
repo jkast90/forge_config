@@ -12,6 +12,7 @@ import {
   useModalForm,
   getServices,
   addNotification,
+  navigateAction,
   usePersistedTab,
   formatRelativeTime,
   getJobTypeBadgeVariant,
@@ -42,6 +43,7 @@ import { Icon, RefreshIcon, PlusIcon } from './Icon';
 import { SaveAsTemplateDialog } from './SaveAsTemplateDialog';
 import { EditTemplateDialog } from './EditTemplateDialog';
 import { JobTemplatesPanel } from './JobTemplatesPanel';
+import { CopyButton } from './CopyButton';
 import { CredentialsPanel } from './CredentialsPanel';
 
 const ACTION_TYPE_OPTIONS = [
@@ -252,7 +254,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
       if (isStaticWebhook && selectedAction) {
         // Static webhook — run without device target
         await services.vendors.runAction(selectedAction.id);
-        addNotification('success', 'Queued webhook job');
+        addNotification('success', 'Queued webhook job', navigateAction('View Jobs', 'jobs', 'history'));
       } else {
         const cmd = command.trim();
         let succeeded = 0;
@@ -272,9 +274,9 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
         }
 
         if (failed === 0) {
-          addNotification('success', `Queued ${succeeded} job${succeeded !== 1 ? 's' : ''}`);
+          addNotification('success', `Queued ${succeeded} job${succeeded !== 1 ? 's' : ''}`, navigateAction('View Jobs', 'jobs', 'history'));
         } else {
-          addNotification('warning', `Queued ${succeeded}, failed ${failed} job${failed !== 1 ? 's' : ''}`);
+          addNotification('warning', `Queued ${succeeded}, failed ${failed} job${failed !== 1 ? 's' : ''}`, navigateAction('View Jobs', 'jobs', 'history'));
         }
       }
 
@@ -779,7 +781,11 @@ export function Jobs() {
   const handleRelaunch = useCallback(async (job: Job) => {
     try {
       const services = getServices();
-      if (job.job_type === 'webhook') {
+      if (job.job_type === 'deploy' && job.device_id) {
+        await services.devices.deployConfig(job.device_id);
+      } else if (job.job_type === 'diff' && job.device_id) {
+        await services.devices.diffConfig(job.device_id);
+      } else if (job.job_type === 'webhook') {
         if (job.device_id) {
           await services.devices.exec(job.device_id, '', job.command);
         } else {
@@ -791,7 +797,7 @@ export function Jobs() {
       } else if (job.device_id) {
         await services.devices.exec(job.device_id, job.command);
       }
-      addNotification('success', 'Job relaunched');
+      addNotification('success', 'Job relaunched', navigateAction('View Jobs', 'jobs', 'history'));
       refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1234,23 +1240,31 @@ export function Jobs() {
                     </>
                   )}
                 </div>
-              ) : (
+              ) : selectedJob.command ? (
                 <div style={{ marginTop: '1rem' }}>
-                  <span className="label" style={{ display: 'block', marginBottom: '4px' }}>Command</span>
+                  <span className="label" style={{ display: 'block', marginBottom: '4px' }}>
+                    {selectedJob.job_type === 'deploy' || selectedJob.job_type === 'diff' ? 'Template' : 'Command'}
+                  </span>
                   <pre className="command-entry-output">{selectedJob.command}</pre>
                 </div>
-              )}
+              ) : null}
 
               {selectedJob.output && (
                 <div style={{ marginTop: '0.75rem' }}>
-                  <span className="label" style={{ display: 'block', marginBottom: '4px' }}>Output</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                    <span className="label">Output</span>
+                    <CopyButton text={selectedJob.output} />
+                  </div>
                   <pre className="command-entry-output">{selectedJob.output}</pre>
                 </div>
               )}
 
               {selectedJob.error && (
                 <div style={{ marginTop: '0.75rem' }}>
-                  <span className="label" style={{ display: 'block', marginBottom: '4px' }}>Error</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '4px' }}>
+                    <span className="label">Error</span>
+                    <CopyButton text={selectedJob.error} />
+                  </div>
                   <pre className="command-entry-output" style={{ color: 'var(--color-error)' }}>
                     {selectedJob.error}
                   </pre>

@@ -116,7 +116,7 @@ impl BackupService {
             .unwrap_or(settings.default_ssh_pass.clone());
 
         // Determine backup command
-        let command = if let Some(vendor_id) = &device.vendor {
+        let command = if let Some(vendor_id) = device.vendor.as_deref().and_then(|v| v.parse::<i64>().ok()) {
             if let Ok(Some(vendor)) = self.store.get_vendor(vendor_id).await {
                 if !vendor.backup_command.is_empty() {
                     vendor.backup_command

@@ -26,6 +26,11 @@ const FIELD_LABELS: Record<ScanField, { title: string; prompt: string; button: s
     prompt: 'Use "%s" as the model?',
     button: 'Use Model',
   },
+  url: {
+    title: 'URL Scanned',
+    prompt: 'Use "%s" as the API server URL?',
+    button: 'Use URL',
+  },
 };
 
 export function ScannerScreen() {
@@ -36,7 +41,7 @@ export function ScannerScreen() {
   const [scanned, setScanned] = useState(false);
   const lastScannedRef = useRef<string | null>(null);
 
-  const { mac, field } = route.params;
+  const { mac, field, returnTo } = route.params;
   const labels = FIELD_LABELS[field];
 
   const handleBarCodeScanned = (result: BarcodeScanningResult) => {
@@ -47,6 +52,15 @@ export function ScannerScreen() {
     // Prevent duplicate scans
     if (lastScannedRef.current === data) return;
     lastScannedRef.current = data;
+
+    // For URL scanning, only accept values that look like URLs
+    if (field === 'url') {
+      const trimmed = data.trim();
+      if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+        lastScannedRef.current = null;
+        return;
+      }
+    }
 
     setScanned(true);
 
@@ -68,16 +82,18 @@ export function ScannerScreen() {
         {
           text: labels.button,
           onPress: () => {
-            // Navigate back with the scanned value
             navigation.goBack();
 
-            // Use setTimeout to ensure goBack completes before navigate
             setTimeout(() => {
-              navigation.navigate('DeviceForm', {
-                mac,
-                scannedValue: cleanedData,
-                scannedField: field,
-              });
+              if (returnTo === 'Login') {
+                navigation.navigate('Login', { scannedUrl: cleanedData.replace(/\/+$/, '') });
+              } else {
+                navigation.navigate('DeviceForm', {
+                  mac,
+                  scannedValue: cleanedData,
+                  scannedField: field,
+                });
+              }
             }, 50);
           },
         },
@@ -116,7 +132,9 @@ export function ScannerScreen() {
     );
   }
 
-  const instructionText = field === 'mac'
+  const instructionText = field === 'url'
+    ? 'Scan a QR code containing the server URL'
+    : field === 'mac'
     ? 'Point camera at MAC address barcode or QR code'
     : 'Point camera at serial number barcode or QR code';
 
@@ -126,7 +144,9 @@ export function ScannerScreen() {
         style={StyleSheet.absoluteFillObject}
         facing="back"
         barcodeScannerSettings={{
-          barcodeTypes: ['qr', 'code128', 'code39', 'ean13', 'ean8', 'datamatrix'],
+          barcodeTypes: field === 'url'
+            ? ['qr']
+            : ['qr', 'code128', 'code39', 'ean13', 'ean8', 'datamatrix'],
         }}
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
       />

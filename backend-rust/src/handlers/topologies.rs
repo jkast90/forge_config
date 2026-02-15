@@ -22,11 +22,11 @@ pub async fn list_topologies(
 pub async fn get_topology(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Topology>, ApiError> {
     let topology = state
         .store
-        .get_topology(&id)
+        .get_topology(id)
         .await?
         .ok_or_else(|| ApiError::not_found("topology"))?;
     Ok(Json(topology))
@@ -38,12 +38,8 @@ pub async fn create_topology(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateTopologyRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Topology>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() {
-        return Err(ApiError::bad_request("id and name are required"));
-    }
-
-    if state.store.get_topology(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("topology with this ID already exists"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
 
     let topology = state.store.create_topology(&req).await?;
@@ -54,11 +50,10 @@ pub async fn create_topology(
 pub async fn update_topology(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateTopologyRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateTopologyRequest>,
 ) -> Result<Json<Topology>, ApiError> {
-    req.id = id.clone();
-    let topology = state.store.update_topology(&id, &req).await?;
+    let topology = state.store.update_topology(id, &req).await?;
     Ok(Json(topology))
 }
 
@@ -66,8 +61,8 @@ pub async fn update_topology(
 pub async fn delete_topology(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<axum::http::StatusCode, ApiError> {
-    state.store.delete_topology(&id).await?;
+    state.store.delete_topology(id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

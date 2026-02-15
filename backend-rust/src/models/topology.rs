@@ -17,16 +17,16 @@ pub mod topology_role {
 /// Topology represents a named CLOS fabric topology
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Topology {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub region_id: Option<String>,
+    pub region_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub campus_id: Option<String>,
+    pub campus_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub datacenter_id: Option<String>,
+    pub datacenter_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_count: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -42,14 +42,13 @@ pub struct Topology {
 /// CreateTopologyRequest for creating new topologies
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateTopologyRequest {
-    pub id: String,
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub region_id: Option<String>,
+    pub region_id: Option<i64>,
     #[serde(default)]
-    pub campus_id: Option<String>,
+    pub campus_id: Option<i64>,
     #[serde(default)]
-    pub datacenter_id: Option<String>,
+    pub datacenter_id: Option<i64>,
 }

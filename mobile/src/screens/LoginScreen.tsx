@@ -8,13 +8,23 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 import { useAuth, checkApiHealth } from '../core';
 import { useAppTheme } from '../context';
 import { getApiUrl, setApiUrl } from '../setup';
+import { ScanButton } from '../components/ScanButton';
+import type { RootStackParamList } from '../navigation/types';
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
+type LoginRouteProp = RouteProp<RootStackParamList, 'Login'>;
 
 export function LoginScreen() {
   const { colors } = useAppTheme();
   const { login, loading, error } = useAuth();
+  const navigation = useNavigation<NavigationProp>();
+  const route = useRoute<LoginRouteProp>();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [apiUrl, setApiUrlState] = useState('');
@@ -35,6 +45,15 @@ export function LoginScreen() {
     });
   }, [testConnection]);
 
+  // Handle scanned URL coming back from ScannerScreen
+  useEffect(() => {
+    const scannedUrl = route.params?.scannedUrl;
+    if (scannedUrl) {
+      setApiUrlState(scannedUrl);
+      setApiUrl(scannedUrl).then(() => testConnection(scannedUrl));
+    }
+  }, [route.params?.scannedUrl, testConnection]);
+
   const handleTestConnection = async () => {
     const cleanUrl = apiUrl.replace(/\/+$/, '');
     await setApiUrl(cleanUrl);
@@ -48,6 +67,10 @@ export function LoginScreen() {
     } catch {
       // Error is handled by useAuth
     }
+  };
+
+  const handleScanPress = () => {
+    navigation.navigate('Scanner', { returnTo: 'Login', field: 'url' });
   };
 
   const styles = useMemo(() => ({
@@ -78,6 +101,16 @@ export function LoginScreen() {
       marginBottom: 6,
     },
     input: {
+      flex: 1,
+      backgroundColor: colors.bgPrimary,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: colors.textPrimary,
+    },
+    inputStandalone: {
       backgroundColor: colors.bgPrimary,
       borderWidth: 1,
       borderColor: colors.border,
@@ -144,6 +177,11 @@ export function LoginScreen() {
       fontSize: 14,
       marginTop: 12,
     },
+    inputRow: {
+      flexDirection: 'row' as const,
+      gap: 8,
+      marginBottom: 16,
+    },
   }), [colors]);
 
   // Checking initial connection
@@ -154,7 +192,7 @@ export function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.card}>
-          <Text style={styles.title}>ZTP Manager</Text>
+          <Text style={styles.title}>ForgeConfig</Text>
           <View style={styles.checkingContainer}>
             <ActivityIndicator size="large" color={colors.accentBlue} />
             <Text style={styles.checkingText}>Connecting to API server...</Text>
@@ -172,7 +210,7 @@ export function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.card}>
-          <Text style={styles.title}>ZTP Manager</Text>
+          <Text style={styles.title}>ForgeConfig</Text>
 
           <View style={styles.warning}>
             <Text style={styles.warningText}>
@@ -181,17 +219,20 @@ export function LoginScreen() {
           </View>
 
           <Text style={styles.label}>API Server URL</Text>
-          <TextInput
-            style={styles.input}
-            value={apiUrl}
-            onChangeText={setApiUrlState}
-            placeholder="http://192.168.1.100:8088"
-            placeholderTextColor={colors.textMuted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="url"
-            autoFocus
-          />
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              value={apiUrl}
+              onChangeText={setApiUrlState}
+              placeholder="http://192.168.1.100:8080"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              autoFocus
+            />
+            <ScanButton onPress={handleScanPress} />
+          </View>
 
           <Pressable
             style={[styles.button, (checking || !apiUrl) && styles.buttonDisabled]}
@@ -214,11 +255,11 @@ export function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.card}>
-        <Text style={styles.title}>ZTP Manager</Text>
+        <Text style={styles.title}>ForgeConfig</Text>
 
         <Text style={styles.label}>Username</Text>
         <TextInput
-          style={styles.input}
+          style={styles.inputStandalone}
           value={username}
           onChangeText={setUsername}
           placeholder="Enter username"
@@ -230,7 +271,7 @@ export function LoginScreen() {
 
         <Text style={styles.label}>Password</Text>
         <TextInput
-          style={styles.input}
+          style={styles.inputStandalone}
           value={password}
           onChangeText={setPassword}
           placeholder="Enter password"

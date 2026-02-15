@@ -12,10 +12,6 @@ fn map_row(row: &SqliteRow) -> JobTemplate {
         serde_json::from_str(&device_ids_json).unwrap_or_default()
     };
 
-    // target_group_id is stored as TEXT in the DB; parse to i64 (0 if empty/invalid)
-    let target_group_id_str: String = row.get("target_group_id");
-    let target_group_id: i64 = target_group_id_str.parse().unwrap_or(0);
-
     JobTemplate {
         id: row.get("id"),
         name: row.get("name"),
@@ -25,7 +21,7 @@ fn map_row(row: &SqliteRow) -> JobTemplate {
         action_id: row.get("action_id"),
         target_mode: row.get("target_mode"),
         target_device_ids,
-        target_group_id,
+        target_group_id: row.get("target_group_id"),
         schedule: row.get("schedule"),
         enabled: row.get::<i32, _>("enabled") != 0,
         last_run_at: row.get("last_run_at"),
@@ -45,7 +41,7 @@ impl JobTemplateRepo {
         Ok(rows.iter().map(map_row).collect())
     }
 
-    pub async fn get(pool: &Pool<Sqlite>, id: &str) -> Result<Option<JobTemplate>> {
+    pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<JobTemplate>> {
         let row = sqlx::query("SELECT * FROM job_templates WHERE id = ?")
             .bind(id)
             .fetch_optional(pool)
@@ -55,41 +51,38 @@ impl JobTemplateRepo {
 
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateJobTemplateRequest) -> Result<JobTemplate> {
         let now = Utc::now();
-        let id = uuid::Uuid::new_v4().to_string();
         let device_ids_json = serde_json::to_string(&req.target_device_ids)?;
-        let target_group_id_str = req.target_group_id.to_string();
 
-        sqlx::query(
-            r#"INSERT INTO job_templates (id, name, description, job_type, command, action_id,
+        let result = sqlx::query(
+            r#"INSERT INTO job_templates (name, description, job_type, command, action_id,
                 target_mode, target_device_ids, target_group_id, schedule, enabled, created_at, updated_at, credential_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
-        .bind(&id)
         .bind(&req.name)
         .bind(&req.description)
         .bind(&req.job_type)
         .bind(&req.command)
-        .bind(&req.action_id)
+        .bind(req.action_id)
         .bind(&req.target_mode)
         .bind(&device_ids_json)
-        .bind(&target_group_id_str)
+        .bind(req.target_group_id)
         .bind(&req.schedule)
         .bind(req.enabled as i32)
         .bind(now)
         .bind(now)
-        .bind(&req.credential_id)
+        .bind(req.credential_id)
         .execute(pool)
         .await?;
 
-        Self::get(pool, &id)
+        let new_id = result.last_insert_rowid();
+        Self::get(pool, new_id)
             .await?
             .context("Job template not found after creation")
     }
 
-    pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateJobTemplateRequest) -> Result<JobTemplate> {
+    pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateJobTemplateRequest) -> Result<JobTemplate> {
         let now = Utc::now();
         let device_ids_json = serde_json::to_string(&req.target_device_ids)?;
-        let target_group_id_str = req.target_group_id.to_string();
 
         let result = sqlx::query(
             r#"UPDATE job_templates SET name = ?, description = ?, job_type = ?, command = ?,
@@ -101,20 +94,20 @@ impl JobTemplateRepo {
         .bind(&req.description)
         .bind(&req.job_type)
         .bind(&req.command)
-        .bind(&req.action_id)
+        .bind(req.action_id)
         .bind(&req.target_mode)
         .bind(&device_ids_json)
-        .bind(&target_group_id_str)
+        .bind(req.target_group_id)
         .bind(&req.schedule)
         .bind(req.enabled as i32)
         .bind(now)
-        .bind(&req.credential_id)
+        .bind(req.credential_id)
         .bind(id)
         .execute(pool)
         .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Job template", id).into());
+            return Err(super::NotFoundError::new("Job template", &id.to_string()).into());
         }
 
         Self::get(pool, id)
@@ -122,14 +115,14 @@ impl JobTemplateRepo {
             .context("Job template not found after update")
     }
 
-    pub async fn delete(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let result = sqlx::query("DELETE FROM job_templates WHERE id = ?")
             .bind(id)
             .execute(pool)
             .await?;
 
         if result.rows_affected() == 0 {
-            return Err(super::NotFoundError::new("Job template", id).into());
+            return Err(super::NotFoundError::new("Job template", &id.to_string()).into());
         }
         Ok(())
     }
@@ -141,7 +134,7 @@ impl JobTemplateRepo {
         Ok(rows.iter().map(map_row).collect())
     }
 
-    pub async fn update_last_run(pool: &Pool<Sqlite>, id: &str) -> Result<()> {
+    pub async fn update_last_run(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         let now = Utc::now();
         sqlx::query("UPDATE job_templates SET last_run_at = ?, updated_at = ? WHERE id = ?")
             .bind(now)

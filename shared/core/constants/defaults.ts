@@ -105,6 +105,7 @@ export const EMPTY_VENDOR_FORM = {
   name: '',
   backup_command: 'show running-config',
   deploy_command: '',
+  diff_command: '',
   ssh_port: 22,
   ssh_user: '',
   ssh_pass: '',

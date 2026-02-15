@@ -22,9 +22,9 @@ pub async fn list_regions(
 pub async fn get_region(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<IpamRegion>, ApiError> {
-    let region = state.store.get_ipam_region(&id).await?
+    let region = state.store.get_ipam_region(id).await?
         .ok_or_else(|| ApiError::not_found("Region"))?;
     Ok(Json(region))
 }
@@ -34,11 +34,8 @@ pub async fn create_region(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamRegionRequest>,
 ) -> Result<(StatusCode, Json<IpamRegion>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() {
-        return Err(ApiError::bad_request("id and name are required"));
-    }
-    if state.store.get_ipam_region(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("Region with this ID already exists"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
     let region = state.store.create_ipam_region(&req).await?;
     Ok(created(region))
@@ -47,20 +44,19 @@ pub async fn create_region(
 pub async fn update_region(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateIpamRegionRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateIpamRegionRequest>,
 ) -> Result<Json<IpamRegion>, ApiError> {
-    req.id = id.clone();
-    let region = state.store.update_ipam_region(&id, &req).await?;
+    let region = state.store.update_ipam_region(id, &req).await?;
     Ok(Json(region))
 }
 
 pub async fn delete_region(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_region(&id).await?;
+    state.store.delete_ipam_region(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -77,9 +73,9 @@ pub async fn list_campuses(
 pub async fn get_campus(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<IpamCampus>, ApiError> {
-    let campus = state.store.get_ipam_campus(&id).await?
+    let campus = state.store.get_ipam_campus(id).await?
         .ok_or_else(|| ApiError::not_found("Campus"))?;
     Ok(Json(campus))
 }
@@ -89,13 +85,10 @@ pub async fn create_campus(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamCampusRequest>,
 ) -> Result<(StatusCode, Json<IpamCampus>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() || req.region_id.is_empty() {
-        return Err(ApiError::bad_request("id, name, and region_id are required"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
-    if state.store.get_ipam_campus(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("Campus with this ID already exists"));
-    }
-    if state.store.get_ipam_region(&req.region_id).await?.is_none() {
+    if state.store.get_ipam_region(req.region_id).await?.is_none() {
         return Err(ApiError::bad_request("Region not found"));
     }
     let campus = state.store.create_ipam_campus(&req).await?;
@@ -105,20 +98,19 @@ pub async fn create_campus(
 pub async fn update_campus(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateIpamCampusRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateIpamCampusRequest>,
 ) -> Result<Json<IpamCampus>, ApiError> {
-    req.id = id.clone();
-    let campus = state.store.update_ipam_campus(&id, &req).await?;
+    let campus = state.store.update_ipam_campus(id, &req).await?;
     Ok(Json(campus))
 }
 
 pub async fn delete_campus(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_campus(&id).await?;
+    state.store.delete_ipam_campus(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -135,9 +127,9 @@ pub async fn list_datacenters(
 pub async fn get_datacenter(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<IpamDatacenter>, ApiError> {
-    let datacenter = state.store.get_ipam_datacenter(&id).await?
+    let datacenter = state.store.get_ipam_datacenter(id).await?
         .ok_or_else(|| ApiError::not_found("Datacenter"))?;
     Ok(Json(datacenter))
 }
@@ -147,13 +139,10 @@ pub async fn create_datacenter(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamDatacenterRequest>,
 ) -> Result<(StatusCode, Json<IpamDatacenter>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() || req.campus_id.is_empty() {
-        return Err(ApiError::bad_request("id, name, and campus_id are required"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
-    if state.store.get_ipam_datacenter(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("Datacenter with this ID already exists"));
-    }
-    if state.store.get_ipam_campus(&req.campus_id).await?.is_none() {
+    if state.store.get_ipam_campus(req.campus_id).await?.is_none() {
         return Err(ApiError::bad_request("Campus not found"));
     }
     let datacenter = state.store.create_ipam_datacenter(&req).await?;
@@ -163,20 +152,19 @@ pub async fn create_datacenter(
 pub async fn update_datacenter(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateIpamDatacenterRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateIpamDatacenterRequest>,
 ) -> Result<Json<IpamDatacenter>, ApiError> {
-    req.id = id.clone();
-    let datacenter = state.store.update_ipam_datacenter(&id, &req).await?;
+    let datacenter = state.store.update_ipam_datacenter(id, &req).await?;
     Ok(Json(datacenter))
 }
 
 pub async fn delete_datacenter(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_datacenter(&id).await?;
+    state.store.delete_ipam_datacenter(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -193,9 +181,9 @@ pub async fn list_halls(
 pub async fn get_hall(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<IpamHall>, ApiError> {
-    let hall = state.store.get_ipam_hall(&id).await?
+    let hall = state.store.get_ipam_hall(id).await?
         .ok_or_else(|| ApiError::not_found("Hall"))?;
     Ok(Json(hall))
 }
@@ -205,13 +193,10 @@ pub async fn create_hall(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamHallRequest>,
 ) -> Result<(StatusCode, Json<IpamHall>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() || req.datacenter_id.is_empty() {
-        return Err(ApiError::bad_request("id, name, and datacenter_id are required"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
-    if state.store.get_ipam_hall(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("Hall with this ID already exists"));
-    }
-    if state.store.get_ipam_datacenter(&req.datacenter_id).await?.is_none() {
+    if state.store.get_ipam_datacenter(req.datacenter_id).await?.is_none() {
         return Err(ApiError::bad_request("Datacenter not found"));
     }
     let hall = state.store.create_ipam_hall(&req).await?;
@@ -221,20 +206,19 @@ pub async fn create_hall(
 pub async fn update_hall(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateIpamHallRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateIpamHallRequest>,
 ) -> Result<Json<IpamHall>, ApiError> {
-    req.id = id.clone();
-    let hall = state.store.update_ipam_hall(&id, &req).await?;
+    let hall = state.store.update_ipam_hall(id, &req).await?;
     Ok(Json(hall))
 }
 
 pub async fn delete_hall(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_hall(&id).await?;
+    state.store.delete_ipam_hall(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -251,9 +235,9 @@ pub async fn list_rows(
 pub async fn get_row(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<IpamRow>, ApiError> {
-    let row = state.store.get_ipam_row(&id).await?
+    let row = state.store.get_ipam_row(id).await?
         .ok_or_else(|| ApiError::not_found("Row"))?;
     Ok(Json(row))
 }
@@ -263,13 +247,10 @@ pub async fn create_row(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamRowRequest>,
 ) -> Result<(StatusCode, Json<IpamRow>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() || req.hall_id.is_empty() {
-        return Err(ApiError::bad_request("id, name, and hall_id are required"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
-    if state.store.get_ipam_row(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("Row with this ID already exists"));
-    }
-    if state.store.get_ipam_hall(&req.hall_id).await?.is_none() {
+    if state.store.get_ipam_hall(req.hall_id).await?.is_none() {
         return Err(ApiError::bad_request("Hall not found"));
     }
     let row = state.store.create_ipam_row(&req).await?;
@@ -279,20 +260,19 @@ pub async fn create_row(
 pub async fn update_row(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateIpamRowRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateIpamRowRequest>,
 ) -> Result<Json<IpamRow>, ApiError> {
-    req.id = id.clone();
-    let row = state.store.update_ipam_row(&id, &req).await?;
+    let row = state.store.update_ipam_row(id, &req).await?;
     Ok(Json(row))
 }
 
 pub async fn delete_row(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_row(&id).await?;
+    state.store.delete_ipam_row(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -309,9 +289,9 @@ pub async fn list_racks(
 pub async fn get_rack(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<IpamRack>, ApiError> {
-    let rack = state.store.get_ipam_rack(&id).await?
+    let rack = state.store.get_ipam_rack(id).await?
         .ok_or_else(|| ApiError::not_found("Rack"))?;
     Ok(Json(rack))
 }
@@ -321,13 +301,10 @@ pub async fn create_rack(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamRackRequest>,
 ) -> Result<(StatusCode, Json<IpamRack>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() || req.row_id.is_empty() {
-        return Err(ApiError::bad_request("id, name, and row_id are required"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
-    if state.store.get_ipam_rack(&req.id).await?.is_some() {
-        return Err(ApiError::conflict("Rack with this ID already exists"));
-    }
-    if state.store.get_ipam_row(&req.row_id).await?.is_none() {
+    if state.store.get_ipam_row(req.row_id).await?.is_none() {
         return Err(ApiError::bad_request("Row not found"));
     }
     let rack = state.store.create_ipam_rack(&req).await?;
@@ -337,20 +314,19 @@ pub async fn create_rack(
 pub async fn update_rack(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateIpamRackRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateIpamRackRequest>,
 ) -> Result<Json<IpamRack>, ApiError> {
-    req.id = id.clone();
-    let rack = state.store.update_ipam_rack(&id, &req).await?;
+    let rack = state.store.update_ipam_rack(id, &req).await?;
     Ok(Json(rack))
 }
 
 pub async fn delete_rack(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_rack(&id).await?;
+    state.store.delete_ipam_rack(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -369,8 +345,8 @@ pub async fn create_role(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamRoleRequest>,
 ) -> Result<(StatusCode, Json<IpamRole>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() {
-        return Err(ApiError::bad_request("id and name are required"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
     let role = state.store.create_ipam_role(&req).await?;
     Ok(created(role))
@@ -379,9 +355,9 @@ pub async fn create_role(
 pub async fn delete_role(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_role(&id).await?;
+    state.store.delete_ipam_role(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -480,9 +456,9 @@ pub async fn list_ip_addresses(
 pub async fn get_ip_address(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<IpamIpAddress>, ApiError> {
-    let ip = state.store.get_ipam_ip_address(&id).await?
+    let ip = state.store.get_ipam_ip_address(id).await?
         .ok_or_else(|| ApiError::not_found("IP Address"))?;
     Ok(Json(ip))
 }
@@ -492,8 +468,8 @@ pub async fn create_ip_address(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamIpAddressRequest>,
 ) -> Result<(StatusCode, Json<IpamIpAddress>), ApiError> {
-    if req.id.is_empty() || req.address.is_empty() || req.prefix_id == 0 {
-        return Err(ApiError::bad_request("id, address, and prefix_id are required"));
+    if req.address.is_empty() || req.prefix_id == 0 {
+        return Err(ApiError::bad_request("address and prefix_id are required"));
     }
     let ip = state.store.create_ipam_ip_address(&req).await?;
     Ok(created(ip))
@@ -502,20 +478,19 @@ pub async fn create_ip_address(
 pub async fn update_ip_address(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
-    Json(mut req): Json<CreateIpamIpAddressRequest>,
+    Path(id): Path<i64>,
+    Json(req): Json<CreateIpamIpAddressRequest>,
 ) -> Result<Json<IpamIpAddress>, ApiError> {
-    req.id = id.clone();
-    let ip = state.store.update_ipam_ip_address(&id, &req).await?;
+    let ip = state.store.update_ipam_ip_address(id, &req).await?;
     Ok(Json(ip))
 }
 
 pub async fn delete_ip_address(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_ip_address(&id).await?;
+    state.store.delete_ipam_ip_address(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -575,8 +550,8 @@ pub async fn create_vrf(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateIpamVrfRequest>,
 ) -> Result<(StatusCode, Json<IpamVrf>), ApiError> {
-    if req.id.is_empty() || req.name.is_empty() {
-        return Err(ApiError::bad_request("id and name are required"));
+    if req.name.is_empty() {
+        return Err(ApiError::bad_request("name is required"));
     }
     let vrf = state.store.create_ipam_vrf(&req).await?;
     Ok(created(vrf))
@@ -585,8 +560,8 @@ pub async fn create_vrf(
 pub async fn delete_vrf(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<StatusCode, ApiError> {
-    state.store.delete_ipam_vrf(&id).await?;
+    state.store.delete_ipam_vrf(id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

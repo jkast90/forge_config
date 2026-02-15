@@ -70,6 +70,7 @@ export {
   type NotificationLevel,
   navigateTo,
   navigateAction,
+  dialogAction,
   registerNavigator,
   type NavigationTarget,
   type LoginRequest,
