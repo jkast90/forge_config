@@ -11,6 +11,7 @@ import {
   useWebSocket,
   getServices,
   addNotification,
+  navigateAction,
   EMPTY_TOPOLOGY_FORM,
   slugify,
 } from '@core';
@@ -396,6 +397,60 @@ export function TopologyManagement() {
       return Object.keys(updates).length > 0 ? { ...c, ...updates } : c;
     });
   }, [showVirtualClosDialog, regions, campuses, datacenters]);
+
+  const [deployingTopology, setDeployingTopology] = useState<string | null>(null);
+
+  const handleDeployTopology = async (topology: Topology) => {
+    const topoDevices = devicesByTopology[topology.id] || [];
+    const deployable = topoDevices.filter(d => d.config_template || d.vendor);
+    if (deployable.length === 0) {
+      addNotification('error', 'No deployable devices in this topology (need config_template or vendor)');
+      return;
+    }
+    if (!(await confirm({
+      title: 'Deploy All Configs',
+      message: `Deploy configuration to ${deployable.length} device(s) in "${topology.name}", then back up their running configs?`,
+      confirmText: 'Deploy & Backup',
+      destructive: false,
+    }))) return;
+
+    setDeployingTopology(topology.id);
+    let deployed = 0;
+    let failed = 0;
+    try {
+      // Deploy configs sequentially to avoid overwhelming the backend
+      for (const device of deployable) {
+        try {
+          await getServices().devices.deployConfig(device.id);
+          deployed++;
+        } catch (err) {
+          failed++;
+          const msg = err instanceof Error ? err.message : String(err);
+          addNotification('error', `Deploy failed for ${device.hostname}: ${msg}`, navigateAction('View Jobs', 'jobs', 'history'));
+        }
+      }
+      addNotification('success', `Deploy complete: ${deployed} succeeded, ${failed} failed`, navigateAction('View Jobs', 'jobs', 'history'));
+
+      // Trigger backups for all deployed devices
+      let backedUp = 0;
+      for (const device of deployable) {
+        try {
+          await getServices().devices.triggerBackup(device.id);
+          backedUp++;
+        } catch {
+          // Backup failures are non-critical
+        }
+      }
+      if (backedUp > 0) {
+        addNotification('success', `Backup triggered for ${backedUp} device(s)`, navigateAction('View Jobs', 'jobs', 'history'));
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Deploy topology failed: ${msg}`, navigateAction('View Jobs', 'jobs', 'history'));
+    } finally {
+      setDeployingTopology(null);
+    }
+  };
 
   const [buildingLabClos, setBuildingLabClos] = useState(false);
 
@@ -878,6 +933,15 @@ export function TopologyManagement() {
             `Delete topology "${t.name}"? ${(t.device_count || 0) > 0 ? `${t.device_count} device(s) will be unassigned.` : ''}`
           }
           actions={[
+            {
+              icon: (t) => deployingTopology === t.id ? <SpinnerIcon size={14} /> : <Icon name="rocket_launch" size={14} />,
+              label: 'Deploy',
+              onClick: handleDeployTopology,
+              variant: 'primary',
+              tooltip: 'Deploy configs to all devices, then backup',
+              disabled: (t) => deployingTopology === t.id || !(t.device_count && t.device_count > 0),
+              loading: (t) => deployingTopology === t.id,
+            },
             {
               icon: (t) => rebuildingTopology === t.id ? <SpinnerIcon size={14} /> : <Icon name="refresh" size={14} />,
               label: 'Rebuild',

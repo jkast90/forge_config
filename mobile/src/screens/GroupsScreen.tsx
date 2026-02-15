@@ -38,7 +38,7 @@ export function GroupsScreen() {
 
   const [showForm, setShowForm] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
-  const [formData, setFormData] = useState<GroupFormData>({ id: '', name: '', description: '', parent_id: '', precedence: 0 });
+  const [formData, setFormData] = useState<GroupFormData>({ name: '', description: '', parent_id: null, precedence: 0 });
 
   // Detail view state
   const [selectedGroup, setSelectedGroup] = useState<Group | null>(null);
@@ -50,7 +50,7 @@ export function GroupsScreen() {
 
   const parentOptions = useMemo(() => [
     { value: '', label: 'None (top-level)' },
-    ...groups.filter(g => !editingGroup || g.id !== editingGroup.id).map(g => ({ value: g.id, label: g.name })),
+    ...groups.filter(g => !editingGroup || g.id !== editingGroup.id).map(g => ({ value: String(g.id), label: g.name })),
   ], [groups, editingGroup]);
 
   const nonMembers = useMemo(() =>
@@ -63,17 +63,16 @@ export function GroupsScreen() {
 
   const handleAdd = () => {
     setEditingGroup(null);
-    setFormData({ id: '', name: '', description: '', parent_id: '', precedence: groups.length });
+    setFormData({ name: '', description: '', parent_id: null, precedence: groups.length });
     setShowForm(true);
   };
 
   const handleEdit = (group: Group) => {
     setEditingGroup(group);
     setFormData({
-      id: group.id,
       name: group.name,
       description: group.description || '',
-      parent_id: group.parent_id || '',
+      parent_id: group.parent_id ?? null,
       precedence: group.precedence,
     });
     setShowForm(true);
@@ -83,7 +82,7 @@ export function GroupsScreen() {
     if (!formData.name.trim()) { showError('Group name is required'); return; }
     const success = editingGroup
       ? await updateGroup(editingGroup.id, formData)
-      : await createGroup({ ...formData, id: formData.id || formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-') });
+      : await createGroup(formData);
     if (success) { setShowForm(false); setEditingGroup(null); }
   };
 
@@ -166,9 +165,9 @@ export function GroupsScreen() {
             </View>
           </View>
           <View style={styles.metaRow}>
-            {item.parent_id && (
+            {item.parent_id != null && (
               <Text style={[styles.metaText, { color: colors.textMuted }]}>
-                Parent: {groups.find(g => g.id === item.parent_id)?.name || item.parent_id}
+                Parent: {groups.find(g => g.id === item.parent_id)?.name || String(item.parent_id)}
               </Text>
             )}
             <Text style={[styles.metaText, { color: colors.textMuted }]}>Precedence: {item.precedence}</Text>
@@ -193,7 +192,7 @@ export function GroupsScreen() {
 
       <FlatList
         data={groups}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderGroup}
         ListEmptyComponent={<EmptyState message="No groups" actionLabel="Add Group" onAction={handleAdd} />}
         contentContainerStyle={groups.length === 0 ? styles.emptyList : undefined}
@@ -276,9 +275,8 @@ export function GroupsScreen() {
         size="medium"
       >
         <FormInput label="Name *" value={formData.name} onChangeText={t => setFormData(p => ({ ...p, name: t }))} placeholder="datacenter-switches" />
-        <FormInput label="ID" value={formData.id} onChangeText={t => setFormData(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingGroup} />
         <FormInput label="Description" value={formData.description} onChangeText={t => setFormData(p => ({ ...p, description: t }))} placeholder="All switches in datacenter" />
-        <FormSelect label="Parent Group" value={formData.parent_id} options={parentOptions} onChange={v => setFormData(p => ({ ...p, parent_id: v }))} />
+        <FormSelect label="Parent Group" value={formData.parent_id != null ? String(formData.parent_id) : ''} options={parentOptions} onChange={v => setFormData(p => ({ ...p, parent_id: v ? Number(v) : null }))} />
         <FormInput label="Precedence" value={formData.precedence.toString()} onChangeText={t => setFormData(p => ({ ...p, precedence: parseInt(t, 10) || 0 }))} placeholder="0" keyboardType="number-pad" />
       </FormModal>
 

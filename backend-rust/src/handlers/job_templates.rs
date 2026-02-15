@@ -80,8 +80,8 @@ pub async fn run_job_template(
         .ok_or_else(|| ApiError::not_found("job template"))?;
 
     // Resolve target device IDs
-    let device_ids: Vec<i64> = if template.target_mode == "group" && !template.target_group_id.is_empty() {
-        state.store.list_group_members(&template.target_group_id).await
+    let device_ids: Vec<i64> = if template.target_mode == "group" && template.target_group_id != 0 {
+        state.store.list_group_members(template.target_group_id).await
             .map_err(|e| ApiError::internal(e.to_string()))?
     } else {
         template.target_device_ids.clone()

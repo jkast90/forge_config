@@ -11,6 +11,7 @@ import {
   triggerBackup as triggerBackupThunk,
 } from '../store/slices/devicesSlice';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseDevicesOptions {
@@ -53,49 +54,52 @@ export function useDevices(options: UseDevicesOptions = {}): UseDevicesReturn {
   const createDevice = useCallback(async (data: Partial<Device>): Promise<boolean> => {
     try {
       await dispatch(createDeviceThunk(data)).unwrap();
-      addNotification('success', 'Device added successfully');
+      addNotification('success', `Device added: ${data.hostname || 'unknown'}`);
       dispatch(fetchDevices());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to add device: ${getErrorMessage(err)}`);
+      addNotification('error', `Failed to add device${data.hostname ? ` ${data.hostname}` : ''}: ${getErrorMessage(err)}`);
       return false;
     }
   }, [dispatch]);
 
   const updateDevice = useCallback(async (id: number, data: Partial<Device>): Promise<boolean> => {
+    const name = data.hostname || devices.find((d) => d.id === id)?.hostname || 'unknown';
     try {
       await dispatch(updateDeviceThunk({ id, data })).unwrap();
-      addNotification('success', 'Device updated successfully');
+      addNotification('success', `Device updated: ${name}`);
       dispatch(fetchDevices());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to update device: ${getErrorMessage(err)}`);
+      addNotification('error', `Failed to update ${name}: ${getErrorMessage(err)}`);
       return false;
     }
-  }, [dispatch]);
+  }, [dispatch, devices]);
 
   const deleteDevice = useCallback(async (id: number): Promise<boolean> => {
+    const name = devices.find((d) => d.id === id)?.hostname || 'unknown';
     try {
       await dispatch(deleteDeviceThunk(id)).unwrap();
-      addNotification('success', 'Device deleted successfully');
+      addNotification('success', `Device deleted: ${name}`);
       dispatch(fetchDevices());
       return true;
     } catch (err) {
-      addNotification('error', `Failed to delete device: ${getErrorMessage(err)}`);
+      addNotification('error', `Failed to delete ${name}: ${getErrorMessage(err)}`);
       return false;
     }
-  }, [dispatch]);
+  }, [dispatch, devices]);
 
   const triggerBackupFn = useCallback(async (id: number): Promise<boolean> => {
+    const name = devices.find((d) => d.id === id)?.hostname || 'unknown';
     try {
       await dispatch(triggerBackupThunk(id)).unwrap();
-      addNotification('success', 'Backup initiated');
+      addNotification('success', `Backup initiated for ${name}`, navigateAction('View Jobs', 'jobs', 'history'));
       return true;
     } catch (err) {
-      addNotification('error', `Failed to trigger backup: ${getErrorMessage(err)}`);
+      addNotification('error', `Failed to trigger backup for ${name}: ${getErrorMessage(err)}`);
       return false;
     }
-  }, [dispatch]);
+  }, [dispatch, devices]);
 
   return {
     devices,

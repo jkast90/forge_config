@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Provider } from 'react-redux';
-import { store, useAuth, useAuthState, AuthProvider, useDevices, useWebTheme, useWebSocket, useVendors, useSettings, useInflight, useModalRoute, useNotificationHistory, lookupVendorByMac, setVendorCache, addNotification, DeviceDiscoveredPayload, getServices, initTelemetry, trackEvent } from '@core';
+import { store, useAuth, useAuthState, AuthProvider, useDevices, useWebTheme, useWebSocket, useVendors, useSettings, useInflight, useModalRoute, useNotificationHistory, lookupVendorByMac, setVendorCache, addNotification, registerNavigator, DeviceDiscoveredPayload, getServices, initTelemetry, trackEvent } from '@core';
 import type { Branding } from '@core';
 import { DeviceForm } from './components/DeviceForm';
 import { LoginPage } from './components/LoginPage';
@@ -160,9 +160,10 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
   const modalRoute = useModalRoute();
   const { unreadCount } = useNotificationHistory();
 
-  // Initialize telemetry on mount
+  // Initialize telemetry on mount and register navigator for deep linking
   useEffect(() => {
     initTelemetry();
+    registerNavigator(({ page }) => handlePageChange(page));
   }, []);
 
   const { theme, setTheme: setThemeRaw } = useWebTheme();
@@ -391,6 +392,7 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
       <footer className="footer">
         <div className="footer-content">
           {inflightCount > 0 && <InflightIndicator count={inflightCount} />}
+          <span className="footer-commit">{__COMMIT_HASH__}</span>
           <div className="footer-actions">
             <Tooltip content="Spawn test host">
               <button

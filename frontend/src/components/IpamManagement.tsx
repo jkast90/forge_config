@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   useIpam,
   useDevices,
+  usePersistedTab,
   addNotification,
   slugify,
   validators,
@@ -33,7 +34,7 @@ import { useConfirm } from './ConfirmDialog';
 type IpamTab = 'prefixes' | 'ips' | 'roles' | 'vrfs';
 
 export function IpamManagement() {
-  const [activeTab, setActiveTab] = useState<IpamTab>('prefixes');
+  const [activeTab, setActiveTab] = usePersistedTab<IpamTab>('prefixes', ['prefixes', 'ips', 'roles', 'vrfs'], 'tab_ipam');
   const [showInfo, setShowInfo] = useState(false);
 
   const ipam = useIpam();

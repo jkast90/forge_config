@@ -4,6 +4,7 @@ import {
   useTestContainers,
   useVendors,
   useModalRoute,
+  usePersistedSet,
   CONFIG_METHOD_OPTIONS,
   createChangeHandler,
   generateMac,
@@ -41,6 +42,7 @@ export function TestContainers() {
 
   const connectModal = useConnectModal();
   const modalRoute = useModalRoute();
+  const [selectedIds, setSelectedIds] = usePersistedSet('containers_selected');
 
   // Restore modals from URL hash
   useEffect(() => {
@@ -266,6 +268,7 @@ export function TestContainers() {
               onClick: (c) => restart(c.id),
               variant: 'secondary',
               tooltip: 'Restart container',
+              bulk: true,
             },
             {
               icon: <TrashIcon size={14} />,
@@ -273,8 +276,17 @@ export function TestContainers() {
               onClick: (c) => remove(c.id),
               variant: 'danger',
               tooltip: 'Remove container',
+              bulk: true,
+              bulkConfirm: (rows) => ({
+                title: `Remove ${rows.length} Containers`,
+                message: `This will remove the following containers:\n\n${rows.map(c => `  \u2022 ${c.hostname}`).join('\n')}\n\nThis cannot be undone.`,
+                confirmText: 'Remove All',
+              }),
             },
           ] as TableAction<TestContainerType>[]}
+          selectable
+          selectedKeys={selectedIds}
+          onSelectionChange={setSelectedIds}
           searchable
           searchPlaceholder="Search containers..."
           emptyMessage="No test containers running."

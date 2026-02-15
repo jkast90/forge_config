@@ -16,12 +16,12 @@ pub struct DeviceVariable {
 /// Group represents a device group for Ansible-style variable inheritance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Group {
-    pub id: String,
+    pub id: i64,
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id: Option<String>,
+    pub parent_id: Option<i64>,
     pub precedence: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_count: Option<i32>,
@@ -34,12 +34,11 @@ pub struct Group {
 /// CreateGroupRequest for creating/updating device groups
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateGroupRequest {
-    pub id: String,
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub parent_id: Option<String>,
+    pub parent_id: Option<i64>,
     #[serde(default = "default_precedence")]
     pub precedence: i32,
 }
@@ -52,7 +51,7 @@ fn default_precedence() -> i32 {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GroupVariable {
     pub id: i64,
-    pub group_id: String,
+    pub group_id: i64,
     pub key: String,
     pub value: String,
     pub created_at: DateTime<Utc>,

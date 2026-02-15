@@ -2,12 +2,18 @@
 
 export type NotificationLevel = 'success' | 'error' | 'warning' | 'info';
 
+export interface NotificationAction {
+  label: string;
+  onClick: () => void;
+}
+
 export interface Notification {
   id: number;
   level: NotificationLevel;
   message: string;
   timestamp: number;
   read: boolean;
+  action?: NotificationAction;
 }
 
 let notifications: Notification[] = [];
@@ -19,13 +25,14 @@ function emit() {
   listeners.forEach((fn) => fn(snapshot));
 }
 
-export function addNotification(level: NotificationLevel, message: string): Notification {
+export function addNotification(level: NotificationLevel, message: string, action?: NotificationAction): Notification {
   const notification: Notification = {
     id: nextId++,
     level,
     message,
     timestamp: Date.now(),
     read: false,
+    action,
   };
   notifications = [notification, ...notifications];
   // Cap at 100
@@ -60,3 +67,4 @@ export function onNotificationsChange(listener: (notifications: Notification[]) 
     listeners = listeners.filter((fn) => fn !== listener);
   };
 }
+

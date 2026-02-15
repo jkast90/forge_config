@@ -66,7 +66,8 @@ pub struct JobTemplate {
     pub action_id: String,
     pub target_mode: String,
     pub target_device_ids: Vec<i64>,
-    pub target_group_id: String,
+    #[serde(default)]
+    pub target_group_id: i64,
     pub schedule: String,
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -94,7 +95,7 @@ pub struct CreateJobTemplateRequest {
     #[serde(default)]
     pub target_device_ids: Vec<i64>,
     #[serde(default)]
-    pub target_group_id: String,
+    pub target_group_id: i64,
     #[serde(default)]
     pub schedule: String,
     #[serde(default = "default_true")]

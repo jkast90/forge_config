@@ -1,6 +1,7 @@
 import { ReactNode, useState, useCallback, useMemo, useRef, useEffect, isValidElement, Children, cloneElement, ReactElement } from 'react';
 import { useTableFeatures, getDefaultPageSize, getTablePageSize, setTablePageSize } from '@core';
 import type { ColumnFilterDef } from '@core';
+import { Checkbox } from './Checkbox';
 import { IconButton } from './IconButton';
 import { Tooltip } from './Tooltip';
 import { EditIcon, TrashIcon, Icon } from './Icon';
@@ -91,6 +92,12 @@ export interface TableAction<T> {
   tooltip?: string | ((row: T) => string);
   /** Whether to show this action */
   show?: (row: T) => boolean;
+  /** Show as bulk action in selection bar. When true, loops onClick over selected rows. */
+  bulk?: boolean;
+  /** Separate handler for bulk execution (skips per-row confirmations). Falls back to onClick. */
+  bulkOnClick?: (row: T) => void | Promise<void>;
+  /** Confirmation shown once before executing bulk action. String uses {count} placeholder; function receives selected rows. */
+  bulkConfirm?: string | ((rows: T[]) => { title?: string; message: string; confirmText?: string });
 }
 
 export interface TableProps<T> {
@@ -144,6 +151,12 @@ export interface TableProps<T> {
   pageSizeOptions?: number[];
   /** Unique ID for persisting per-table page size overrides */
   tableId?: string;
+  /** Enable row selection checkboxes */
+  selectable?: boolean;
+  /** Currently selected row keys (controlled) */
+  selectedKeys?: Set<string | number>;
+  /** Called when selection changes */
+  onSelectionChange?: (selectedKeys: Set<string | number>) => void;
 }
 
 /**
@@ -266,11 +279,15 @@ export function Table<T>({
   pageSize: initialPageSize,
   pageSizeOptions = [10, 25, 50, 100],
   tableId,
+  selectable = false,
+  selectedKeys,
+  onSelectionChange,
 }: TableProps<T>) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [expandedKeys, setExpandedKeys] = useState<Set<string | number>>(new Set());
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [bulkRunning, setBulkRunning] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollWidth, setScrollWidth] = useState(0);
 
@@ -387,6 +404,7 @@ export function Table<T>({
 
   const {
     displayData,
+    filteredData,
     filteredCount,
     totalCount,
     currentPage,
@@ -407,6 +425,87 @@ export function Table<T>({
 
   const isSearching = searchable && searchQuery.trim().length > 0;
   const isFiltering = hasActiveFilters;
+
+  // Selection helpers
+  const selectionEnabled = selectable && selectedKeys && onSelectionChange;
+  const displayKeys = useMemo(() => selectionEnabled ? new Set(displayData.map(getRowKey)) : new Set<string | number>(), [selectionEnabled, displayData, getRowKey]);
+  const allDisplaySelected = selectionEnabled && displayKeys.size > 0 && [...displayKeys].every(k => selectedKeys.has(k));
+  const someDisplaySelected = selectionEnabled && !allDisplaySelected && [...displayKeys].some(k => selectedKeys.has(k));
+
+  const toggleSelectAll = useCallback(() => {
+    if (!selectionEnabled) return;
+    const next = new Set(selectedKeys);
+    if (allDisplaySelected) {
+      for (const k of displayKeys) next.delete(k);
+    } else {
+      for (const k of displayKeys) next.add(k);
+    }
+    onSelectionChange(next);
+  }, [selectionEnabled, selectedKeys, onSelectionChange, allDisplaySelected, displayKeys]);
+
+  const toggleSelectRow = useCallback((key: string | number) => {
+    if (!selectionEnabled) return;
+    const next = new Set(selectedKeys);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    onSelectionChange(next);
+  }, [selectionEnabled, selectedKeys, onSelectionChange]);
+
+  const selectAllFiltered = useCallback(() => {
+    if (!selectionEnabled) return;
+    const next = new Set(selectedKeys);
+    for (const row of filteredData) next.add(getRowKey(row));
+    onSelectionChange(next);
+  }, [selectionEnabled, selectedKeys, onSelectionChange, filteredData, getRowKey]);
+
+  const clearSelection = useCallback(() => {
+    if (!selectionEnabled) return;
+    onSelectionChange(new Set());
+  }, [selectionEnabled, onSelectionChange]);
+
+  // Resolve selected rows for bulk actions
+  const selectedRows = useMemo(() => {
+    if (!selectionEnabled || selectedKeys.size === 0) return [];
+    return data.filter(row => selectedKeys.has(getRowKey(row)));
+  }, [selectionEnabled, selectedKeys, data, getRowKey]);
+
+  // Auto-prune stale keys when data changes (e.g., after bulk delete)
+  // Skip when data is empty — that's the loading state, not a real change
+  const selectedCount = selectedRows.length;
+  useEffect(() => {
+    if (!selectionEnabled || selectedKeys.size === 0 || data.length === 0) return;
+    if (selectedCount < selectedKeys.size) {
+      const validKeys = new Set(data.map(getRowKey));
+      const pruned = new Set([...selectedKeys].filter(k => validKeys.has(k)));
+      onSelectionChange(pruned);
+    }
+  }, [data, selectionEnabled, selectedKeys, selectedCount, getRowKey, onSelectionChange]);
+
+  const executeBulkAction = useCallback(async (action: TableAction<T>) => {
+    if (action.bulkConfirm) {
+      let opts: { title?: string; message: string; confirmText?: string };
+      if (typeof action.bulkConfirm === 'function') {
+        opts = action.bulkConfirm(selectedRows);
+      } else {
+        opts = { message: action.bulkConfirm.replace('{count}', String(selectedRows.length)) };
+      }
+      const ok = await confirm({ title: opts.title || 'Confirm Bulk Action', message: opts.message, confirmText: opts.confirmText || 'Confirm', destructive: action.variant === 'danger' });
+      if (!ok) return;
+    }
+    const handler = action.bulkOnClick || action.onClick;
+    setBulkRunning(true);
+    for (const row of selectedRows) {
+      try {
+        await handler(row);
+      } catch {
+        // individual action handles its own errors
+      }
+    }
+    setBulkRunning(false);
+  }, [selectedRows, confirm]);
 
   // Build actions array from shortcuts + custom actions
   const allActions: TableAction<T>[] = [];
@@ -456,6 +555,7 @@ export function Table<T>({
   }
 
   const isExpandable = !!renderExpandedRow;
+  const bulkActions = selectionEnabled ? allActions.filter(a => a.bulk) : [];
 
   const tableClassName = [
     'data-table',
@@ -502,6 +602,40 @@ export function Table<T>({
         </div>
       )}
 
+      {selectionEnabled && selectedCount > 0 && (
+        <div className="table-selection-bar">
+          <span className="table-selection-count">{selectedCount} selected</span>
+          {selectedCount < filteredCount && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={selectAllFiltered}>
+              Select All {filteredCount}
+            </button>
+          )}
+          <button type="button" className="btn btn-secondary btn-sm" onClick={clearSelection}>
+            Clear
+          </button>
+          {bulkActions.length > 0 && (
+            <div className="table-selection-actions">
+              {bulkActions.map((action, idx) => {
+                const label = typeof action.label === 'function' ? 'Action' : action.label;
+                const icon = typeof action.icon === 'function' ? null : action.icon;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`btn btn-sm btn-${action.variant || 'secondary'}`}
+                    disabled={bulkRunning}
+                    onClick={() => executeBulkAction(action)}
+                  >
+                    {icon}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {(isSearching || isFiltering) && displayData.length === 0 ? (
         <div className="table-no-results">
           {isSearching ? `No results for "${searchQuery}"` : 'No results match the active filters'}
@@ -516,6 +650,15 @@ export function Table<T>({
         <table className={tableClassName}>
           <thead>
             <tr>
+              {selectionEnabled && (
+                <th className="table-select-checkbox">
+                  <Checkbox
+                    checked={!!allDisplaySelected}
+                    indeterminate={!!someDisplaySelected}
+                    onChange={toggleSelectAll}
+                  />
+                </th>
+              )}
               {columns.map((col, idx) => (
                 <th
                   key={idx}
@@ -571,7 +714,8 @@ export function Table<T>({
               const key = getRowKey(row);
               const className = rowClassName?.(row);
               const isExpanded = isExpandable && expandedKeys.has(key);
-              const totalCols = columns.length + (hasActions ? 1 : 0);
+              const isSelected = selectionEnabled && selectedKeys.has(key);
+              const totalCols = columns.length + (hasActions ? 1 : 0) + (selectionEnabled ? 1 : 0);
 
               const handleRowClick = isExpandable
                 ? () => toggleExpand(key)
@@ -582,9 +726,17 @@ export function Table<T>({
               return (
                 <TableRowGroup key={key}>
                   <tr
-                    className={[className, isExpanded && 'expanded-row'].filter(Boolean).join(' ')}
+                    className={[className, isExpanded && 'expanded-row', isSelected && 'table-row-selected'].filter(Boolean).join(' ')}
                     onClick={handleRowClick}
                   >
+                    {selectionEnabled && (
+                      <td className="table-select-checkbox" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={!!isSelected}
+                          onChange={() => toggleSelectRow(key)}
+                        />
+                      </td>
+                    )}
                     {columns.map((col, idx) => {
                       let content = typeof col.accessor === 'function'
                         ? col.accessor(row, rowIndex)

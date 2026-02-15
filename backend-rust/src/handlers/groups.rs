@@ -23,9 +23,9 @@ pub async fn list_groups(
 pub async fn get_group(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Group>, ApiError> {
-    let group = state.store.get_group(&id).await?
+    let group = state.store.get_group(id).await?
         .ok_or_else(|| ApiError::not_found("Group"))?;
     Ok(Json(group))
 }
@@ -35,15 +35,11 @@ pub async fn create_group(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateGroupRequest>,
 ) -> Result<(axum::http::StatusCode, Json<Group>), ApiError> {
-    // Reject creating a group with id "all"
-    if req.id == "all" {
-        return Err(ApiError::bad_request("Cannot create a group with id 'all' — it is reserved"));
-    }
-
-    // Validate parent wouldn't create a cycle
-    if let Some(ref parent_id) = req.parent_id {
-        if state.store.would_create_cycle(&req.id, parent_id).await? {
-            return Err(ApiError::bad_request("Setting this parent would create a cycle"));
+    // Validate parent wouldn't create a cycle (new group has no ID yet, so no cycle possible from self)
+    // Just validate parent exists if provided
+    if let Some(parent_id) = req.parent_id {
+        if state.store.get_group(parent_id).await?.is_none() {
+            return Err(ApiError::bad_request("Parent group not found"));
         }
     }
 
@@ -54,11 +50,11 @@ pub async fn create_group(
 pub async fn update_group(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<CreateGroupRequest>,
 ) -> Result<Json<Group>, ApiError> {
-    // Protect "all" group invariants
-    if id == "all" {
+    // Protect "all" group invariants (id == 1)
+    if id == 1 {
         if req.parent_id.is_some() {
             return Err(ApiError::bad_request("Cannot set parent_id on the 'all' group"));
         }
@@ -68,22 +64,22 @@ pub async fn update_group(
     }
 
     // Validate parent wouldn't create a cycle
-    if let Some(ref parent_id) = req.parent_id {
-        if state.store.would_create_cycle(&id, parent_id).await? {
+    if let Some(parent_id) = req.parent_id {
+        if state.store.would_create_cycle(id, parent_id).await? {
             return Err(ApiError::bad_request("Setting this parent would create a cycle"));
         }
     }
 
-    let group = state.store.update_group(&id, &req).await?;
+    let group = state.store.update_group(id, &req).await?;
     Ok(Json(group))
 }
 
 pub async fn delete_group(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.delete_group(&id).await?;
+    state.store.delete_group(id).await?;
     Ok(Json(serde_json::json!({"message": "group deleted"})))
 }
 
@@ -92,9 +88,9 @@ pub async fn delete_group(
 pub async fn list_group_variables(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Vec<GroupVariable>>, ApiError> {
-    let vars = state.store.list_group_variables(&id).await?;
+    let vars = state.store.list_group_variables(id).await?;
     Ok(Json(vars))
 }
 
@@ -106,19 +102,19 @@ pub struct SetVariableRequest {
 pub async fn set_group_variable(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path((id, key)): Path<(String, String)>,
+    Path((id, key)): Path<(i64, String)>,
     Json(req): Json<SetVariableRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.set_group_variable(&id, &key, &req.value).await?;
+    state.store.set_group_variable(id, &key, &req.value).await?;
     Ok(Json(serde_json::json!({"message": "variable set"})))
 }
 
 pub async fn delete_group_variable(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path((id, key)): Path<(String, String)>,
+    Path((id, key)): Path<(i64, String)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.delete_group_variable(&id, &key).await?;
+    state.store.delete_group_variable(id, &key).await?;
     Ok(Json(serde_json::json!({"message": "variable deleted"})))
 }
 
@@ -127,9 +123,9 @@ pub async fn delete_group_variable(
 pub async fn list_group_members(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
 ) -> Result<Json<Vec<i64>>, ApiError> {
-    let members = state.store.list_group_members(&id).await?;
+    let members = state.store.list_group_members(id).await?;
     Ok(Json(members))
 }
 
@@ -141,28 +137,28 @@ pub struct SetMembersRequest {
 pub async fn set_group_members(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path(id): Path<String>,
+    Path(id): Path<i64>,
     Json(req): Json<SetMembersRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.set_group_members(&id, &req.device_ids).await?;
+    state.store.set_group_members(id, &req.device_ids).await?;
     Ok(Json(serde_json::json!({"message": "members updated"})))
 }
 
 pub async fn add_group_member(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path((id, device_id)): Path<(String, i64)>,
+    Path((id, device_id)): Path<(i64, i64)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.add_device_to_group(device_id, &id).await?;
+    state.store.add_device_to_group(device_id, id).await?;
     Ok(Json(serde_json::json!({"message": "device added to group"})))
 }
 
 pub async fn remove_group_member(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Path((id, device_id)): Path<(String, i64)>,
+    Path((id, device_id)): Path<(i64, i64)>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.store.remove_device_from_group(device_id, &id).await?;
+    state.store.remove_device_from_group(device_id, id).await?;
     Ok(Json(serde_json::json!({"message": "device removed from group"})))
 }
 
@@ -179,7 +175,7 @@ pub async fn list_device_groups(
 
 #[derive(Deserialize)]
 pub struct SetDeviceGroupsRequest {
-    pub group_ids: Vec<String>,
+    pub group_ids: Vec<i64>,
 }
 
 pub async fn set_device_groups(

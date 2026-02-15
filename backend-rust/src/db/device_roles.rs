@@ -9,12 +9,15 @@ use super::row_helpers::none_if_empty;
 // ========== Row Mapper ==========
 
 fn map_device_role_row(row: &SqliteRow) -> DeviceRole {
+    let group_names_json: String = row.get("group_names");
+    let group_names: Vec<String> = serde_json::from_str(&group_names_json).unwrap_or_default();
     DeviceRole {
         id: row.get("id"),
         name: row.get("name"),
         description: none_if_empty(row.get("description")),
         template_ids: None,
         template_names: None,
+        group_names,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     }
@@ -100,12 +103,14 @@ impl DeviceRoleRepo {
 
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
         let now = Utc::now();
+        let group_names_json = serde_json::to_string(&req.group_names).unwrap_or_else(|_| "[]".to_string());
         sqlx::query(
-            "INSERT INTO device_roles (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO device_roles (id, name, description, group_names, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
         )
         .bind(&req.id)
         .bind(&req.name)
         .bind(&req.description)
+        .bind(&group_names_json)
         .bind(now)
         .bind(now)
         .execute(pool).await?;
@@ -116,11 +121,13 @@ impl DeviceRoleRepo {
 
     pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateDeviceRoleRequest) -> Result<DeviceRole> {
         let now = Utc::now();
+        let group_names_json = serde_json::to_string(&req.group_names).unwrap_or_else(|_| "[]".to_string());
         let result = sqlx::query(
-            "UPDATE device_roles SET name = ?, description = ?, updated_at = ? WHERE id = ?"
+            "UPDATE device_roles SET name = ?, description = ?, group_names = ?, updated_at = ? WHERE id = ?"
         )
         .bind(&req.name)
         .bind(&req.description)
+        .bind(&group_names_json)
         .bind(now)
         .bind(id)
         .execute(pool).await?;

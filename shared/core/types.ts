@@ -386,7 +386,7 @@ export interface JobTemplate {
   credential_id?: string;
   target_mode: 'device' | 'group';
   target_device_ids: number[];
-  target_group_id: string;
+  target_group_id: number;
   schedule: string;
   enabled: boolean;
   last_run_at: string | null;
@@ -403,7 +403,7 @@ export interface CreateJobTemplateRequest {
   credential_id?: string;
   target_mode: string;
   target_device_ids?: number[];
-  target_group_id?: string;
+  target_group_id?: number;
   schedule?: string;
   enabled?: boolean;
 }
@@ -466,10 +466,10 @@ export interface OutputParserFormData {
 
 // Group types (Ansible-style variable inheritance)
 export interface Group {
-  id: string;
+  id: number;
   name: string;
   description?: string;
-  parent_id?: string;
+  parent_id?: number;
   precedence: number;
   device_count?: number;
   child_count?: number;
@@ -478,16 +478,15 @@ export interface Group {
 }
 
 export interface GroupFormData {
-  id: string;
   name: string;
   description: string;
-  parent_id: string;
+  parent_id: number | null;
   precedence: number;
 }
 
 export interface GroupVariable {
   id: number;
-  group_id: string;
+  group_id: number;
   key: string;
   value: string;
   created_at: string;
@@ -758,6 +757,7 @@ export interface DeviceRole {
   description?: string;
   template_ids?: string[];
   template_names?: string[];
+  group_names: string[];
   created_at: string;
   updated_at: string;
 }
@@ -767,6 +767,7 @@ export interface DeviceRoleFormData {
   name: string;
   description: string;
   template_ids: string[];
+  group_names: string[];
 }
 
 // ========== Chassis / Port Layout Types ==========

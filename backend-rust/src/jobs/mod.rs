@@ -115,8 +115,8 @@ impl JobService {
                     tracing::info!("Scheduler: running template '{}' ({})", tmpl.name, tmpl.id);
 
                     // Resolve target device IDs
-                    let device_ids: Vec<i64> = if tmpl.target_mode == "group" && !tmpl.target_group_id.is_empty() {
-                        match svc.store.list_group_members(&tmpl.target_group_id).await {
+                    let device_ids: Vec<i64> = if tmpl.target_mode == "group" && tmpl.target_group_id != 0 {
+                        match svc.store.list_group_members(tmpl.target_group_id).await {
                             Ok(ids) => ids,
                             Err(e) => {
                                 tracing::warn!("Scheduler: failed to resolve group {}: {}", tmpl.target_group_id, e);

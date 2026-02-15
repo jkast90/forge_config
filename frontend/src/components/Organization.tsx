@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useIpam, useDevices, addNotification } from '@core';
+import { useIpam, useDevices, addNotification, usePersistedTab } from '@core';
 import type {
   IpamRegion, IpamRegionFormData,
   IpamCampus, IpamCampusFormData,
@@ -35,7 +35,7 @@ const EMPTY_ROW_FORM: IpamRowFormData = { id: '', name: '', description: '', hal
 const EMPTY_RACK_FORM: IpamRackFormData = { id: '', name: '', description: '', row_id: '' };
 
 export function Locations() {
-  const [activeTab, setActiveTab] = useState<OrgTab>('regions');
+  const [activeTab, setActiveTab] = usePersistedTab<OrgTab>('regions', ['regions', 'campuses', 'datacenters', 'halls', 'rows', 'racks'], 'tab_locations');
   const ipam = useIpam();
   const { regions, campuses, datacenters, halls, rows, racks, loading, error } = ipam;
   const { devices } = useDevices();

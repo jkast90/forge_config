@@ -20,17 +20,16 @@ import { PlusIcon, TrashIcon, EditIcon, Icon } from './Icon';
 import { useConfirm } from './ConfirmDialog';
 
 const EMPTY_GROUP_FORM: GroupFormData = {
-  id: '',
   name: '',
   description: '',
-  parent_id: '',
+  parent_id: null,
   precedence: 1000,
 };
 
 export function GroupManagement() {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showInfo, setShowInfo] = useState(false);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [groupForm, setGroupForm] = useState<GroupFormData>(EMPTY_GROUP_FORM);
@@ -75,7 +74,7 @@ export function GroupManagement() {
 
   // When selection changes, load variables and members
   useEffect(() => {
-    if (selectedGroupId) {
+    if (selectedGroupId != null) {
       fetchGroupVariables(selectedGroupId);
       fetchMembers(selectedGroupId);
     }
@@ -85,7 +84,7 @@ export function GroupManagement() {
   const groupTree = useMemo(() => {
     const childrenMap: Record<string, Group[]> = {};
     groups.forEach(g => {
-      const parentKey = g.parent_id || '__root__';
+      const parentKey = g.parent_id != null ? String(g.parent_id) : '__root__';
       if (!childrenMap[parentKey]) childrenMap[parentKey] = [];
       childrenMap[parentKey].push(g);
     });
@@ -96,8 +95,8 @@ export function GroupManagement() {
     }
 
     const result: TreeNode[] = [];
-    const buildTree = (parentId: string | null, depth: number) => {
-      const key = parentId || '__root__';
+    const buildTree = (parentId: number, depth: number) => {
+      const key = String(parentId);
       const children = childrenMap[key] || [];
       for (const child of children) {
         result.push({ group: child, depth });
@@ -105,11 +104,11 @@ export function GroupManagement() {
       }
     };
 
-    // "all" group first (no parent)
-    const allGroup = groups.find(g => g.id === 'all');
+    // "all" group first (id === 1)
+    const allGroup = groups.find(g => g.id === 1);
     if (allGroup) {
       result.push({ group: allGroup, depth: 0 });
-      buildTree('all', 1);
+      buildTree(1, 1);
     }
     // Any orphan groups (parent not in tree)
     const inTree = new Set(result.map(n => n.group.id));
@@ -139,13 +138,13 @@ export function GroupManagement() {
     groups
       .filter(g => g.id !== editingGroup?.id)
       .forEach(g => {
-        opts.push({ value: g.id, label: `${g.name} (prec: ${g.precedence})` });
+        opts.push({ value: String(g.id), label: `${g.name} (prec: ${g.precedence})` });
       });
     return opts;
   }, [groups, editingGroup]);
 
   // Handlers
-  const handleSelectGroup = useCallback((id: string) => {
+  const handleSelectGroup = useCallback((id: number) => {
     setSelectedGroupId(id);
     setActiveTab('variables');
   }, []);
@@ -159,25 +158,23 @@ export function GroupManagement() {
   const handleOpenEdit = useCallback((group: Group) => {
     setEditingGroup(group);
     setGroupForm({
-      id: group.id,
       name: group.name,
       description: group.description || '',
-      parent_id: group.parent_id || '',
+      parent_id: group.parent_id ?? null,
       precedence: group.precedence,
     });
     setShowGroupForm(true);
   }, []);
 
   const handleSubmitGroup = useCallback(async () => {
-    if (!groupForm.id.trim() || !groupForm.name.trim()) {
-      addNotification('error', 'ID and Name are required');
+    if (!groupForm.name.trim()) {
+      addNotification('error', 'Name is required');
       return;
     }
     const data: Partial<GroupFormData> = {
-      id: groupForm.id.trim(),
       name: groupForm.name.trim(),
       description: groupForm.description || undefined,
-      parent_id: groupForm.parent_id || undefined,
+      parent_id: groupForm.parent_id ?? undefined,
       precedence: groupForm.precedence,
     };
 
@@ -189,24 +186,23 @@ export function GroupManagement() {
     }
     if (success) {
       setShowGroupForm(false);
-      if (!editingGroup) setSelectedGroupId(groupForm.id.trim());
     }
   }, [groupForm, editingGroup, createGroup, updateGroup]);
 
-  const handleDeleteGroup = useCallback(async (id: string) => {
-    if (id === 'all') {
+  const handleDeleteGroup = useCallback(async (group: Group) => {
+    if (group.id === 1) {
       addNotification('error', 'Cannot delete the "all" group');
       return;
     }
-    if (!(await confirm({ title: 'Delete Group', message: `Delete group "${id}"? Variables will be lost and child groups will become root-level.`, confirmText: 'Delete', destructive: true }))) return;
-    const success = await deleteGroup(id);
-    if (success && selectedGroupId === id) {
+    if (!(await confirm({ title: 'Delete Group', message: `Delete group "${group.name}"? Variables will be lost and child groups will become root-level.`, confirmText: 'Delete', destructive: true }))) return;
+    const success = await deleteGroup(group.id);
+    if (success && selectedGroupId === group.id) {
       setSelectedGroupId(null);
     }
-  }, [deleteGroup, selectedGroupId]);
+  }, [deleteGroup, selectedGroupId, confirm]);
 
   const handleAddVariable = useCallback(async () => {
-    if (!selectedGroupId || !newVarKey.trim()) {
+    if (selectedGroupId == null || !newVarKey.trim()) {
       addNotification('error', 'Key name is required');
       return;
     }
@@ -224,13 +220,13 @@ export function GroupManagement() {
   }, []);
 
   const handleSaveEditVar = useCallback(async () => {
-    if (!selectedGroupId || !editingVar) return;
+    if (selectedGroupId == null || !editingVar) return;
     await setGroupVariable(selectedGroupId, editingVar.key, editVarValue);
     setEditingVar(null);
   }, [selectedGroupId, editingVar, editVarValue, setGroupVariable]);
 
   const handleAddMember = useCallback(async () => {
-    if (!selectedGroupId || !selectedDeviceId) return;
+    if (selectedGroupId == null || !selectedDeviceId) return;
     const success = await addMember(selectedGroupId, Number(selectedDeviceId));
     if (success) {
       setShowAddMember(false);
@@ -239,7 +235,7 @@ export function GroupManagement() {
   }, [selectedGroupId, selectedDeviceId, addMember]);
 
   const handleRemoveMember = useCallback(async (deviceId: number) => {
-    if (!selectedGroupId) return;
+    if (selectedGroupId == null) return;
     await removeMember(selectedGroupId, deviceId);
   }, [selectedGroupId, removeMember]);
 
@@ -293,7 +289,7 @@ export function GroupManagement() {
       icon: <TrashIcon size={14} />,
       label: 'Delete',
       onClick: (row: GroupVariable) => {
-        if (selectedGroupId) deleteGroupVariable(selectedGroupId, row.key);
+        if (selectedGroupId != null) deleteGroupVariable(selectedGroupId, row.key);
       },
       variant: 'danger' as const,
     },
@@ -319,6 +315,13 @@ export function GroupManagement() {
       variant: 'danger' as const,
     },
   ], [handleRemoveMember]);
+
+  // Find the parent group name for display
+  const parentGroupName = useMemo(() => {
+    if (!selectedGroup?.parent_id) return null;
+    const parent = groups.find(g => g.id === selectedGroup.parent_id);
+    return parent?.name || String(selectedGroup.parent_id);
+  }, [selectedGroup, groups]);
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading groups...">
@@ -377,8 +380,8 @@ export function GroupManagement() {
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Icon name={g.id === 'all' ? 'public' : depth > 0 ? 'subdirectory_arrow_right' : 'folder'} size={16} />
-                        <span style={{ fontWeight: g.id === 'all' ? 600 : 500 }}>{g.name}</span>
+                        <Icon name={g.id === 1 ? 'public' : depth > 0 ? 'subdirectory_arrow_right' : 'folder'} size={16} />
+                        <span style={{ fontWeight: g.id === 1 ? 600 : 500 }}>{g.name}</span>
                         <span style={{
                           fontSize: '11px',
                           padding: '1px 6px',
@@ -394,7 +397,7 @@ export function GroupManagement() {
                         {(g.child_count ?? 0) > 0 && ` · ${g.child_count} child${(g.child_count ?? 0) !== 1 ? 'ren' : ''}`}
                       </div>
                     </div>
-                    {g.id !== 'all' && (
+                    {g.id !== 1 && (
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <IconButton
                           size="sm"
@@ -406,7 +409,7 @@ export function GroupManagement() {
                         <IconButton
                           variant="danger"
                           size="sm"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g.id); }}
+                          onClick={(e) => { e.stopPropagation(); handleDeleteGroup(g); }}
                           title="Delete group"
                         >
                           <TrashIcon size={14} />
@@ -440,10 +443,10 @@ export function GroupManagement() {
                     )}
                     <div style={{ fontSize: '12px', opacity: 0.5, marginTop: '2px' }}>
                       Precedence: {selectedGroup.precedence}
-                      {selectedGroup.parent_id && ` · Parent: ${selectedGroup.parent_id}`}
+                      {parentGroupName && ` · Parent: ${parentGroupName}`}
                     </div>
                   </div>
-                  {selectedGroup.id !== 'all' && (
+                  {selectedGroup.id !== 1 && (
                     <IconButton size="sm" onClick={() => handleOpenEdit(selectedGroup)} title="Edit group">
                       <EditIcon size={16} />
                     </IconButton>
@@ -516,11 +519,11 @@ export function GroupManagement() {
                         actions={memberActions}
                         getRowKey={(row) => row.id}
                         tableId="group-members"
-                        emptyMessage={selectedGroup.id === 'all' ?
+                        emptyMessage={selectedGroup.id === 1 ?
                           'All devices implicitly belong to the "all" group.' :
                           'No devices in this group.'
                         }
-                        emptyDescription={selectedGroup.id === 'all' ?
+                        emptyDescription={selectedGroup.id === 1 ?
                           'No explicit membership needed for the "all" group.' :
                           'Add devices using the button above.'
                         }
@@ -551,11 +554,10 @@ export function GroupManagement() {
       {/* Create/Edit Group Modal */}
       <FormDialog isOpen={showGroupForm} onClose={() => setShowGroupForm(false)} title={editingGroup ? 'Edit Group' : 'Create Group'} onSubmit={(e) => { e.preventDefault(); handleSubmitGroup(); }} submitText={editingGroup ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={groupForm.id} onChange={(e) => setGroupForm(f => ({ ...f, id: e.target.value }))} placeholder="e.g., spines, leafs, dc-east" disabled={!!editingGroup} />
-          <FormField label="Name" name="name" value={groupForm.name} onChange={(e) => setGroupForm(f => ({ ...f, name: e.target.value }))} placeholder="Display name" />
+          <FormField label="Name" name="name" value={groupForm.name} onChange={(e) => setGroupForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., spines, leafs, dc-east" />
           <FormField label="Description" name="description" value={groupForm.description} onChange={(e) => setGroupForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional description" />
-          <SelectField label="Parent Group" name="parent_id" value={groupForm.parent_id} onChange={(e) => setGroupForm(f => ({ ...f, parent_id: e.target.value }))} options={parentOptions} disabled={editingGroup?.id === 'all'} />
-          <FormField label="Precedence" name="precedence" type="number" value={String(groupForm.precedence)} onChange={(e) => setGroupForm(f => ({ ...f, precedence: parseInt(e.target.value) || 1000 }))} disabled={editingGroup?.id === 'all'} />
+          <SelectField label="Parent Group" name="parent_id" value={groupForm.parent_id != null ? String(groupForm.parent_id) : ''} onChange={(e) => setGroupForm(f => ({ ...f, parent_id: e.target.value ? Number(e.target.value) : null }))} options={parentOptions} disabled={editingGroup?.id === 1} />
+          <FormField label="Precedence" name="precedence" type="number" value={String(groupForm.precedence)} onChange={(e) => setGroupForm(f => ({ ...f, precedence: parseInt(e.target.value) || 1000 }))} disabled={editingGroup?.id === 1} />
         </div>
       </FormDialog>
 

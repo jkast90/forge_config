@@ -75,6 +75,9 @@ export {
 export { useInflight } from './useInflight';
 export { useApiHistory } from './useApiHistory';
 export { useModalRoute, type UseModalRouteReturn } from './useModalRoute';
+export { useNavigationTab, usePersistedTab } from './useNavigationTab';
+export { useLocalStorage } from './useLocalStorage';
+export { usePersistedSet } from './usePersistedSet';
 export { useTelemetry } from './useTelemetry';
 export {
   useTableFeatures,

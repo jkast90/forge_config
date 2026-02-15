@@ -38,7 +38,7 @@ export function ConfirmDialog({
 
   return (
     <Modal isOpen={isOpen} onClose={onCancel} title={title} footer={footer}>
-      <p style={{ margin: 0, lineHeight: 1.5 }}>{message}</p>
+      <p style={{ margin: 0, lineHeight: 1.5, whiteSpace: 'pre-line' }}>{message}</p>
     </Modal>
   );
 }

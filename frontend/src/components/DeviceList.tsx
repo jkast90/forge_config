@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useBackups, useDevices, useTopologies, useAsyncModal, useModalRoute, useWebSocket, formatDate, getServices, addNotification } from '@core';
+import { useBackups, useDevices, useTopologies, useAsyncModal, useModalRoute, useWebSocket, usePersistedSet, formatDate, getServices, addNotification, navigateAction } from '@core';
 import type { Device, ConfigResult, BackupContentResult, ConfigPreviewResult, Backup, NetBoxStatus, Job, TopologyRole } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
@@ -34,6 +34,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
   const modalRoute = useModalRoute();
 
   const [showInfo, setShowInfo] = useState(false);
+  const [selectedDeviceIds, setSelectedDeviceIds] = usePersistedSet('devices_selected');
   const [commandDevice, setCommandDevice] = useState<Device | null>(null);
   const [portsDevice, setPortsDevice] = useState<Device | null>(null);
 
@@ -286,6 +287,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
       label: 'Backup',
       onClick: (d) => onBackup(d.id),
       tooltip: 'Trigger backup',
+      bulk: true,
     },
     {
       icon: (d) => loadingIcon(configModal.item?.id === d.id && configModal.loading, 'description'),
@@ -303,6 +305,23 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
       tooltip: 'Preview & deploy config',
       loading: (d) => previewModal.item?.id === d.id && previewModal.loading,
       disabled: (d) => !d.config_template && !d.vendor,
+    },
+    {
+      icon: <Icon name="send" size={14} />,
+      label: 'Deploy',
+      onClick: async (d) => {
+        try {
+          await getServices().devices.deployConfig(d.id);
+          addNotification('success', `Deploy queued for ${d.hostname}`, navigateAction('View Jobs', 'jobs', 'history'));
+        } catch {
+          addNotification('error', `Failed to deploy to ${d.hostname}`, navigateAction('View Jobs', 'jobs', 'history'));
+        }
+      },
+      variant: 'primary',
+      tooltip: 'Deploy config via SSH',
+      disabled: (d) => !d.config_template && !d.vendor,
+      bulk: true,
+      show: () => false, // Hidden from per-row actions, only shown in bulk bar
     },
     {
       icon: (d) => loadingIcon(netboxModal.item?.id === d.id && netboxModal.loading, 'cloud'),
@@ -343,6 +362,13 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
       },
       variant: 'danger',
       tooltip: 'Delete device',
+      bulk: true,
+      bulkOnClick: (d) => onDelete(d.id),
+      bulkConfirm: (rows) => ({
+        title: `Delete ${rows.length} Devices`,
+        message: `This will delete the following devices:\n\n${rows.map(d => `  \u2022 ${d.hostname} (${d.ip})`).join('\n')}\n\nThis cannot be undone.`,
+        confirmText: 'Delete All',
+      }),
     },
   ];
 
@@ -373,6 +399,9 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
           searchPlaceholder="Search devices..."
           emptyMessage="No devices configured yet."
           emptyDescription="Add a device using the button above."
+          selectable
+          selectedKeys={selectedDeviceIds}
+          onSelectionChange={setSelectedDeviceIds}
         />
       </Card>
 
@@ -641,6 +670,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
           </div>
         </FormDialog>
       )}
+
 
       <ConfirmDialogRenderer />
     </>

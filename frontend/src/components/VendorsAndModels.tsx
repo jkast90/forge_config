@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { useVendors, useDhcpOptions, useDeviceModels } from '@core';
+import { useVendors, useDhcpOptions, useDeviceModels, usePersistedTab } from '@core';
 import { Card } from './Card';
 import { SideTabs } from './SideTabs';
 import type { SideTab } from './SideTabs';
@@ -10,7 +9,7 @@ import { DeviceModelManagement } from './DeviceModelManagement';
 type Tab = 'vendors' | 'dhcp' | 'models';
 
 export function VendorsAndModels() {
-  const [activeTab, setActiveTab] = useState<Tab>('vendors');
+  const [activeTab, setActiveTab] = usePersistedTab<Tab>('vendors', ['vendors', 'dhcp', 'models'], 'tab_vendors-models');
   const { vendors } = useVendors();
   const { options } = useDhcpOptions();
   const { deviceModels } = useDeviceModels();

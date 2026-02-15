@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useTemplates, useGroups, useDeviceVariables, useCredentials, useDeviceRoles } from '@core';
+import { useTemplates, useGroups, useDeviceVariables, useCredentials, useDeviceRoles, usePersistedTab } from '@core';
 import { Card } from './Card';
 import { InfoSection } from './InfoSection';
 import { SideTabs } from './SideTabs';
@@ -15,7 +15,7 @@ type Tab = 'templates' | 'roles' | 'groups' | 'variables' | 'inspector' | 'crede
 
 export function ConfigManagement() {
   const [showInfo, setShowInfo] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>('templates');
+  const [activeTab, setActiveTab] = usePersistedTab<Tab>('templates', ['templates', 'roles', 'groups', 'variables', 'inspector', 'credentials'], 'tab_config');
   const { templates } = useTemplates();
   const { groups } = useGroups();
   const { keys: variableKeys } = useDeviceVariables();
@@ -59,6 +59,7 @@ export function ConfigManagement() {
           <DeviceRolesPanel
             deviceRoles={deviceRoles}
             templates={templates}
+            groups={groups}
             loading={rolesLoading}
             onCreate={createDeviceRole}
             onUpdate={updateDeviceRole}

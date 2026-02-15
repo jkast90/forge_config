@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { DeviceRole, DeviceRoleFormData, Template } from '@core';
+import type { DeviceRole, DeviceRoleFormData, Template, Group } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
 import { FormDialog } from './FormDialog';
@@ -7,11 +7,13 @@ import { FormField } from './FormField';
 import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { Icon, PlusIcon, RefreshIcon, SpinnerIcon } from './Icon';
+import { Toggle } from './Toggle';
 import { useConfirm } from './ConfirmDialog';
 
 interface DeviceRolesPanelProps {
   deviceRoles: DeviceRole[];
   templates: Template[];
+  groups: Group[];
   loading: boolean;
   onCreate: (data: DeviceRoleFormData) => Promise<boolean>;
   onUpdate: (id: string, data: DeviceRoleFormData) => Promise<boolean>;
@@ -19,16 +21,16 @@ interface DeviceRolesPanelProps {
   onRefresh: () => void;
 }
 
-export function DeviceRolesPanel({ deviceRoles, templates, loading, onCreate, onUpdate, onDelete, onRefresh }: DeviceRolesPanelProps) {
+export function DeviceRolesPanel({ deviceRoles, templates, groups, loading, onCreate, onUpdate, onDelete, onRefresh }: DeviceRolesPanelProps) {
   const [showForm, setShowForm] = useState(false);
   const [editingRole, setEditingRole] = useState<DeviceRole | null>(null);
-  const [formData, setFormData] = useState<DeviceRoleFormData>({ name: '', description: '', template_ids: [] });
+  const [formData, setFormData] = useState<DeviceRoleFormData>({ name: '', description: '', template_ids: [], group_names: [] });
   const [saving, setSaving] = useState(false);
   const { confirm, ConfirmDialogRenderer } = useConfirm();
 
   const openCreate = () => {
     setEditingRole(null);
-    setFormData({ name: '', description: '', template_ids: [] });
+    setFormData({ name: '', description: '', template_ids: [], group_names: [] });
     setShowForm(true);
   };
 
@@ -39,6 +41,7 @@ export function DeviceRolesPanel({ deviceRoles, templates, loading, onCreate, on
       name: role.name,
       description: role.description || '',
       template_ids: role.template_ids || [],
+      group_names: role.group_names || [],
     });
     setShowForm(true);
   };
@@ -76,6 +79,15 @@ export function DeviceRolesPanel({ deviceRoles, templates, loading, onCreate, on
     });
   };
 
+  const toggleGroup = (groupName: string) => {
+    setFormData(prev => {
+      const names = prev.group_names.includes(groupName)
+        ? prev.group_names.filter(n => n !== groupName)
+        : [...prev.group_names, groupName];
+      return { ...prev, group_names: names };
+    });
+  };
+
   const columns: TableColumn<DeviceRole>[] = useMemo(() => [
     {
       header: 'Name',
@@ -94,6 +106,19 @@ export function DeviceRolesPanel({ deviceRoles, templates, loading, onCreate, on
         );
       },
       searchValue: (r) => (r.template_names || []).join(' '),
+    },
+    {
+      header: 'Groups',
+      accessor: (r) => {
+        const names = r.group_names || [];
+        if (names.length === 0) return <span className="text-muted">None</span>;
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {names.map(name => Cell.badge(name, 'default'))}
+          </div>
+        );
+      },
+      searchValue: (r) => (r.group_names || []).join(' '),
     },
     {
       header: 'Description',
@@ -187,39 +212,51 @@ export function DeviceRolesPanel({ deviceRoles, templates, loading, onCreate, on
             borderRadius: '4px',
             maxHeight: '200px',
             overflow: 'auto',
+            padding: '4px 12px',
           }}>
             {templates.length === 0 ? (
-              <div style={{ padding: '12px', color: 'var(--text-muted)' }}>No templates available</div>
+              <div style={{ padding: '12px 0', color: 'var(--text-muted)' }}>No templates available</div>
             ) : (
               templates.map(t => (
-                <label
+                <Toggle
                   key={t.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '6px 12px',
-                    cursor: 'pointer',
-                    borderBottom: '1px solid var(--border-color)',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={formData.template_ids.includes(t.id)}
-                    onChange={() => toggleTemplate(t.id)}
-                  />
-                  <span>{t.name}</span>
-                  {t.description && (
-                    <span style={{ color: 'var(--text-muted)', fontSize: '12px', marginLeft: 'auto' }}>
-                      {t.description}
-                    </span>
-                  )}
-                </label>
+                  label={t.name}
+                  description={t.description || undefined}
+                  checked={formData.template_ids.includes(t.id)}
+                  onChange={() => toggleTemplate(t.id)}
+                />
               ))
             )}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
             {formData.template_ids.length} template{formData.template_ids.length !== 1 ? 's' : ''} selected
+          </div>
+        </div>
+        <div className="form-field">
+          <label className="form-field-label">Auto-assign Groups</label>
+          <div style={{
+            border: '1px solid var(--border-color)',
+            borderRadius: '4px',
+            maxHeight: '200px',
+            overflow: 'auto',
+            padding: '4px 12px',
+          }}>
+            {groups.length === 0 ? (
+              <div style={{ padding: '12px 0', color: 'var(--text-muted)' }}>No groups available</div>
+            ) : (
+              groups.map(g => (
+                <Toggle
+                  key={g.id}
+                  label={g.name}
+                  description={g.description || undefined}
+                  checked={formData.group_names.includes(g.name)}
+                  onChange={() => toggleGroup(g.name)}
+                />
+              ))
+            )}
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            Devices with this role will be automatically added to the selected groups.
           </div>
         </div>
       </FormDialog>

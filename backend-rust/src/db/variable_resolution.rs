@@ -9,6 +9,9 @@ use crate::models::{
 use super::groups::GroupRepo;
 use super::device_variables::DeviceVariableRepo;
 
+/// The "all" group always has integer ID 1 after migration.
+const ALL_GROUP_ID: i64 = 1;
+
 /// Ansible-style variable resolution with group inheritance.
 ///
 /// Resolution order (lowest → highest priority):
@@ -25,14 +28,14 @@ impl VariableResolver {
     ) -> Result<ResolvedVariablesResponse> {
         // 1. Load all groups into a lookup map
         let all_groups = GroupRepo::list_all_raw(pool).await?;
-        let groups_by_id: HashMap<String, Group> = all_groups
+        let groups_by_id: HashMap<i64, Group> = all_groups
             .iter()
             .cloned()
-            .map(|g| (g.id.clone(), g))
+            .map(|g| (g.id, g))
             .collect();
 
         // 2. Load device's direct group memberships
-        let member_group_ids: Vec<String> = sqlx::query_scalar(
+        let member_group_ids: Vec<i64> = sqlx::query_scalar(
             "SELECT group_id FROM device_group_members WHERE device_id = ?",
         )
         .bind(device_id)
@@ -40,17 +43,17 @@ impl VariableResolver {
         .await?;
 
         // 3. For each direct group, build ancestor chain (walk parent_id up to root)
-        let mut all_relevant_ids: HashSet<String> = HashSet::new();
+        let mut all_relevant_ids: HashSet<i64> = HashSet::new();
         // (group_id, depth) — depth = distance from "all" root
-        let mut group_depths: HashMap<String, usize> = HashMap::new();
+        let mut group_depths: HashMap<i64, usize> = HashMap::new();
 
         for gid in &member_group_ids {
-            let chain = build_ancestor_chain(gid, &groups_by_id);
+            let chain = build_ancestor_chain(*gid, &groups_by_id);
             for (depth, id) in chain.iter().enumerate() {
-                all_relevant_ids.insert(id.clone());
+                all_relevant_ids.insert(*id);
                 // Use the shallowest depth if a group appears in multiple chains
                 let d = depth + 1; // +1 because "all" is depth 0
-                group_depths.entry(id.clone()).and_modify(|e| {
+                group_depths.entry(*id).and_modify(|e| {
                     if d < *e { *e = d; }
                 }).or_insert(d);
             }
@@ -60,7 +63,7 @@ impl VariableResolver {
         //    lower precedence evaluated first (overridden by higher)
         let mut sorted_groups: Vec<&Group> = all_relevant_ids
             .iter()
-            .filter(|id| *id != "all") // "all" handled separately as layer 0
+            .filter(|id| **id != ALL_GROUP_ID) // "all" handled separately as layer 0
             .filter_map(|id| groups_by_id.get(id))
             .collect();
 
@@ -71,16 +74,16 @@ impl VariableResolver {
         });
 
         // 5. Load group variables for all relevant groups (including "all")
-        let mut var_group_ids: Vec<String> = vec!["all".to_string()];
-        var_group_ids.extend(sorted_groups.iter().map(|g| g.id.clone()));
+        let mut var_group_ids: Vec<i64> = vec![ALL_GROUP_ID];
+        var_group_ids.extend(sorted_groups.iter().map(|g| g.id));
 
         let all_group_vars = GroupRepo::list_variables_for_groups(pool, &var_group_ids).await?;
 
         // Index group vars by group_id
-        let mut vars_by_group: HashMap<String, HashMap<String, String>> = HashMap::new();
+        let mut vars_by_group: HashMap<i64, HashMap<String, String>> = HashMap::new();
         for gv in &all_group_vars {
             vars_by_group
-                .entry(gv.group_id.clone())
+                .entry(gv.group_id)
                 .or_default()
                 .insert(gv.key.clone(), gv.value.clone());
         }
@@ -96,10 +99,10 @@ impl VariableResolver {
         let mut layers: Vec<ResolutionLayer> = Vec::new();
 
         // Layer 0: "all" group
-        let all_group = groups_by_id.get("all");
-        let all_vars = vars_by_group.remove("all").unwrap_or_default();
+        let all_group = groups_by_id.get(&ALL_GROUP_ID);
+        let all_vars = vars_by_group.remove(&ALL_GROUP_ID).unwrap_or_default();
         layers.push(ResolutionLayer {
-            source: "all".to_string(),
+            source: ALL_GROUP_ID.to_string(),
             source_name: all_group.map(|g| g.name.clone()).unwrap_or_else(|| "all".to_string()),
             source_type: "all".to_string(),
             precedence: 0,
@@ -110,7 +113,7 @@ impl VariableResolver {
         for group in &sorted_groups {
             let gvars = vars_by_group.remove(&group.id).unwrap_or_default();
             layers.push(ResolutionLayer {
-                source: group.id.clone(),
+                source: group.id.to_string(),
                 source_name: group.name.clone(),
                 source_type: "group".to_string(),
                 precedence: group.precedence,
@@ -181,17 +184,17 @@ impl VariableResolver {
 /// Build ancestor chain for a group, walking parent_id up.
 /// Returns a list from outermost ancestor to self (excluding "all").
 /// Stops at "all" or on cycle detection.
-fn build_ancestor_chain(group_id: &str, groups_by_id: &HashMap<String, Group>) -> Vec<String> {
+fn build_ancestor_chain(group_id: i64, groups_by_id: &HashMap<i64, Group>) -> Vec<i64> {
     let mut chain = Vec::new();
     let mut visited = HashSet::new();
-    let mut current = Some(group_id.to_string());
+    let mut current = Some(group_id);
 
     while let Some(id) = current {
-        if id == "all" || !visited.insert(id.clone()) {
+        if id == ALL_GROUP_ID || !visited.insert(id) {
             break;
         }
-        chain.push(id.clone());
-        current = groups_by_id.get(&id).and_then(|g| g.parent_id.clone());
+        chain.push(id);
+        current = groups_by_id.get(&id).and_then(|g| g.parent_id);
     }
 
     chain.reverse(); // ancestors first, self last

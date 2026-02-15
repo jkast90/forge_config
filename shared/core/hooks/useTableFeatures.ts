@@ -22,6 +22,8 @@ export interface UseTableFeaturesOptions<T> {
 
 export interface UseTableFeaturesReturn<T> {
   displayData: T[];
+  /** All rows after search + column filters (before pagination) */
+  filteredData: T[];
   filteredCount: number;
   totalCount: number;
   currentPage: number;
@@ -92,6 +94,7 @@ export function useTableFeatures<T>({
 
   return {
     displayData,
+    filteredData,
     filteredCount,
     totalCount,
     currentPage,

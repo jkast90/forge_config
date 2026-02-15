@@ -62,8 +62,9 @@ pub async fn build_virtual_clos(
     let use_frr = spawn_containers && is_frr_image(&ceos_image);
     let vendor_id = if use_frr { "frr" } else { "arista" };
 
-    // Look up device roles to resolve config_template per topology role
+    // Look up device roles to resolve config_template + group_names per topology role
     let mut role_templates: HashMap<String, String> = HashMap::new();
+    let mut role_group_names: HashMap<String, Vec<String>> = HashMap::new();
     for role_name in ["spine", "leaf", "external"] {
         let role_id = format!("{}-{}", vendor_id, role_name);
         if let Ok(Some(role)) = state.store.get_device_role(&role_id).await {
@@ -74,6 +75,9 @@ pub async fn build_virtual_clos(
                         .unwrap_or(first);
                     role_templates.insert(role_name.to_string(), base.to_string());
                 }
+            }
+            if !role.group_names.is_empty() {
+                role_group_names.insert(role_name.to_string(), role.group_names.clone());
             }
         }
     }
@@ -302,6 +306,33 @@ pub async fn build_virtual_clos(
 
         match state.store.create_device(&dev_req).await {
             Ok(dev) => {
+                // Auto-assign device to role-based groups
+                if let Some(group_names) = role_group_names.get(&node.role) {
+                    for group_name in group_names {
+                        // Look up group by name, create if it doesn't exist
+                        let group_id = match state.store.get_group_by_name(group_name).await {
+                            Ok(Some(g)) => g.id,
+                            _ => {
+                                let group_req = crate::models::CreateGroupRequest {
+                                    name: group_name.clone(),
+                                    description: Some("Auto-created for device role".to_string()),
+                                    parent_id: None,
+                                    precedence: 100,
+                                };
+                                match state.store.create_group(&group_req).await {
+                                    Ok(g) => g.id,
+                                    Err(e) => {
+                                        tracing::warn!("Failed to create group {}: {}", group_name, e);
+                                        continue;
+                                    }
+                                }
+                            }
+                        };
+                        if let Err(e) = state.store.add_device_to_group(dev.id, group_id).await {
+                            tracing::warn!("Failed to add {} to group {}: {}", node.hostname, group_name, e);
+                        }
+                    }
+                }
                 result_devices.push(ClosLabDevice {
                     hostname: node.hostname.clone(),
                     role: node.role.to_string(),

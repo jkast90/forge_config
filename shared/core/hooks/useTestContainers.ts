@@ -63,43 +63,46 @@ export function useTestContainers(options: UseTestContainersOptions = {}): UseTe
   }, [dispatch]);
 
   const start = useCallback(async (id: string): Promise<boolean> => {
+    const name = containers.find((c) => c.id === id)?.hostname || id;
     try {
       await dispatch(startContainerThunk(id)).unwrap();
-      addNotification('success', 'Container started successfully');
+      addNotification('success', `Container started: ${name}`);
       dispatch(fetchContainers());
       return true;
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : 'Failed to start container';
+      const errMsg = err instanceof Error ? err.message : `Failed to start ${name}`;
       addNotification('error', errMsg);
       return false;
     }
-  }, [dispatch]);
+  }, [dispatch, containers]);
 
   const restart = useCallback(async (id: string): Promise<boolean> => {
+    const name = containers.find((c) => c.id === id)?.hostname || id;
     try {
       await dispatch(restartContainerThunk(id)).unwrap();
-      addNotification('success', 'Container restarted successfully');
+      addNotification('success', `Container restarted: ${name}`);
       dispatch(fetchContainers());
       return true;
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : 'Failed to restart container';
+      const errMsg = err instanceof Error ? err.message : `Failed to restart ${name}`;
       addNotification('error', errMsg);
       return false;
     }
-  }, [dispatch]);
+  }, [dispatch, containers]);
 
   const remove = useCallback(async (id: string): Promise<boolean> => {
+    const name = containers.find((c) => c.id === id)?.hostname || id;
     try {
       await dispatch(removeContainerThunk(id)).unwrap();
-      addNotification('success', 'Container removed successfully');
+      addNotification('success', `Container removed: ${name}`);
       dispatch(fetchContainers());
       return true;
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : 'Failed to remove container';
+      const errMsg = err instanceof Error ? err.message : `Failed to remove ${name}`;
       addNotification('error', errMsg);
       return false;
     }
-  }, [dispatch]);
+  }, [dispatch, containers]);
 
   return {
     containers,

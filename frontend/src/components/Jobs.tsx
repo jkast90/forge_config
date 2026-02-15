@@ -12,6 +12,7 @@ import {
   useModalForm,
   getServices,
   addNotification,
+  usePersistedTab,
   formatRelativeTime,
   getJobTypeBadgeVariant,
   getHttpMethodBadgeVariant,
@@ -99,7 +100,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
 
   const [targetMode, setTargetMode] = useState<TargetMode>('device');
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<number[]>([]);
-  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   const [groupMembers, setGroupMembers] = useState<number[]>([]);
   const [groupMembersLoading, setGroupMembersLoading] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState('');
@@ -112,7 +113,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
     if (isOpen) {
       setTargetMode('device');
       setSelectedDeviceIds([]);
-      setSelectedGroupId('');
+      setSelectedGroupId(null);
       setGroupMembers([]);
       setSelectedActionId(initialActionId || '');
       setCustomCommand('');
@@ -127,9 +128,9 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
     setTargetMode(tmpl.target_mode);
     if (tmpl.target_mode === 'device') {
       setSelectedDeviceIds(tmpl.target_device_ids);
-      setSelectedGroupId('');
+      setSelectedGroupId(null);
     } else {
-      setSelectedGroupId(tmpl.target_group_id);
+      setSelectedGroupId(tmpl.target_group_id || null);
       setSelectedDeviceIds([]);
     }
     if (tmpl.action_id) {
@@ -148,7 +149,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
 
   // Fetch group members when group selection changes
   useEffect(() => {
-    if (targetMode !== 'group' || !selectedGroupId) {
+    if (targetMode !== 'group' || selectedGroupId == null) {
       setGroupMembers([]);
       return;
     }
@@ -221,7 +222,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
   const groupOptions = useMemo(() => [
     { value: '', label: 'Select group...' },
     ...groups.map((g) => ({
-      value: g.id,
+      value: String(g.id),
       label: `${g.name}${g.device_count ? ` (${g.device_count} devices)` : ''}`,
     })),
   ], [groups]);
@@ -316,7 +317,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
             <button
               type="button"
               className={`run-job-target-tab${targetMode === 'device' ? ' active' : ''}`}
-              onClick={() => { setTargetMode('device'); setSelectedGroupId(''); }}
+              onClick={() => { setTargetMode('device'); setSelectedGroupId(null); }}
             >
               <Icon name="devices" size={16} />
               Devices
@@ -408,11 +409,11 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
           <SelectField
             label="Group"
             name="group"
-            value={selectedGroupId}
-            onChange={(e) => setSelectedGroupId(e.target.value)}
+            value={selectedGroupId != null ? String(selectedGroupId) : ''}
+            onChange={(e) => setSelectedGroupId(e.target.value ? Number(e.target.value) : null)}
             options={groupOptions}
           />
-          {selectedGroupId && (
+          {selectedGroupId != null && (
             <div className="run-job-group-info">
               {groupMembersLoading ? (
                 <span className="text-muted text-sm">Loading members...</span>
@@ -478,7 +479,7 @@ export function Jobs() {
   const [showInfo, setShowInfo] = useState(false);
   const [showActionsInfo, setShowActionsInfo] = useState(false);
   const [showHistoryInfo, setShowHistoryInfo] = useState(false);
-  const [activeTab, setActiveTab] = useState<JobTab>('actions');
+  const [activeTab, setActiveTab] = usePersistedTab<JobTab>('actions', ['actions', 'history', 'templates', 'credentials', 'parsers'], 'tab_jobs');
   const { jobs, loading, error, refresh } = useJobs();
   const { devices } = useDevices();
   const {

@@ -725,39 +725,43 @@ impl Store {
         groups::GroupRepo::list(&self.pool).await
     }
 
-    pub async fn get_group(&self, id: &str) -> Result<Option<Group>> {
+    pub async fn get_group(&self, id: i64) -> Result<Option<Group>> {
         groups::GroupRepo::get(&self.pool, id).await
+    }
+
+    pub async fn get_group_by_name(&self, name: &str) -> Result<Option<Group>> {
+        groups::GroupRepo::get_by_name(&self.pool, name).await
     }
 
     pub async fn create_group(&self, req: &CreateGroupRequest) -> Result<Group> {
         groups::GroupRepo::create(&self.pool, req).await
     }
 
-    pub async fn update_group(&self, id: &str, req: &CreateGroupRequest) -> Result<Group> {
+    pub async fn update_group(&self, id: i64, req: &CreateGroupRequest) -> Result<Group> {
         groups::GroupRepo::update(&self.pool, id, req).await
     }
 
-    pub async fn delete_group(&self, id: &str) -> Result<()> {
+    pub async fn delete_group(&self, id: i64) -> Result<()> {
         groups::GroupRepo::delete(&self.pool, id).await
     }
 
     // ========== Group Variable Operations ==========
 
-    pub async fn list_group_variables(&self, group_id: &str) -> Result<Vec<GroupVariable>> {
+    pub async fn list_group_variables(&self, group_id: i64) -> Result<Vec<GroupVariable>> {
         groups::GroupRepo::list_variables(&self.pool, group_id).await
     }
 
-    pub async fn set_group_variable(&self, group_id: &str, key: &str, value: &str) -> Result<()> {
+    pub async fn set_group_variable(&self, group_id: i64, key: &str, value: &str) -> Result<()> {
         groups::GroupRepo::set_variable(&self.pool, group_id, key, value).await
     }
 
-    pub async fn delete_group_variable(&self, group_id: &str, key: &str) -> Result<()> {
+    pub async fn delete_group_variable(&self, group_id: i64, key: &str) -> Result<()> {
         groups::GroupRepo::delete_variable(&self.pool, group_id, key).await
     }
 
     // ========== Group Membership Operations ==========
 
-    pub async fn list_group_members(&self, group_id: &str) -> Result<Vec<i64>> {
+    pub async fn list_group_members(&self, group_id: i64) -> Result<Vec<i64>> {
         groups::GroupRepo::list_group_members(&self.pool, group_id).await
     }
 
@@ -765,29 +769,29 @@ impl Store {
         groups::GroupRepo::list_device_groups(&self.pool, device_id).await
     }
 
-    pub async fn add_device_to_group(&self, device_id: i64, group_id: &str) -> Result<()> {
+    pub async fn add_device_to_group(&self, device_id: i64, group_id: i64) -> Result<()> {
         groups::GroupRepo::add_device_to_group(&self.pool, device_id, group_id).await
     }
 
-    pub async fn remove_device_from_group(&self, device_id: i64, group_id: &str) -> Result<()> {
+    pub async fn remove_device_from_group(&self, device_id: i64, group_id: i64) -> Result<()> {
         groups::GroupRepo::remove_device_from_group(&self.pool, device_id, group_id).await
     }
 
-    pub async fn set_group_members(&self, group_id: &str, device_ids: &[i64]) -> Result<()> {
+    pub async fn set_group_members(&self, group_id: i64, device_ids: &[i64]) -> Result<()> {
         groups::GroupRepo::set_group_members(&self.pool, group_id, device_ids).await
     }
 
-    pub async fn set_device_groups(&self, device_id: i64, group_ids: &[String]) -> Result<()> {
+    pub async fn set_device_groups(&self, device_id: i64, group_ids: &[i64]) -> Result<()> {
         groups::GroupRepo::set_device_groups(&self.pool, device_id, group_ids).await
     }
 
     // ========== Group Hierarchy ==========
 
-    pub async fn get_group_children(&self, group_id: &str) -> Result<Vec<Group>> {
+    pub async fn get_group_children(&self, group_id: i64) -> Result<Vec<Group>> {
         groups::GroupRepo::get_children(&self.pool, group_id).await
     }
 
-    pub async fn would_create_cycle(&self, group_id: &str, proposed_parent_id: &str) -> Result<bool> {
+    pub async fn would_create_cycle(&self, group_id: i64, proposed_parent_id: i64) -> Result<bool> {
         groups::GroupRepo::would_create_cycle(&self.pool, group_id, proposed_parent_id).await
     }
 
@@ -870,11 +874,10 @@ impl Store {
     // ========== Ensure "all" group ==========
 
     async fn ensure_all_group(&self) -> Result<()> {
-        let exists = groups::GroupRepo::get(&self.pool, "all").await?;
+        let exists = groups::GroupRepo::get(&self.pool, 1).await?;
         if exists.is_none() {
             tracing::info!("Creating 'all' group");
             let req = CreateGroupRequest {
-                id: "all".to_string(),
                 name: "all".to_string(),
                 description: Some("Default group — all devices inherit from this".to_string()),
                 parent_id: None,

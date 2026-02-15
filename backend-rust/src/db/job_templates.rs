@@ -12,6 +12,10 @@ fn map_row(row: &SqliteRow) -> JobTemplate {
         serde_json::from_str(&device_ids_json).unwrap_or_default()
     };
 
+    // target_group_id is stored as TEXT in the DB; parse to i64 (0 if empty/invalid)
+    let target_group_id_str: String = row.get("target_group_id");
+    let target_group_id: i64 = target_group_id_str.parse().unwrap_or(0);
+
     JobTemplate {
         id: row.get("id"),
         name: row.get("name"),
@@ -21,7 +25,7 @@ fn map_row(row: &SqliteRow) -> JobTemplate {
         action_id: row.get("action_id"),
         target_mode: row.get("target_mode"),
         target_device_ids,
-        target_group_id: row.get("target_group_id"),
+        target_group_id,
         schedule: row.get("schedule"),
         enabled: row.get::<i32, _>("enabled") != 0,
         last_run_at: row.get("last_run_at"),
@@ -53,6 +57,7 @@ impl JobTemplateRepo {
         let now = Utc::now();
         let id = uuid::Uuid::new_v4().to_string();
         let device_ids_json = serde_json::to_string(&req.target_device_ids)?;
+        let target_group_id_str = req.target_group_id.to_string();
 
         sqlx::query(
             r#"INSERT INTO job_templates (id, name, description, job_type, command, action_id,
@@ -67,7 +72,7 @@ impl JobTemplateRepo {
         .bind(&req.action_id)
         .bind(&req.target_mode)
         .bind(&device_ids_json)
-        .bind(&req.target_group_id)
+        .bind(&target_group_id_str)
         .bind(&req.schedule)
         .bind(req.enabled as i32)
         .bind(now)
@@ -84,6 +89,7 @@ impl JobTemplateRepo {
     pub async fn update(pool: &Pool<Sqlite>, id: &str, req: &CreateJobTemplateRequest) -> Result<JobTemplate> {
         let now = Utc::now();
         let device_ids_json = serde_json::to_string(&req.target_device_ids)?;
+        let target_group_id_str = req.target_group_id.to_string();
 
         let result = sqlx::query(
             r#"UPDATE job_templates SET name = ?, description = ?, job_type = ?, command = ?,
@@ -98,7 +104,7 @@ impl JobTemplateRepo {
         .bind(&req.action_id)
         .bind(&req.target_mode)
         .bind(&device_ids_json)
-        .bind(&req.target_group_id)
+        .bind(&target_group_id_str)
         .bind(&req.schedule)
         .bind(req.enabled as i32)
         .bind(now)

@@ -11,6 +11,8 @@ pub struct DeviceRole {
     pub template_ids: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub template_names: Option<Vec<String>>,
+    #[serde(default)]
+    pub group_names: Vec<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -23,4 +25,6 @@ pub struct CreateDeviceRoleRequest {
     pub description: String,
     #[serde(default)]
     pub template_ids: Vec<String>,
+    #[serde(default)]
+    pub group_names: Vec<String>,
 }

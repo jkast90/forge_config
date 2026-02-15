@@ -28,13 +28,15 @@ function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
-function NotificationItem({ notification, onClick }: { notification: Notification; onClick?: () => void }) {
-  const isClickable = !!onClick;
+function NotificationItem({ notification, onClick, onAction }: { notification: Notification; onClick?: () => void; onAction?: () => void }) {
+  const action = notification.action;
+  const isClickable = !!onClick || !!action;
+  const handleClick = onClick || (action ? () => { action.onClick(); onAction?.(); } : undefined);
   return (
     <div
       className={`notification-item${notification.read ? '' : ' notification-unread'}${isClickable ? ' clickable' : ''}`}
-      onClick={onClick}
-      title={isClickable ? 'View API details' : undefined}
+      onClick={handleClick}
+      title={isClickable ? (action ? action.label : 'View API details') : undefined}
     >
       <Icon
         name={LEVEL_ICONS[notification.level]}
@@ -45,7 +47,10 @@ function NotificationItem({ notification, onClick }: { notification: Notificatio
         <span className="notification-message">{notification.message}</span>
         <span className="notification-time">
           {formatTime(notification.timestamp)}
-          {isClickable && (
+          {action && (
+            <span className="notification-action-link">{action.label}</span>
+          )}
+          {!action && isClickable && (
             <Icon name="open_in_new" size={12} style={{ marginLeft: 4, opacity: 0.5 }} />
           )}
         </span>
@@ -93,6 +98,7 @@ export function Notifications({ isOpen, onClose, onViewApiError }: Notifications
               key={n.id}
               notification={n}
               onClick={n.level === 'error' && onViewApiError ? () => onViewApiError(n.timestamp) : undefined}
+              onAction={onClose}
             />
           ))}
         </div>
@@ -130,11 +136,13 @@ export function NotificationPopup() {
 
   return (
     <div
-      className="notification-popup"
+      className={`notification-popup${popup.action ? ' notification-popup-clickable' : ''}`}
       style={{
         opacity: exiting ? 0 : 1,
         transform: exiting ? 'translateY(-12px) scale(0.95)' : 'translateY(0) scale(1)',
+        cursor: popup.action ? 'pointer' : undefined,
       }}
+      onClick={popup.action ? () => { popup.action!.onClick(); setPopup(null); } : undefined}
     >
       <Icon
         name={LEVEL_ICONS[popup.level]}
@@ -142,6 +150,9 @@ export function NotificationPopup() {
         style={{ color: LEVEL_COLORS[popup.level], flexShrink: 0 }}
       />
       <span className="notification-popup-text">{popup.message}</span>
+      {popup.action && (
+        <span className="notification-action-link">{popup.action.label}</span>
+      )}
     </div>
   );
 }

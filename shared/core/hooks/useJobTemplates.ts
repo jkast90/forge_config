@@ -11,6 +11,7 @@ import {
 } from '../store/slices/jobTemplatesSlice';
 import { getServices } from '../services';
 import { addNotification } from '../services/notifications';
+import { navigateAction } from '../services/navigation';
 import { getErrorMessage } from '../utils/errors';
 
 export interface UseJobTemplatesReturn {
@@ -76,7 +77,7 @@ export function useJobTemplates(): UseJobTemplatesReturn {
   const run = useCallback(async (id: string): Promise<boolean> => {
     try {
       const jobs = await getServices().jobTemplates.run(id);
-      addNotification('success', `Queued ${jobs.length} job${jobs.length !== 1 ? 's' : ''} from template`);
+      addNotification('success', `Queued ${jobs.length} job${jobs.length !== 1 ? 's' : ''} from template`, navigateAction('View Jobs', 'jobs', 'history'));
       dispatch(fetchJobTemplates());
       return true;
     } catch (err) {

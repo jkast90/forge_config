@@ -5,6 +5,7 @@ export { ActionButtons } from './ActionButtons';
 export { Button } from './Button';
 export { IconButton } from './IconButton';
 export { Card } from './Card';
+export { Checkbox } from './Checkbox';
 export { CloseButton } from './CloseButton';
 export { ConfirmDialog, useConfirm } from './ConfirmDialog';
 export { ConfigViewer } from './ConfigViewer';

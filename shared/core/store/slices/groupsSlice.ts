@@ -24,12 +24,12 @@ export const createGroup = createAsyncThunk('groups/create', async (data: Partia
 
 export const updateGroup = createAsyncThunk(
   'groups/update',
-  async ({ id, data }: { id: string; data: Partial<GroupFormData> }) => {
+  async ({ id, data }: { id: number; data: Partial<GroupFormData> }) => {
     return getServices().groups.update(id, data);
   }
 );
 
-export const deleteGroup = createAsyncThunk('groups/delete', async (id: string) => {
+export const deleteGroup = createAsyncThunk('groups/delete', async (id: number) => {
   await getServices().groups.remove(id);
   return id;
 });

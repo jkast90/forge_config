@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import type { Device, DeviceFormData } from '@core';
-import { useDevices, useDiscovery, useTestContainers } from '@core';
+import { useDevices, useDiscovery, useTestContainers, usePersistedTab } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
 import { DeviceList } from './DeviceList';
@@ -21,7 +20,7 @@ interface DevicesPageProps {
 type Tab = 'devices' | 'discovery' | 'containers';
 
 export function DevicesPage({ onEdit, onDelete, onBackup, onRefresh, onAddDiscoveredDevice }: DevicesPageProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('devices');
+  const [activeTab, setActiveTab] = usePersistedTab<Tab>('devices', ['devices', 'discovery', 'containers'], 'tab_devices');
   const { devices } = useDevices();
   const { discovered } = useDiscovery();
   const { containers } = useTestContainers();
