@@ -1,0 +1,62 @@
+# =============================================================
+# shared/core/BUILD.bazel
+#
+# Shared TypeScript module consumed by both frontend and mobile.
+# This is NOT an npm package — it has no package.json. It's a
+# ts_project that other targets depend on directly.
+#
+# It doesn't have its own tsconfig.json either — it relies on
+# the consumer's tsconfig. For Bazel, we generate a minimal one.
+#
+# Targets:
+#   bazel build //shared/core:core   Compile to JS + declarations
+# =============================================================
+
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+
+# Generate a tsconfig for this package since it doesn't have one.
+# In the non-Bazel build, the frontend's tsconfig handles this
+# via the @core path alias.
+write_file(
+    name = "gen_tsconfig",
+    out = "tsconfig.bazel.json",
+    content = ["""{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "declaration": true,
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "."
+  },
+  "include": ["**/*.ts", "**/*.tsx"]
+}"""],
+)
+
+ts_project(
+    name = "core",
+    srcs = glob(
+        [
+            "**/*.ts",
+            "**/*.tsx",
+        ],
+        # Exclude test files if any exist
+        exclude = ["**/*.test.ts", "**/*.spec.ts"],
+    ),
+    declaration = True,
+    tsconfig = ":tsconfig.bazel.json",
+    deps = [
+        # These come from the frontend's node_modules since shared/core
+        # has no package.json of its own. The frontend and mobile both
+        # provide react + redux at the same versions.
+        "@npm_frontend//:node_modules/react",
+        "@npm_frontend//:node_modules/@types/react",
+        "@npm_frontend//:node_modules/react-redux",
+        "@npm_frontend//:node_modules/@reduxjs/toolkit",
+    ],
+    visibility = ["//visibility:public"],
+)

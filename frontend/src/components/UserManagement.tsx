@@ -11,6 +11,7 @@ import { LoadingState } from './LoadingState';
 import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { Icon, PlusIcon, RefreshIcon } from './Icon';
+import { Toggle } from './Toggle';
 
 const EMPTY_FORM: UserFormData = {
   username: '',
@@ -171,16 +172,11 @@ export function UserManagement() {
           placeholder={editingUser ? 'Leave blank to keep current password' : 'Enter password'}
           required={!editingUser}
         />
-        <div className="form-group">
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input
-              type="checkbox"
-              checked={formData.enabled}
-              onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-            />
-            Enabled
-          </label>
-        </div>
+        <Toggle
+          label="Enabled"
+          checked={formData.enabled}
+          onChange={(checked) => setFormData({ ...formData, enabled: checked })}
+        />
       </FormDialog>
     </LoadingState>
   );

@@ -133,7 +133,13 @@ export function TestContainers() {
   const handleBuildClosLab = async (image?: string) => {
     setBuildingClos(true);
     try {
-      const result = await getServices().testContainers.buildClosLab(image);
+      const result = await getServices().testContainers.buildVirtualClos({
+        spines: 2,
+        leaves: 2,
+        external_devices: 0,
+        spawn_containers: true,
+        ceos_image: image || '',
+      });
       const type_ = image?.includes('frr') ? 'FRR' : 'cEOS';
       addNotification('success', `CLOS lab ready: ${result.devices.length} ${type_} switches in ${result.topology_name}`);
       refresh();
@@ -147,7 +153,7 @@ export function TestContainers() {
 
   const handleTeardownClosLab = async () => {
     try {
-      await getServices().testContainers.teardownClosLab();
+      await getServices().testContainers.teardownVirtualClos();
       addNotification('success', 'CLOS lab torn down');
       refresh();
     } catch (err) {

@@ -1,0 +1,193 @@
+# =============================================================
+# backend-rust/BUILD.bazel
+#
+# Targets:
+#   bazel build //backend-rust:ztp-server        Build the binary
+#   bazel test  //backend-rust:ztp-server_test   Run unit tests
+#   bazel build //backend-rust:image             Build OCI image
+#   bazel build //backend-rust:image_tarball     Export for docker load
+#   bazel run   //backend-rust:image_push        Push to registry
+# =============================================================
+
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_push", "oci_tarball")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load("@crates//:defs.bzl", "all_crate_deps")
+
+# ---- Cargo manifest (consumed by crate_universe in MODULE.bazel) ----
+
+exports_files([
+    "Cargo.toml",
+    "Cargo.lock",
+])
+
+# ---- Migration files ----
+# Embedded at compile time by sqlx::migrate!("./migrations")
+
+filegroup(
+    name = "migrations",
+    srcs = glob(["migrations/**/*.sql"]),
+    visibility = ["//visibility:public"],
+)
+
+# ---- Main Binary ----
+
+rust_binary(
+    name = "ztp-server",
+    srcs = glob(["src/**/*.rs"]),
+    edition = "2021",
+    deps = all_crate_deps(normal = True),
+    # sqlx::migrate!() reads migration files at compile time
+    compile_data = [":migrations"],
+    # Runtime data: migrations are also needed at runtime for the
+    # embedded path check, but since they're compiled in, this is
+    # belt-and-suspenders.
+    data = [":migrations"],
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    visibility = ["//visibility:public"],
+)
+
+# ---- Tests ----
+
+rust_test(
+    name = "ztp-server_test",
+    crate = ":ztp-server",
+    deps = all_crate_deps(
+        normal = True,
+        normal_dev = True,
+    ),
+    proc_macro_deps = all_crate_deps(
+        proc_macro = True,
+        proc_macro_dev = True,
+    ),
+    compile_data = [":migrations"],
+    data = [":migrations"],
+)
+
+# =============================================================
+# OCI Image
+#
+# Replaces the multi-stage Dockerfile. Bazel builds the binary
+# natively (cached, incremental), then layers it into Alpine.
+#
+# The current Dockerfile installs dnsmasq, openssh-client,
+# ca-certificates, tzdata, and libssh2 into the runtime image.
+# With rules_oci, we need a custom base that has these packages.
+#
+# Option A: Use a pre-built base image with apk packages
+# Option B: Use oci_image with an apk install layer
+#
+# Below uses Option A — build a custom base image once and
+# push it to your registry, then reference it here.
+# =============================================================
+
+# Layer: compiled binary
+pkg_tar(
+    name = "binary_layer",
+    srcs = [":ztp-server"],
+    package_dir = "/app",
+)
+
+# Layer: SQL migration files
+pkg_tar(
+    name = "migrations_layer",
+    srcs = [":migrations"],
+    package_dir = "/app/migrations",
+    strip_prefix = "migrations",
+)
+
+# Layer: DHCP notify script
+pkg_tar(
+    name = "scripts_layer",
+    srcs = ["scripts/dhcp-notify.sh"],
+    package_dir = "/scripts",
+    modes = {"scripts/dhcp-notify.sh": "0755"},
+)
+
+# Layer: runtime directories
+# These are empty dirs needed at runtime (data, tftp, backups, etc.)
+# In a real Dockerfile these are `mkdir -p` commands.
+pkg_tar(
+    name = "dirs_layer",
+    empty_dirs = [
+        "/data",
+        "/tftp",
+        "/backups",
+        "/dnsmasq",
+        "/configs/templates",
+        "/var/lib/misc",
+    ],
+)
+
+# Layer: frontend static files (the built Vite bundle)
+pkg_tar(
+    name = "frontend_layer",
+    srcs = ["//frontend:bundle"],
+    package_dir = "/app/frontend",
+)
+
+# Assemble the final image
+#
+# NOTE: The base image (@alpine_3_19) is vanilla Alpine. For production,
+# you should either:
+# 1. Create a custom base image with dnsmasq/libssh2/openssh-client
+#    pre-installed and push it to your registry, then reference here
+# 2. Use rules_apk (experimental) to install packages declaratively
+# 3. Keep using the Dockerfile for the base and layer the binary on top
+#
+# For now this builds a functional image minus the system packages.
+# The recommended production path is option 1: maintain a "ztp-base"
+# image in your registry with the runtime deps baked in.
+
+oci_image(
+    name = "image",
+    base = "@alpine_3_19",
+    tars = [
+        ":binary_layer",
+        ":migrations_layer",
+        ":scripts_layer",
+        ":dirs_layer",
+        ":frontend_layer",
+    ],
+    entrypoint = ["/app/ztp-server"],
+    exposed_ports = [
+        "8080/tcp",
+        "67/udp",
+        "69/udp",
+    ],
+    env = {
+        "DB_PATH": "/data/ztp.db",
+        "DNSMASQ_CONFIG": "/dnsmasq/dnsmasq.conf",
+        "TFTP_DIR": "/tftp",
+        "TEMPLATES_DIR": "/configs/templates",
+        "BACKUP_DIR": "/backups",
+        "LEASE_PATH": "/var/lib/misc/dnsmasq.leases",
+        "DNSMASQ_PID": "/var/run/dnsmasq.pid",
+        "LISTEN_ADDR": "0.0.0.0:8080",
+        "DHCP_INTERFACE": "eth0",
+        "FRONTEND_DIR": "/app/frontend",
+        "RUST_LOG": "info",
+    },
+    labels = {
+        "org.opencontainers.image.source": "https://github.com/your-org/ztp-app",
+        "org.opencontainers.image.description": "ZTP Server",
+    },
+    visibility = ["//visibility:public"],
+)
+
+# Export as a tarball for `docker load`
+oci_tarball(
+    name = "image_tarball",
+    image = ":image",
+    repo_tags = ["ztp-app-backend-rust:latest"],
+)
+
+# Push to container registry
+oci_push(
+    name = "image_push",
+    image = ":image",
+    # Update for your registry:
+    repository = "ghcr.io/your-org/ztp-backend-rust",
+    # Optionally stamp with git SHA:
+    # remote_tags = ["latest", "{STABLE_GIT_SHA}"],
+)

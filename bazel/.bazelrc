@@ -1,0 +1,104 @@
+# =============================================================
+# .bazelrc — Bazel build configuration
+#
+# Profiles:
+#   (default)       Local dev — fast incremental builds
+#   --config=ci     CI pipeline — optimized, uploads cache
+#   --config=release  Release — fully optimized binary
+# =============================================================
+
+# ---- Correctness ----
+
+# Prevent actions from accessing the network (hermetic builds)
+build --sandbox_default_allow_network=false
+
+# Don't leak host env vars into builds (prevents cache misses from $PATH diffs)
+build --incompatible_strict_action_env
+
+# Propagate tags like "requires-network" to action execution
+common --incompatible_allow_tags_propagation
+
+# Ensure test sandboxing is correct for exclusive tests
+test --incompatible_exclusive_test_sandboxed
+
+# ---- Performance ----
+
+# Local disk cache — shared across branches/workspaces on this machine
+build --disk_cache=~/.cache/bazel-disk
+
+# Skip legacy external runfiles tree (faster, less disk)
+build --nolegacy_external_runfiles
+
+# Only build test dependencies when running `bazel test`
+test --build_tests_only
+
+# ---- Rust ----
+
+# Default to fast debug builds locally
+build --compilation_mode=fastbuild
+
+# ---- Testing ----
+
+# Show output only on failure (not for passing tests)
+test --test_output=errors
+
+# Use all cores for test parallelism
+test --local_test_jobs=HOST_CPUS
+
+# ---- Output / UX ----
+
+common --color=yes
+build --show_timestamps
+build --show_result=20
+
+# Keep building other targets when one fails
+build --keep_going
+
+# Predictable symlink names (bazel-bin/, bazel-out/, etc.)
+build --symlink_prefix=bazel-
+
+# ---- Remote Cache ----
+# Uncomment when you have a remote cache server (BuildBarn, EngFlow, etc.)
+# This is the single biggest CI speedup — teammates and CI share artifacts.
+#
+# build --remote_cache=grpc://cache.example.com:9092
+# build --remote_upload_local_results=true
+# build --remote_timeout=3600
+
+# ---- Config: CI ----
+# Usage: bazel build --config=ci //...
+
+build:ci --compilation_mode=opt
+build:ci --remote_upload_local_results=true
+build:ci --jobs=HOST_CPUS*.8
+test:ci --test_output=all
+test:ci --flaky_test_attempts=2
+
+# Stamp binaries with git commit in CI (for version tracking)
+build:ci --stamp
+build:ci --workspace_status_command=scripts/workspace_status.sh
+
+# ---- Config: Release ----
+# Usage: bazel build --config=release //backend-rust:ztp-server
+
+build:release --compilation_mode=opt
+build:release --strip=always
+build:release --stamp
+
+# ---- Platform-Specific ----
+# These activate automatically based on the host OS via
+# --enable_platform_specific_config
+
+common --enable_platform_specific_config
+
+# macOS: use the Xcode-provided SDK
+build:macos --macos_minimum_os=13.0
+
+# Linux: musl static linking for Alpine compatibility
+build:linux --platforms=@rules_rust//rust/platform:x86_64-unknown-linux-musl
+
+# ---- Personal Overrides ----
+# Create .bazelrc.user for machine-specific settings (gitignored).
+# Prefix custom configs with underscore: build:_myconfig --flag=value
+
+try-import %workspace%/.bazelrc.user

@@ -1,0 +1,8 @@
+# Root BUILD file
+
+exports_files([
+    ".npmrc",
+    ".bazelignore",
+    "docker-compose.yml",
+    "openapi.yaml",
+])

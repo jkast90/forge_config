@@ -1,0 +1,131 @@
+# MODULE.bazel — Bzlmod dependency management (Bazel 7+)
+#
+# This replaces the legacy WORKSPACE file. All external dependencies
+# are declared here as modules from the Bazel Central Registry.
+#
+# After modifying this file, run:
+#   bazel mod tidy
+#
+# After modifying Cargo.toml:
+#   CARGO_BAZEL_REPIN=1 bazel sync --only=crates
+#
+# After modifying package-lock.json:
+#   npx pnpm import   (generates pnpm-lock.yaml from package-lock.json)
+#   bazel sync --only=npm_frontend
+
+module(
+    name = "ztp_app",
+    version = "0.1.0",
+)
+
+# ============================================================
+# Rust Toolchain
+# ============================================================
+
+bazel_dep(name = "rules_rust", version = "0.68.1")
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2021",
+    versions = ["1.85.0"],
+    # Static musl target for Alpine-compatible binaries
+    extra_target_triples = ["x86_64-unknown-linux-musl"],
+)
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+
+# ---- Crate Universe ----
+# Auto-generates BUILD targets from Cargo.toml + Cargo.lock.
+# No need to manually declare each crate — this reads your
+# existing Cargo manifest and creates @crates//:<crate_name> targets.
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//backend-rust:Cargo.lock",
+    manifests = ["//backend-rust:Cargo.toml"],
+)
+use_repo(crate, "crates")
+
+# sqlx uses sqlx::migrate!() which embeds migration files at compile time.
+# The project does NOT use sqlx::query!() macros, so no .sqlx offline
+# directory is needed — only the migrations directory as compile_data.
+# That's handled in backend-rust/BUILD.bazel on the rust_binary target.
+
+# ============================================================
+# Node.js / JavaScript
+# ============================================================
+
+bazel_dep(name = "aspect_rules_js", version = "2.9.2")
+bazel_dep(name = "aspect_rules_ts", version = "3.8.5")
+
+# Node.js toolchain — pinned to match current Dockerfile (node:20-alpine)
+node = use_extension("@aspect_rules_js//js:extensions.bzl", "node")
+node.toolchain(node_version = "20.11.1")
+
+# ---- npm dependencies ----
+# rules_js uses pnpm's resolution internally. Since this project uses
+# npm (package-lock.json), you must first generate a pnpm lockfile:
+#
+#   cd frontend && npx pnpm import
+#   cd mobile && npx pnpm import
+#
+# This creates pnpm-lock.yaml from the existing package-lock.json.
+# Both lockfiles should be committed to version control.
+
+npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
+
+npm.npm_translate_lock(
+    name = "npm_frontend",
+    npmrc = "//:.npmrc",
+    pnpm_lock = "//frontend:pnpm-lock.yaml",
+    # Verify integrity hashes from the lockfile
+    verify_node_modules_ignored = "//:.bazelignore",
+)
+use_repo(npm, "npm_frontend")
+
+npm.npm_translate_lock(
+    name = "npm_mobile",
+    npmrc = "//:.npmrc",
+    pnpm_lock = "//mobile:pnpm-lock.yaml",
+    verify_node_modules_ignored = "//:.bazelignore",
+)
+use_repo(npm, "npm_mobile")
+
+# TypeScript compiler version — match the project's typescript dep
+ts = use_extension("@aspect_rules_ts//ts:extensions.bzl", "ts")
+ts.deps(ts_version = "5.2.2")
+
+# ============================================================
+# OCI Container Images
+# ============================================================
+
+bazel_dep(name = "rules_oci", version = "2.2.7")
+bazel_dep(name = "rules_pkg", version = "1.2.0")
+
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+
+# Base image for runtime — matches current Dockerfile (alpine:3.19)
+# Pin to a digest for reproducibility. To update:
+#   crane digest alpine:3.19
+oci.pull(
+    name = "alpine_3_19",
+    image = "docker.io/library/alpine",
+    tag = "3.19",
+    # TODO: pin digest for production reproducibility:
+    # digest = "sha256:<run `crane digest alpine:3.19` to get this>",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64",
+    ],
+)
+use_repo(oci, "alpine_3_19")
+
+# ============================================================
+# Common dependencies
+# ============================================================
+
+bazel_dep(name = "platforms", version = "0.0.10")
+bazel_dep(name = "bazel_skylib", version = "1.7.1")

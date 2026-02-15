@@ -8,8 +8,23 @@ use crate::AppState;
 
 use super::helpers::*;
 
+struct VNode {
+    hostname: String,
+    role: String,
+    loopback: String,
+    asn: u32,
+    model: String,
+    mgmt_ip: String,
+    hall_id: Option<String>,
+    row_id: Option<String>,
+    rack_id: Option<String>,
+    rack_position: Option<i32>,
+    device_type: Option<String>,
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Virtual CLOS topology — spines, leaves, externals — device records only, no Docker
+// CLOS topology builder — spines, leaves, externals with racks/IPAM/patch panels
+// Optionally spawns cEOS or FRR containers when spawn_containers is set
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VIRTUAL_CLOS_TOPOLOGY_ID: &str = "dc1-virtual";
@@ -42,6 +57,26 @@ pub async fn build_virtual_clos(
     } else {
         req.ceos_image.clone()
     };
+
+    // Detect vendor from image (FRR vs Arista)
+    let use_frr = spawn_containers && is_frr_image(&ceos_image);
+    let vendor_id = if use_frr { "frr" } else { "arista" };
+
+    // Look up device roles to resolve config_template per topology role
+    let mut role_templates: HashMap<String, String> = HashMap::new();
+    for role_name in ["spine", "leaf", "external"] {
+        let role_id = format!("{}-{}", vendor_id, role_name);
+        if let Ok(Some(role)) = state.store.get_device_role(&role_id).await {
+            if let Some(tids) = &role.template_ids {
+                if let Some(first) = tids.first() {
+                    // Derive base template: "arista-eos-leaf" → "arista-eos"
+                    let base = first.strip_suffix(&format!("-{}", role_name))
+                        .unwrap_or(first);
+                    role_templates.insert(role_name.to_string(), base.to_string());
+                }
+            }
+        }
+    }
 
     // Create topology
     let topo_req = crate::models::CreateTopologyRequest {
@@ -157,19 +192,6 @@ pub async fn build_virtual_clos(
     }
 
     // Build node list: spines + leaves + externals
-    struct VNode {
-        hostname: String,
-        role: String,
-        loopback: String,
-        asn: u32,
-        model: String,
-        mgmt_ip: String,
-        hall_id: Option<String>,
-        row_id: Option<String>,
-        rack_id: Option<String>,
-        rack_position: Option<i32>,
-        device_type: Option<String>,
-    }
 
     let mut nodes: Vec<VNode> = Vec::new();
 
@@ -256,17 +278,17 @@ pub async fn build_virtual_clos(
     let mut created_ids: Vec<(i64, VNode)> = Vec::new();
 
     for node in nodes {
-        let mac = generate_arista_mac();
+        let mac = if use_frr { generate_mac() } else { generate_arista_mac() };
         let serial = format!("SN-VCLOS-{}", node.hostname);
 
         let dev_req = crate::models::CreateDeviceRequest {
             mac: mac.clone(),
             ip: node.mgmt_ip.clone(),
             hostname: node.hostname.clone(),
-            vendor: Some("arista".to_string()),
+            vendor: Some(vendor_id.to_string()),
             model: Some(node.model.to_string()),
             serial_number: Some(serial),
-            config_template: "arista-eos".to_string(),
+            config_template: role_templates.get(&node.role).cloned().unwrap_or_default(),
             ssh_user: Some("admin".to_string()),
             ssh_pass: Some("admin".to_string()),
             topology_id: Some(VIRTUAL_CLOS_TOPOLOGY_ID.to_string()),
@@ -706,7 +728,7 @@ pub async fn build_virtual_clos(
         tracing::warn!("Failed to generate config after virtual CLOS build: {}", e);
     }
 
-    // Optionally spawn cEOS containers for each device
+    // Optionally spawn cEOS or FRR containers for each device
     if spawn_containers {
         match bollard::Docker::connect_with_socket_defaults() {
             Ok(docker) => {
@@ -731,49 +753,77 @@ pub async fn build_virtual_clos(
                         },
                     );
 
-                    labels.insert("ztp-ceos".to_string(), "true".to_string());
-
-                    let env = vec![
-                        "CEOS=1".to_string(),
-                        "container=docker".to_string(),
-                        "INTFTYPE=eth".to_string(),
-                        "ETBA=1".to_string(),
-                        "SKIP_STARTUP_CONFIG=false".to_string(),
-                        "AUTOCONFIGURE=dhcp".to_string(),
-                        "MAPETH0=1".to_string(),
-                    ];
-
-                    let host_config = bollard::models::HostConfig {
-                        privileged: Some(true),
-                        devices: Some(vec![bollard::models::DeviceMapping {
-                            path_on_host: Some("/dev/net/tun".to_string()),
-                            path_in_container: Some("/dev/net/tun".to_string()),
-                            cgroup_permissions: Some("rwm".to_string()),
-                        }]),
-                        ..Default::default()
-                    };
-
-                    let config = bollard::container::Config {
-                        image: Some(ceos_image.clone()),
-                        hostname: Some(node.hostname.clone()),
-                        env: Some(env),
-                        entrypoint: Some(vec![
-                            "/bin/bash".to_string(), "-c".to_string(),
-                            "mknod -m 600 /dev/console c 5 1 2>/dev/null; exec /sbin/init \"$@\"".to_string(),
-                            "--".to_string(),
-                        ]),
-                        cmd: Some(vec![
-                            "systemd.setenv=INTFTYPE=eth".to_string(),
-                            "systemd.setenv=ETBA=1".to_string(),
-                            "systemd.setenv=CEOS=1".to_string(),
-                            "systemd.setenv=container=docker".to_string(),
-                        ]),
-                        labels: Some(labels),
-                        host_config: Some(host_config),
-                        networking_config: Some(bollard::container::NetworkingConfig {
-                            endpoints_config: endpoints,
-                        }),
-                        ..Default::default()
+                    let config = if use_frr {
+                        // FRR container config
+                        labels.insert("ztp-frr".to_string(), "true".to_string());
+                        let env = vec![
+                            format!("DEVICE_HOSTNAME={}", node.hostname),
+                        ];
+                        let mut sysctls = HashMap::new();
+                        sysctls.insert("net.ipv4.ip_forward".to_string(), "1".to_string());
+                        sysctls.insert("net.ipv6.conf.all.disable_ipv6".to_string(), "0".to_string());
+                        sysctls.insert("net.ipv6.conf.default.disable_ipv6".to_string(), "0".to_string());
+                        sysctls.insert("net.ipv6.conf.all.forwarding".to_string(), "1".to_string());
+                        let host_config = bollard::models::HostConfig {
+                            cap_add: Some(vec!["NET_ADMIN".to_string(), "SYS_ADMIN".to_string()]),
+                            privileged: Some(true),
+                            sysctls: Some(sysctls),
+                            ..Default::default()
+                        };
+                        bollard::container::Config {
+                            image: Some(ceos_image.clone()),
+                            hostname: Some(node.hostname.clone()),
+                            env: Some(env),
+                            labels: Some(labels),
+                            host_config: Some(host_config),
+                            networking_config: Some(bollard::container::NetworkingConfig {
+                                endpoints_config: endpoints,
+                            }),
+                            ..Default::default()
+                        }
+                    } else {
+                        // cEOS container config
+                        labels.insert("ztp-ceos".to_string(), "true".to_string());
+                        let env = vec![
+                            "CEOS=1".to_string(),
+                            "container=docker".to_string(),
+                            "INTFTYPE=eth".to_string(),
+                            "ETBA=1".to_string(),
+                            "SKIP_STARTUP_CONFIG=false".to_string(),
+                            "AUTOCONFIGURE=dhcp".to_string(),
+                            "MAPETH0=1".to_string(),
+                        ];
+                        let host_config = bollard::models::HostConfig {
+                            privileged: Some(true),
+                            devices: Some(vec![bollard::models::DeviceMapping {
+                                path_on_host: Some("/dev/net/tun".to_string()),
+                                path_in_container: Some("/dev/net/tun".to_string()),
+                                cgroup_permissions: Some("rwm".to_string()),
+                            }]),
+                            ..Default::default()
+                        };
+                        bollard::container::Config {
+                            image: Some(ceos_image.clone()),
+                            hostname: Some(node.hostname.clone()),
+                            env: Some(env),
+                            entrypoint: Some(vec![
+                                "/bin/bash".to_string(), "-c".to_string(),
+                                "mknod -m 600 /dev/console c 5 1 2>/dev/null; exec /sbin/init \"$@\"".to_string(),
+                                "--".to_string(),
+                            ]),
+                            cmd: Some(vec![
+                                "systemd.setenv=INTFTYPE=eth".to_string(),
+                                "systemd.setenv=ETBA=1".to_string(),
+                                "systemd.setenv=CEOS=1".to_string(),
+                                "systemd.setenv=container=docker".to_string(),
+                            ]),
+                            labels: Some(labels),
+                            host_config: Some(host_config),
+                            networking_config: Some(bollard::container::NetworkingConfig {
+                                endpoints_config: endpoints,
+                            }),
+                            ..Default::default()
+                        }
                     };
 
                     let create_options = bollard::container::CreateContainerOptions {
@@ -783,26 +833,25 @@ pub async fn build_virtual_clos(
 
                     match docker.create_container(Some(create_options), config).await {
                         Ok(resp) => {
-                            // Inject startup-config
-                            let config_content = CEOS_STARTUP_CONFIG
-                                .replace("{hostname}", &node.hostname)
-                                .replace("{serial_number}", &serial);
-
-                            if let Ok(tar_bytes) = build_tar(&[("startup-config", config_content.as_bytes(), 0o644)]) {
-                                let options = bollard::container::UploadToContainerOptions {
-                                    path: "/mnt/flash".to_string(),
-                                    ..Default::default()
-                                };
-                                let _ = docker.upload_to_container(&resp.id, Some(options), tar_bytes.into()).await;
-                            }
-
-                            // Inject modprobe wrapper
-                            if let Ok(tar_bytes) = build_tar(&[("modprobe", b"#!/bin/sh\nexit 0\n".as_slice(), 0o755)]) {
-                                let options = bollard::container::UploadToContainerOptions {
-                                    path: "/sbin".to_string(),
-                                    ..Default::default()
-                                };
-                                let _ = docker.upload_to_container(&resp.id, Some(options), tar_bytes.into()).await;
+                            // Inject startup-config and modprobe wrapper for cEOS only
+                            if !use_frr {
+                                let config_content = CEOS_STARTUP_CONFIG
+                                    .replace("{hostname}", &node.hostname)
+                                    .replace("{serial_number}", &serial);
+                                if let Ok(tar_bytes) = build_tar(&[("startup-config", config_content.as_bytes(), 0o644)]) {
+                                    let options = bollard::container::UploadToContainerOptions {
+                                        path: "/mnt/flash".to_string(),
+                                        ..Default::default()
+                                    };
+                                    let _ = docker.upload_to_container(&resp.id, Some(options), tar_bytes.into()).await;
+                                }
+                                if let Ok(tar_bytes) = build_tar(&[("modprobe", b"#!/bin/sh\nexit 0\n".as_slice(), 0o755)]) {
+                                    let options = bollard::container::UploadToContainerOptions {
+                                        path: "/sbin".to_string(),
+                                        ..Default::default()
+                                    };
+                                    let _ = docker.upload_to_container(&resp.id, Some(options), tar_bytes.into()).await;
+                                }
                             }
 
                             // Start container
@@ -827,10 +876,10 @@ pub async fn build_virtual_clos(
                                         let _ = state.store.update_device(*device_id, &crate::models::UpdateDeviceRequest {
                                             ip,
                                             hostname: node.hostname.clone(),
-                                            vendor: Some("arista".to_string()),
+                                            vendor: Some(vendor_id.to_string()),
                                             model: Some(node.model.clone()),
                                             serial_number: Some(serial.clone()),
-                                            config_template: "arista-eos".to_string(),
+                                            config_template: role_templates.get(&node.role).cloned().unwrap_or_default(),
                                             ssh_user: Some("admin".to_string()),
                                             ssh_pass: Some("admin".to_string()),
                                             topology_id: Some(VIRTUAL_CLOS_TOPOLOGY_ID.to_string()),
@@ -845,7 +894,7 @@ pub async fn build_virtual_clos(
                                 }
                             }
 
-                            tracing::info!("Spawned cEOS container {} for {}", container_name, node.hostname);
+                            tracing::info!("Spawned {} container {} for {}", if use_frr { "FRR" } else { "cEOS" }, container_name, node.hostname);
                         }
                         Err(e) => {
                             tracing::warn!("Failed to create container {} for {}: {}", container_name, node.hostname, e);
@@ -853,9 +902,7 @@ pub async fn build_virtual_clos(
                     }
                 }
 
-                // Create fabric networks and connect containers to give them fabric interfaces
-                // Each spine↔leaf link pair gets a dedicated bridge network
-                // Then each spine gets one extra network for external connectivity
+                // Create fabric networks and connect containers
                 let spine_containers: Vec<(String, String)> = created_ids.iter()
                     .filter(|(_, n)| n.role == "spine")
                     .map(|(_, n)| (format!("vclos-{}", n.hostname), n.hostname.clone()))
@@ -928,6 +975,12 @@ pub async fn build_virtual_clos(
                         tracing::warn!("Failed to connect {} to {}: {}", spine_cname, net_name, e);
                     }
                 }
+
+                // For FRR: configure BGP via docker exec after containers and networks are ready
+                if use_frr {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                    configure_frr_bgp_nodes(&docker, &created_ids, &spine_vars, &leaf_vars, &external_vars).await;
+                }
             }
             Err(e) => {
                 tracing::warn!("Docker not available for container spawning: {}", e);
@@ -941,6 +994,81 @@ pub async fn build_virtual_clos(
         devices: result_devices,
         fabric_links,
     }))
+}
+
+/// Configure BGP on FRR containers via docker exec (vtysh)
+async fn configure_frr_bgp_nodes(
+    docker: &bollard::Docker,
+    created_ids: &[(i64, VNode)],
+    spine_vars: &[Vec<(usize, String, String, String, String)>],
+    leaf_vars: &[Vec<(usize, String, String, String, String)>],
+    external_vars: &[Vec<(usize, String, String, String, String)>],
+) {
+    let spines: Vec<_> = created_ids.iter().filter(|(_, n)| n.role == "spine").collect();
+    let leaves: Vec<_> = created_ids.iter().filter(|(_, n)| n.role == "leaf").collect();
+    let externals: Vec<_> = created_ids.iter().filter(|(_, n)| n.role == "external").collect();
+
+    // Helper: configure one FRR node
+    async fn configure_one(docker: &bollard::Docker, hostname: &str, loopback: &str, asn: u32, peers: &[(usize, String, String, String, String)]) {
+        let container_name = format!("vclos-{}", hostname);
+        let mut cmds = vec![
+            "configure terminal".to_string(),
+            "interface lo".to_string(),
+            format!(" ip address {}/32", loopback),
+            "exit".to_string(),
+            format!("router bgp {}", asn),
+            format!(" bgp router-id {}", loopback),
+            " no bgp ebgp-requires-policy".to_string(),
+            " no bgp network import-check".to_string(),
+        ];
+        for (_idx, peer_ip, peer_asn, _peer_name, _local_addr) in peers {
+            cmds.push(format!(" neighbor {} remote-as {}", peer_ip, peer_asn));
+        }
+        cmds.push(" address-family ipv4 unicast".to_string());
+        cmds.push("  redistribute connected".to_string());
+        cmds.push(" exit-address-family".to_string());
+        cmds.push("end".to_string());
+        cmds.push("write memory".to_string());
+
+        let mut exec_cmd = vec!["vtysh".to_string()];
+        for cmd in &cmds {
+            exec_cmd.push("-c".to_string());
+            exec_cmd.push(cmd.clone());
+        }
+
+        let exec_config = bollard::exec::CreateExecOptions {
+            cmd: Some(exec_cmd),
+            attach_stdout: Some(true),
+            attach_stderr: Some(true),
+            ..Default::default()
+        };
+        match docker.create_exec(&container_name, exec_config).await {
+            Ok(exec) => {
+                let start_config = bollard::exec::StartExecOptions { detach: false, ..Default::default() };
+                match docker.start_exec(&exec.id, Some(start_config)).await {
+                    Ok(_) => tracing::info!("Configured BGP on {} (AS {})", hostname, asn),
+                    Err(e) => tracing::warn!("Failed to start exec on {}: {}", hostname, e),
+                }
+            }
+            Err(e) => tracing::warn!("Failed to create exec on {}: {}", hostname, e),
+        }
+    }
+
+    for (si, (_, node)) in spines.iter().enumerate() {
+        if let Some(vars) = spine_vars.get(si) {
+            configure_one(docker, &node.hostname, &node.loopback, node.asn, vars).await;
+        }
+    }
+    for (li, (_, node)) in leaves.iter().enumerate() {
+        if let Some(vars) = leaf_vars.get(li) {
+            configure_one(docker, &node.hostname, &node.loopback, node.asn, vars).await;
+        }
+    }
+    for (ei, (_, node)) in externals.iter().enumerate() {
+        if let Some(vars) = external_vars.get(ei) {
+            configure_one(docker, &node.hostname, &node.loopback, node.asn, vars).await;
+        }
+    }
 }
 
 /// Teardown virtual CLOS topology

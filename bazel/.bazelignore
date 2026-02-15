@@ -1,0 +1,11 @@
+# Directories Bazel should ignore entirely.
+# These contain their own node_modules or build artifacts
+# that would confuse Bazel's file watching.
+
+frontend/node_modules
+mobile/node_modules
+shared/node_modules
+frontend/dist
+mobile/dist
+data
+native-data
