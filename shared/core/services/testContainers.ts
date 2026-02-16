@@ -32,6 +32,23 @@ export interface UnifiedTopologyRequest {
   pods?: number;
   // Physical spacing for cable length estimation
   row_spacing_cm?: number;
+  // User-provided topology name
+  topology_name?: string;
+  // GPU cluster configuration
+  gpu_cluster_count?: number;
+  gpu_model?: string;
+  gpus_per_node?: number;
+  gpu_nodes_per_cluster?: number;
+  gpu_interconnect?: string;
+  // Per-cluster VRF assignment (indexed by cluster position)
+  gpu_vrf_ids?: number[];
+  // GPU cabling options
+  gpu_include_leaf_uplinks?: boolean;
+  gpu_include_fabric_cabling?: boolean;
+  // Management switch configuration
+  mgmt_switch_model?: string;
+  mgmt_switch_distribution?: 'per-row' | 'per-rack' | 'per-hall' | 'count-per-row';
+  mgmt_switches_per_row?: number;
 }
 
 export interface TopologyPreviewDevice {
@@ -45,6 +62,7 @@ export interface TopologyPreviewDevice {
   rack_name: string | null;
   rack_index: number | null;
   rack_position: number | null;
+  device_type?: string;
 }
 
 export interface TopologyPreviewLink {
@@ -66,6 +84,18 @@ export interface TopologyPreviewRack {
   rack_type: string;
 }
 
+export interface TopologyPreviewGpuCluster {
+  name: string;
+  gpu_model: string;
+  node_count: number;
+  gpus_per_node: number;
+  interconnect: string;
+  leaf_assignments: string[];
+  device_indices: number[];
+  leaf_uplink_links: TopologyPreviewLink[];
+  fabric_links: TopologyPreviewLink[];
+}
+
 export interface TopologyPreviewResponse {
   architecture: string;
   topology_name: string;
@@ -73,6 +103,7 @@ export interface TopologyPreviewResponse {
   fabric_links: TopologyPreviewLink[];
   racks: TopologyPreviewRack[];
   tier3_placement: string;
+  gpu_clusters?: TopologyPreviewGpuCluster[];
 }
 
 export class TestContainersService extends BaseService {

@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useSettings, useLocalSettings, useLocalAddresses, configureServices, createChangeHandler, clearTablePageSizeOverrides } from '@core';
-import type { Settings, NetworkInterface } from '@core';
+import { useState, useEffect, useMemo } from 'react';
+import { useSettings, useLocalSettings, configureServices, createChangeHandler, clearTablePageSizeOverrides } from '@core';
+import type { Settings } from '@core';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { LayoutSettings } from './LayoutSettings';
@@ -8,38 +8,6 @@ import { SelectField } from './SelectField';
 import { ValidatedInput } from './ValidatedInput';
 import { validators } from '@core';
 import { Icon } from './Icon';
-import QRCode from 'qrcode';
-
-function QrButton({ url }: { url: string }) {
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
-  const [showQr, setShowQr] = useState(false);
-
-  const handleClick = useCallback(async () => {
-    if (!qrDataUrl) {
-      const dataUrl = await QRCode.toDataURL(url, {
-        width: 200,
-        margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
-      });
-      setQrDataUrl(dataUrl);
-    }
-    setShowQr(prev => !prev);
-  }, [url, qrDataUrl]);
-
-  return (
-    <div className="qr-button-wrapper">
-      <button type="button" className="qr-toggle-btn" onClick={handleClick} title="Show QR code">
-        <Icon name="qr_code_2" size={18} />
-      </button>
-      {showQr && qrDataUrl && (
-        <div className="qr-popover">
-          <img src={qrDataUrl} alt={`QR: ${url}`} width={200} height={200} />
-          <div className="qr-popover-url">{url}</div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 interface Props {
   isOpen: boolean;
@@ -49,17 +17,15 @@ interface Props {
 export function SettingsDialog({ isOpen, onClose }: Props) {
   const { settings, loading, saving, load, save } = useSettings();
   const { settings: localSettings, updateSettings: updateLocalSettings } = useLocalSettings();
-  const { addresses, loading: addressesLoading, refresh: refreshAddresses } = useLocalAddresses();
   const [formData, setFormData] = useState<Settings | null>(null);
   const [localFormData, setLocalFormData] = useState({ apiUrl: '', defaultPageSize: 25 });
 
   useEffect(() => {
     if (isOpen) {
       load();
-      refreshAddresses();
       setLocalFormData({ apiUrl: localSettings.apiUrl, defaultPageSize: localSettings.defaultPageSize });
     }
-  }, [isOpen, load, refreshAddresses, localSettings.apiUrl]);
+  }, [isOpen, load, localSettings.apiUrl]);
 
   useEffect(() => {
     if (settings) {
@@ -257,39 +223,6 @@ export function SettingsDialog({ isOpen, onClose }: Props) {
                 placeholder="Enrollment password"
               />
             </div>
-          </div>
-
-          <div className="settings-section">
-            <h3>
-              <Icon name="wifi" size={18} />
-              Server Network Interfaces
-            </h3>
-            {addressesLoading ? (
-              <p className="settings-hint">Loading network interfaces...</p>
-            ) : addresses.length === 0 ? (
-              <p className="settings-hint">No network interfaces found</p>
-            ) : (
-              <div className="local-addresses">
-                {addresses
-                  .filter((iface: NetworkInterface) => !iface.is_loopback)
-                  .map((iface: NetworkInterface) => {
-                    const ipv4Addrs = iface.addresses
-                      .filter((addr: string) => !addr.includes(':'))
-                      .map((addr: string) => addr.split('/')[0]);
-                    if (ipv4Addrs.length === 0) return null;
-                    return ipv4Addrs.map((ip) => (
-                      <div key={`${iface.name}-${ip}`} className="address-item">
-                        <span className="address-name">{iface.name}</span>
-                        <span className="address-ip">{ip}</span>
-                        <QrButton url={`http://${ip}:${window.location.port || '8080'}`} />
-                      </div>
-                    ));
-                  })}
-              </div>
-            )}
-            <p className="settings-hint">
-              Scan a QR code with your phone to auto-fill the API URL in the mobile app.
-            </p>
           </div>
 
           <div className="settings-section">

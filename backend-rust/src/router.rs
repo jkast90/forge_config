@@ -245,6 +245,18 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/output-parsers/:id", get(handlers::output_parsers::get_output_parser))
         .route("/api/output-parsers/:id", put(handlers::output_parsers::update_output_parser))
         .route("/api/output-parsers/:id", delete(handlers::output_parsers::delete_output_parser))
+        // GPU Cluster routes
+        .route("/api/gpu-clusters", get(handlers::gpu_clusters::list_gpu_clusters))
+        .route("/api/gpu-clusters", post(handlers::gpu_clusters::create_gpu_cluster))
+        .route("/api/gpu-clusters/:id", get(handlers::gpu_clusters::get_gpu_cluster))
+        .route("/api/gpu-clusters/:id", put(handlers::gpu_clusters::update_gpu_cluster))
+        .route("/api/gpu-clusters/:id", delete(handlers::gpu_clusters::delete_gpu_cluster))
+        // Tenant routes
+        .route("/api/tenants", get(handlers::tenants::list_tenants))
+        .route("/api/tenants", post(handlers::tenants::create_tenant))
+        .route("/api/tenants/:id", get(handlers::tenants::get_tenant))
+        .route("/api/tenants/:id", put(handlers::tenants::update_tenant))
+        .route("/api/tenants/:id", delete(handlers::tenants::delete_tenant))
         // User management routes
         .route("/api/users", get(handlers::users::list_users))
         .route("/api/users", post(handlers::users::create_user))

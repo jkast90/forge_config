@@ -51,6 +51,7 @@ export { TopologyManagement } from './TopologyManagement';
 export { UserManagement } from './UserManagement';
 export { VariableManager } from './VariableManager';
 export { GroupManagement } from './GroupManagement';
+export { Tenants } from './Tenants';
 export { ResolvedVariablesInspector } from './ResolvedVariablesInspector';
 export { IpamManagement } from './IpamManagement';
 export { Locations } from './Organization';

@@ -160,6 +160,7 @@ pub(super) fn map_vrf_row(row: &SqliteRow) -> IpamVrf {
         name: row.get("name"),
         rd: none_if_empty(row.get("rd")),
         description: none_if_empty(row.get("description")),
+        tenant_id: row.try_get::<Option<i64>, _>("tenant_id").ok().flatten(),
         prefix_count: row.try_get("prefix_count").ok(),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),

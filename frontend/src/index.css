@@ -622,6 +622,25 @@ header h1 {
   letter-spacing: -0.02em;
 }
 
+.header-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  opacity: 0.6;
+  line-height: 1.3;
+}
+
+.header-meta-row {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.header-meta-label {
+  color: var(--text-secondary);
+}
+
 .header-controls {
   display: flex;
   align-items: center;
@@ -1661,16 +1680,11 @@ th:hover .column-filter-toggle,
 }
 
 .select-field-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  width: 100%;
-  min-width: 100%;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: 10px;
   box-shadow: var(--shadow-lg);
-  z-index: 200;
+  z-index: 10000;
   overflow: hidden;
   animation: selectFieldSlide var(--transition-fast) ease;
 }
@@ -2846,7 +2860,7 @@ th:hover .column-filter-toggle,
 .modal-extra-wide {
   max-width: 1000px;
   width: 95%;
-  max-height: 95vh;
+  max-height: 85vh;
 }
 
 
@@ -3268,16 +3282,6 @@ th:hover .column-filter-toggle,
   gap: 8px;
 }
 
-.footer-commit {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.6875rem;
-  font-family: var(--font-mono);
-  color: var(--color-text-muted);
-  opacity: 0.5;
-  user-select: all;
-}
 
 .inflight-indicator {
   position: absolute;

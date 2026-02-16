@@ -30,7 +30,7 @@ pub struct PortAssignment {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub patch_panel_b_hostname: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub vrf_id: Option<String>,
+    pub vrf_id: Option<i64>,
     // Enriched via JOIN (not stored)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vrf_name: Option<String>,
@@ -59,7 +59,7 @@ pub struct SetPortAssignmentRequest {
     #[serde(default)]
     pub patch_panel_b_port: Option<String>,
     #[serde(default)]
-    pub vrf_id: Option<String>,
+    pub vrf_id: Option<i64>,
     #[serde(default)]
     pub cable_length_meters: Option<f64>,
 }

@@ -21,4 +21,8 @@ export class TopologyService extends BaseService {
   async remove(id: number | string): Promise<void> {
     return this.delete<void>(`/topologies/${encodeURIComponent(id)}`);
   }
+
+  async removeWithDevices(id: number | string): Promise<void> {
+    return this.delete<void>(`/topologies/${encodeURIComponent(id)}?delete_devices=true`);
+  }
 }

@@ -19,6 +19,8 @@ import jobTemplatesReducer from './slices/jobTemplatesSlice';
 import outputParsersReducer from './slices/outputParsersSlice';
 import deviceRolesReducer from './slices/deviceRolesSlice';
 import usersReducer from './slices/usersSlice';
+import gpuClustersReducer from './slices/gpuClustersSlice';
+import tenantsReducer from './slices/tenantsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -42,6 +44,8 @@ export const store = configureStore({
     outputParsers: outputParsersReducer,
     deviceRoles: deviceRolesReducer,
     users: usersReducer,
+    gpuClusters: gpuClustersReducer,
+    tenants: tenantsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

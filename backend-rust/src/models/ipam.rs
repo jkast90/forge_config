@@ -346,6 +346,8 @@ pub struct IpamVrf {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub prefix_count: Option<i32>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -358,4 +360,6 @@ pub struct CreateIpamVrfRequest {
     pub rd: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub tenant_id: Option<i64>,
 }

@@ -32,10 +32,10 @@ import { SideTabs } from './SideTabs';
 import type { SideTab } from './SideTabs';
 import { useConfirm } from './ConfirmDialog';
 
-type IpamTab = 'prefixes' | 'ips' | 'roles' | 'vrfs';
+type IpamTab = 'prefixes' | 'ips' | 'roles';
 
 export function IpamManagement() {
-  const [activeTab, setActiveTab] = usePersistedTab<IpamTab>('prefixes', ['prefixes', 'ips', 'roles', 'vrfs'], 'tab_ipam');
+  const [activeTab, setActiveTab] = usePersistedTab<IpamTab>('prefixes', ['prefixes', 'ips', 'roles'], 'tab_ipam');
   const [showInfo, setShowInfo] = useState(false);
 
   const ipam = useIpam();
@@ -70,7 +70,6 @@ export function IpamManagement() {
           tabs={[
             { id: 'prefixes', label: 'Prefixes', icon: 'lan', count: prefixes.length },
             { id: 'ips', label: 'IP Addresses', icon: 'pin', count: ipAddresses.length },
-            { id: 'vrfs', label: 'VRFs', icon: 'route', count: vrfs.length },
             { id: 'roles', label: 'Roles', icon: 'label', count: roles.length },
           ] as SideTab[]}
           activeTab={activeTab}
@@ -95,10 +94,6 @@ export function IpamManagement() {
               devices={devices}
               ipam={ipam}
             />
-          )}
-
-          {activeTab === 'vrfs' && (
-            <VrfsTab vrfs={vrfs} ipam={ipam} />
           )}
 
           {activeTab === 'roles' && (
@@ -790,96 +785,6 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
           <SelectField label="Device" name="device_id" value={form.device_id} onChange={(e) => setForm(f => ({ ...f, device_id: e.target.value }))} options={deviceOptions} />
           <FormField label="Interface" name="interface_name" value={form.interface_name} onChange={(e) => setForm(f => ({ ...f, interface_name: e.target.value }))} placeholder="e.g., eth0, Loopback0" />
           <SelectField label="VRF" name="vrf_id" value={form.vrf_id} onChange={(e) => setForm(f => ({ ...f, vrf_id: e.target.value }))} options={vrfOptions} />
-        </div>
-      </FormDialog>
-
-      <ConfirmDialogRenderer />
-    </>
-  );
-}
-
-// ============================================================
-// VRFs Tab
-// ============================================================
-
-function VrfsTab({ vrfs, ipam }: {
-  vrfs: IpamVrf[];
-  ipam: ReturnType<typeof useIpam>;
-}) {
-  const { confirm, ConfirmDialogRenderer } = useConfirm();
-  const [showForm, setShowForm] = useState(false);
-  const [vrfId, setVrfId] = useState('');
-  const [vrfName, setVrfName] = useState('');
-  const [vrfRd, setVrfRd] = useState('');
-  const [vrfDesc, setVrfDesc] = useState('');
-
-  const handleCreate = useCallback(async () => {
-    if (!vrfId.trim() || !vrfName.trim()) {
-      addNotification('error', 'ID and Name are required');
-      return;
-    }
-    const success = await ipam.createVrf({
-      id: vrfId.trim(),
-      name: vrfName.trim(),
-      rd: vrfRd || undefined,
-      description: vrfDesc || undefined,
-    });
-    if (success) {
-      setShowForm(false);
-      setVrfId('');
-      setVrfName('');
-      setVrfRd('');
-      setVrfDesc('');
-    }
-  }, [vrfId, vrfName, vrfRd, vrfDesc, ipam]);
-
-  const handleDelete = useCallback(async (vrf: IpamVrf) => {
-    if (!(await confirm({ title: 'Delete VRF', message: `Delete VRF "${vrf.name}"? Prefixes in this VRF will become global.`, confirmText: 'Delete', destructive: true }))) return;
-    await ipam.deleteVrf(String(vrf.id));
-  }, [ipam]);
-
-  const columns: TableColumn<IpamVrf>[] = useMemo(() => [
-    { header: 'ID', accessor: 'id' as keyof IpamVrf },
-    { header: 'Name', accessor: 'name' as keyof IpamVrf },
-    { header: 'RD', accessor: (row: IpamVrf) => row.rd || '', searchValue: (row: IpamVrf) => row.rd || '' },
-    { header: 'Description', accessor: (row: IpamVrf) => row.description || '', searchValue: (row: IpamVrf) => row.description || '' },
-    { header: 'Prefixes', accessor: (row: IpamVrf) => String(row.prefix_count ?? 0), searchable: false },
-  ], []);
-
-  const actions: TableAction<IpamVrf>[] = useMemo(() => [
-    { icon: <TrashIcon size={14} />, label: 'Delete', onClick: handleDelete, variant: 'danger' as const },
-  ], [handleDelete]);
-
-  return (
-    <>
-      <Card
-        title="VRFs"
-        headerAction={
-          <Button variant="primary" onClick={() => setShowForm(true)}>
-            <PlusIcon size={14} />
-            Add VRF
-          </Button>
-        }
-      >
-        <Table
-          data={vrfs}
-          columns={columns}
-          actions={actions}
-          getRowKey={(row) => row.id}
-          tableId="ipam-vrfs"
-          emptyMessage="No VRFs defined."
-          emptyDescription="All prefixes are in the global routing table."
-          searchable
-          searchPlaceholder="Search VRFs..."
-        />
-      </Card>
-
-      <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title="Create VRF" onSubmit={(e) => { e.preventDefault(); handleCreate(); }} submitText="Create">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="vrfId" value={vrfId} onChange={(e) => setVrfId(e.target.value)} placeholder="e.g., vrf-mgmt" />
-          <FormField label="Name" name="vrfName" value={vrfName} onChange={(e) => setVrfName(e.target.value)} placeholder="e.g., Management" />
-          <FormField label="Route Distinguisher" name="vrfRd" value={vrfRd} onChange={(e) => setVrfRd(e.target.value)} placeholder="e.g., 65000:100 (optional)" />
-          <FormField label="Description" name="vrfDesc" value={vrfDesc} onChange={(e) => setVrfDesc(e.target.value)} placeholder="Optional description" />
         </div>
       </FormDialog>
 

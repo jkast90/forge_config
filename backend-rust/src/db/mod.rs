@@ -20,6 +20,8 @@ mod users;
 mod variable_resolution;
 mod vendor_actions;
 mod vendors;
+mod gpu_clusters;
+mod tenants;
 mod store_ipam;
 
 use anyhow::{Context, Result};
@@ -1076,6 +1078,50 @@ impl Store {
 
     pub async fn delete_output_parser(&self, id: i64) -> Result<()> {
         output_parsers::OutputParserRepo::delete(&self.pool, id).await
+    }
+
+    // ========== GPU Cluster Operations ==========
+
+    pub async fn list_gpu_clusters(&self) -> Result<Vec<GpuCluster>> {
+        gpu_clusters::GpuClusterRepo::list(&self.pool).await
+    }
+
+    pub async fn get_gpu_cluster(&self, id: i64) -> Result<Option<GpuCluster>> {
+        gpu_clusters::GpuClusterRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_gpu_cluster(&self, req: &CreateGpuClusterRequest) -> Result<GpuCluster> {
+        gpu_clusters::GpuClusterRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_gpu_cluster(&self, id: i64, req: &CreateGpuClusterRequest) -> Result<GpuCluster> {
+        gpu_clusters::GpuClusterRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_gpu_cluster(&self, id: i64) -> Result<()> {
+        gpu_clusters::GpuClusterRepo::delete(&self.pool, id).await
+    }
+
+    // ========== Tenant Operations ==========
+
+    pub async fn list_tenants(&self) -> Result<Vec<Tenant>> {
+        tenants::TenantRepo::list(&self.pool).await
+    }
+
+    pub async fn get_tenant(&self, id: i64) -> Result<Option<Tenant>> {
+        tenants::TenantRepo::get(&self.pool, id).await
+    }
+
+    pub async fn create_tenant(&self, req: &CreateTenantRequest) -> Result<Tenant> {
+        tenants::TenantRepo::create(&self.pool, req).await
+    }
+
+    pub async fn update_tenant(&self, id: i64, req: &CreateTenantRequest) -> Result<Tenant> {
+        tenants::TenantRepo::update(&self.pool, id, req).await
+    }
+
+    pub async fn delete_tenant(&self, id: i64) -> Result<()> {
+        tenants::TenantRepo::delete(&self.pool, id).await
     }
 
     // ========== Ensure "all" group ==========

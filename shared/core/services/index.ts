@@ -19,6 +19,8 @@ import { CredentialService } from './credentials';
 import { OutputParserService } from './outputParsers';
 import { DeviceRoleService } from './deviceRoles';
 import { UserService } from './users';
+import { GpuClusterService } from './gpuClusters';
+import { TenantService } from './tenants';
 import { AuthService } from './auth';
 
 export { BaseService, configureServices, getServiceConfig, getInflightCount, onInflightChange, getApiHistory, clearApiHistory, onApiHistoryChange, checkApiHealth, type ServiceConfig, type ApiHistoryEntry } from './base';
@@ -48,6 +50,8 @@ export { CredentialService } from './credentials';
 export { OutputParserService } from './outputParsers';
 export { DeviceRoleService } from './deviceRoles';
 export { UserService } from './users';
+export { GpuClusterService } from './gpuClusters';
+export { TenantService } from './tenants';
 export { WebSocketService, getWebSocketService } from './websocket';
 export type { WebSocketEvent, WebSocketEventType, DeviceDiscoveredPayload, ConfigPulledPayload, WebSocketEventHandler } from './websocket';
 export { trackEvent, getTelemetryEvents, clearTelemetryEvents, onTelemetryChange, initTelemetry, type TelemetryEvent, type TelemetryEventType } from './telemetry';
@@ -75,6 +79,8 @@ export interface Services {
   outputParsers: OutputParserService;
   deviceRoles: DeviceRoleService;
   users: UserService;
+  gpuClusters: GpuClusterService;
+  tenants: TenantService;
 }
 
 // Singleton services that use global config
@@ -103,6 +109,8 @@ export function getServices(): Services {
       outputParsers: new OutputParserService(),
       deviceRoles: new DeviceRoleService(),
       users: new UserService(),
+      gpuClusters: new GpuClusterService(),
+      tenants: new TenantService(),
     };
   }
   return services;

@@ -3,9 +3,9 @@ import type { Topology, TopologyFormData, Device, ConfigPreviewResult, Job, Topo
 import {
   useTopologies,
   useDevices,
-  useDeviceModels,
   useTemplates,
   useIpam,
+  useSettings,
   useAsyncModal,
   useModalForm,
   useModalRoute,
@@ -29,6 +29,7 @@ import { ConfigViewer } from './ConfigViewer';
 import { DialogActions } from './DialogActions';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
+import { ModelSelector } from './ModelSelector';
 import { SelectField } from './SelectField';
 import { InfoSection } from './InfoSection';
 import { LoadingState, ModalLoading } from './LoadingState';
@@ -48,15 +49,16 @@ export function TopologyManagement() {
     topologies,
     loading,
     error,
+    refresh: refreshTopologies,
     createTopology,
     updateTopology,
     deleteTopology,
   } = useTopologies();
   const { devices, refresh: refreshDevices } = useDevices();
-  const { deviceModels } = useDeviceModels();
   const { templates } = useTemplates();
   const ipam = useIpam();
   const { regions, campuses, datacenters, halls, rows: ipamRows, racks } = ipam;
+  const { settings } = useSettings();
   const [addingNode, setAddingNode] = useState<string | null>(null); // "topologyId:role" while spawning
   const [addMenuOpen, setAddMenuOpen] = useState<string | null>(null); // "topologyId:role" for popover
   const [commandDevice, setCommandDevice] = useState<Device | null>(null);
@@ -83,13 +85,37 @@ export function TopologyManagement() {
     super_spine_enabled: false, super_spine_count: 4, super_spine_model: '', spine_to_super_spine_ratio: 2, pods: 2,
     // Physical spacing
     row_spacing_cm: 120,
+    // Topology name
+    topology_name: '',
+    // GPU clusters
+    gpu_cluster_count: 0, gpu_model: 'MI300X', gpus_per_node: 8, gpu_nodes_per_cluster: 8, gpu_interconnect: 'InfiniBand',
+    gpu_vrf_ids: [] as string[],
+    gpu_include_leaf_uplinks: true, gpu_include_fabric_cabling: true,
+    // Management switch
+    mgmt_switch_model: '',
+    mgmt_switch_distribution: 'per-row' as 'per-row' | 'per-rack' | 'per-hall' | 'count-per-row',
+    mgmt_switches_per_row: 1,
   });
+
+  // Apply settings defaults when topology dialog opens
+  useEffect(() => {
+    if (showTopologyDialog && settings) {
+      setTopologyConfig(prev => ({
+        ...prev,
+        tier1_model: prev.tier1_model || settings.default_spine_model || '',
+        tier2_model: prev.tier2_model || settings.default_leaf_model || '',
+        mgmt_switch_model: prev.mgmt_switch_model || settings.default_mgmt_switch_model || '',
+        gpu_model: prev.gpu_model || settings.default_gpu_model || prev.gpu_model,
+      }));
+    }
+  }, [showTopologyDialog, settings]);
 
   const [previewData, setPreviewData] = useState<TopologyPreviewResponse | null>(null);
   const [previewEdits, setPreviewEdits] = useState<TopologyPreviewDevice[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [showLinks, setShowLinks] = useState(false);
+  const [showGpuLinks, setShowGpuLinks] = useState(false);
 
   const hasBuiltTopology = useMemo(
     () => devices.some(d => {
@@ -677,6 +703,23 @@ export function TopologyManagement() {
       pods: cfg.architecture === 'clos' && cfg.super_spine_enabled ? cfg.pods : undefined,
       // Physical spacing
       row_spacing_cm: cfg.datacenter_id ? cfg.row_spacing_cm : undefined,
+      // Topology name
+      topology_name: cfg.topology_name || undefined,
+      // GPU clusters
+      gpu_cluster_count: cfg.gpu_cluster_count > 0 ? cfg.gpu_cluster_count : undefined,
+      gpu_model: cfg.gpu_cluster_count > 0 ? cfg.gpu_model : undefined,
+      gpus_per_node: cfg.gpu_cluster_count > 0 ? cfg.gpus_per_node : undefined,
+      gpu_nodes_per_cluster: cfg.gpu_cluster_count > 0 ? cfg.gpu_nodes_per_cluster : undefined,
+      gpu_interconnect: cfg.gpu_cluster_count > 0 ? cfg.gpu_interconnect : undefined,
+      gpu_vrf_ids: cfg.gpu_cluster_count > 0 && cfg.gpu_vrf_ids.some(v => v)
+        ? cfg.gpu_vrf_ids.slice(0, cfg.gpu_cluster_count).map(v => v ? Number(v) : 0)
+        : undefined,
+      gpu_include_leaf_uplinks: cfg.gpu_cluster_count > 0 ? cfg.gpu_include_leaf_uplinks : undefined,
+      gpu_include_fabric_cabling: cfg.gpu_cluster_count > 0 ? cfg.gpu_include_fabric_cabling : undefined,
+      // Management switch
+      mgmt_switch_model: cfg.mgmt_switch_model || undefined,
+      mgmt_switch_distribution: cfg.mgmt_switch_distribution !== 'per-row' ? cfg.mgmt_switch_distribution : undefined,
+      mgmt_switches_per_row: cfg.mgmt_switch_distribution === 'count-per-row' ? cfg.mgmt_switches_per_row : undefined,
     };
   };
 
@@ -730,9 +773,11 @@ export function TopologyManagement() {
     if (!previewData) return;
     const csvRows: string[] = ['Category,Item,Specification,Quantity,Unit Length,Notes'];
 
-    // Device BOM: group by model + role
+    // Device BOM: group by model + role (exclude externals and patch panels)
+    const excludedRoles = new Set(['patch-panel']);
     const deviceGroups = new Map<string, { model: string; role: string; count: number }>();
     for (const dev of previewData.devices) {
+      if (excludedRoles.has(dev.role) || dev.device_type === 'external') continue;
       const key = `${dev.model}|${dev.role}`;
       const existing = deviceGroups.get(key);
       if (existing) existing.count++;
@@ -746,13 +791,11 @@ export function TopologyManagement() {
     const standardLengths = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50];
     const roundToStandard = (m: number) => standardLengths.find(l => l >= m) ?? Math.ceil(m);
     const fiberGroups = new Map<number, number>();
-    let totalLinks = 0;
+    let totalLinks = previewData.fabric_links.length;
     for (const link of previewData.fabric_links) {
-      totalLinks++;
-      if (link.cable_length_meters != null) {
-        const rounded = roundToStandard(link.cable_length_meters);
-        fiberGroups.set(rounded, (fiberGroups.get(rounded) || 0) + 1);
-      }
+      const length = link.cable_length_meters ?? 3; // default 3m if unknown
+      const rounded = roundToStandard(length);
+      fiberGroups.set(rounded, (fiberGroups.get(rounded) || 0) + 1);
     }
     const sortedLengths = [...fiberGroups.entries()].sort((a, b) => a[0] - b[0]);
     for (const [length, qty] of sortedLengths) {
@@ -762,6 +805,52 @@ export function TopologyManagement() {
     // Optic BOM: 2 optics per link
     if (totalLinks > 0) {
       csvRows.push(`Optic,QSFP28,100G,${totalLinks * 2},,2 per fabric link`);
+    }
+
+    // GPU cluster BOM
+    if (previewData.gpu_clusters && previewData.gpu_clusters.length > 0) {
+      for (const cluster of previewData.gpu_clusters) {
+        const isIB = cluster.interconnect === 'InfiniBand' || cluster.interconnect === 'InfinityFabric';
+
+        // GPU Leaf Uplink Cables
+        if ((cluster.leaf_uplink_links?.length ?? 0) > 0) {
+          const uplinkFibers = new Map<number, number>();
+          for (const link of cluster.leaf_uplink_links!) {
+            const len = link.cable_length_meters ?? 3;
+            const rounded = roundToStandard(len);
+            uplinkFibers.set(rounded, (uplinkFibers.get(rounded) || 0) + 1);
+          }
+          for (const [length, qty] of [...uplinkFibers.entries()].sort((a, b) => a[0] - b[0])) {
+            csvRows.push(`GPU Leaf Uplink,${isIB ? 'QSFP-DD DAC/AOC' : 'Ethernet DAC/AOC'},400G,${qty},${length}m,GPU node to leaf`);
+          }
+          csvRows.push(`GPU Leaf Optic,QSFP-DD,400G,${cluster.leaf_uplink_links!.length * 2},,2 per uplink`);
+        }
+
+        // GPU Fabric Cables
+        if ((cluster.fabric_links?.length ?? 0) > 0) {
+          const fabricType = isIB ? 'InfiniBand NDR Cable' : 'Ethernet DAC/AOC';
+          const opticType = isIB ? 'OSFP 400G NDR' : 'QSFP-DD 400G';
+          const fabricFibers = new Map<number, number>();
+          for (const link of cluster.fabric_links!) {
+            const len = link.cable_length_meters ?? 3;
+            const rounded = roundToStandard(len);
+            fabricFibers.set(rounded, (fabricFibers.get(rounded) || 0) + 1);
+          }
+          for (const [length, qty] of [...fabricFibers.entries()].sort((a, b) => a[0] - b[0])) {
+            csvRows.push(`GPU Fabric,${fabricType},400G,${qty},${length}m,${cluster.name}`);
+          }
+          csvRows.push(`GPU Fabric Optic,${opticType},400G,${cluster.fabric_links!.length * 2},,2 per fabric link`);
+        }
+      }
+    }
+
+    // Management ethernet cables: one per managed device per mgmt switch
+    const mgmtSwitches = previewData.devices.filter(d => d.role === 'mgmt-switch');
+    const managedDevices = previewData.devices.filter(d =>
+      !excludedRoles.has(d.role) && d.device_type !== 'external' && d.role !== 'mgmt-switch'
+    );
+    if (mgmtSwitches.length > 0 && managedDevices.length > 0) {
+      csvRows.push(`Mgmt Ethernet,Cat6 Ethernet Cable,1G,${managedDevices.length},2m,OOB management per device`);
     }
 
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
@@ -1000,10 +1089,6 @@ export function TopologyManagement() {
     { value: '', label: 'Select datacenter...' },
     ...vclosFilteredDatacenters.map(d => ({ value: String(d.id), label: d.name })),
   ], [vclosFilteredDatacenters]);
-  const vclosModelOptions = useMemo(() => [
-    { value: '', label: 'Default' },
-    ...deviceModels.map(m => ({ value: m.model, label: m.display_name || m.model })),
-  ], [deviceModels]);
 
   // Handle "Create New..." inline creation
   const handleCreateNewRegion = useCallback(async () => {
@@ -1061,6 +1146,25 @@ export function TopologyManagement() {
 
   const handleDelete = async (topology: Topology) => {
     await deleteTopology(String(topology.id));
+  };
+
+  const handleDeleteWithDevices = async (topology: Topology) => {
+    if (await confirm({
+      title: 'Delete Topology & Devices',
+      message: `This will permanently delete topology "${topology.name}" and all ${topology.device_count || 0} device(s) in it. This cannot be undone.`,
+      confirmText: 'Delete All',
+      destructive: true,
+    })) {
+      try {
+        await getServices().topologies.removeWithDevices(topology.id);
+        addNotification('success', `Deleted topology "${topology.name}" and ${topology.device_count || 0} device(s)`);
+        refreshTopologies();
+        refreshDevices();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        addNotification('error', `Failed to delete: ${msg}`);
+      }
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1206,6 +1310,7 @@ export function TopologyManagement() {
               model: 'PP-192-RJ45',
               device_type: 'external',
               topology_id: numericTopoId,
+              topology_role: 'patch-panel',
               hall_id: hallNumericId,
               row_id: rowNumericId,
               rack_id: undefined,
@@ -1410,6 +1515,14 @@ export function TopologyManagement() {
                 const hasLeaves = td.some(d => d.topology_role === 'leaf');
                 return !hasSpines || !hasLeaves;
               },
+            },
+            {
+              icon: <TrashIcon size={14} />,
+              label: 'Delete All',
+              onClick: handleDeleteWithDevices,
+              variant: 'danger',
+              tooltip: 'Delete topology and all its devices',
+              disabled: (t) => !(t.device_count && t.device_count > 0),
             },
           ] as TableAction<Topology>[]}
           renderExpandedRow={(t) => {
@@ -1880,6 +1993,17 @@ export function TopologyManagement() {
         submitText={previewLoading ? 'Loading Preview...' : 'Preview Build'}
         variant="wide"
       >
+        {/* Topology Name */}
+        <div style={{ marginBottom: '16px' }}>
+          <FormField
+            label="Topology Name"
+            name="topology_name"
+            value={topologyConfig.topology_name}
+            onChange={(e) => setTopologyConfig(c => ({ ...c, topology_name: e.target.value }))}
+            placeholder={topologyConfig.architecture === 'clos' ? 'DC1 CLOS Fabric' : 'DC1 Hierarchical Fabric'}
+          />
+        </div>
+
         {/* Row 1: Architecture + Spawn Containers */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
           <SelectField
@@ -1998,12 +2122,12 @@ export function TopologyManagement() {
                 value={String(topologyConfig.tier1_count)}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_count: Math.max(1, parseInt(e.target.value) || 1) }))}
               />
-              <SelectField
+              <ModelSelector
                 label="Model"
                 name="tier1_model"
                 value={topologyConfig.tier1_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_model: e.target.value }))}
-                options={vclosModelOptions}
+                placeholder="Default"
               />
               <FormField
                 label="Links / Tier 2"
@@ -2028,12 +2152,12 @@ export function TopologyManagement() {
                 value={String(topologyConfig.super_spine_count)}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, super_spine_count: Math.max(1, parseInt(e.target.value) || 1) }))}
               />
-              <SelectField
+              <ModelSelector
                 label="Model"
                 name="super_spine_model"
                 value={topologyConfig.super_spine_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, super_spine_model: e.target.value }))}
-                options={vclosModelOptions}
+                placeholder="Default"
               />
               <FormField
                 label="Links / Spine"
@@ -2065,12 +2189,12 @@ export function TopologyManagement() {
                 value={String(topologyConfig.tier1_count)}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_count: Math.max(1, parseInt(e.target.value) || 1) }))}
               />
-              <SelectField
+              <ModelSelector
                 label="Model"
                 name="tier1_model"
                 value={topologyConfig.tier1_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_model: e.target.value }))}
-                options={vclosModelOptions}
+                placeholder="Default"
               />
               <FormField
                 label="Links / Tier 2"
@@ -2092,12 +2216,12 @@ export function TopologyManagement() {
                 value={String(topologyConfig.tier2_count)}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_count: Math.max(1, parseInt(e.target.value) || 1) }))}
               />
-              <SelectField
+              <ModelSelector
                 label="Model"
                 name="tier2_model"
                 value={topologyConfig.tier2_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_model: e.target.value }))}
-                options={vclosModelOptions}
+                placeholder="Default"
               />
               <FormField
                 label="Links / Tier 3"
@@ -2122,12 +2246,12 @@ export function TopologyManagement() {
                 value={String(topologyConfig.tier2_count)}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_count: Math.max(1, parseInt(e.target.value) || 1) }))}
               />
-              <SelectField
+              <ModelSelector
                 label="Model"
                 name="tier2_model"
                 value={topologyConfig.tier2_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_model: e.target.value }))}
-                options={vclosModelOptions}
+                placeholder="Default"
               />
               {topologyConfig.datacenter_id && (
                 <SelectField
@@ -2155,12 +2279,12 @@ export function TopologyManagement() {
                 value={String(topologyConfig.tier3_count)}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_count: Math.max(1, parseInt(e.target.value) || 1) }))}
               />
-              <SelectField
+              <ModelSelector
                 label="Model"
                 name="tier3_model"
                 value={topologyConfig.tier3_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_model: e.target.value }))}
-                options={vclosModelOptions}
+                placeholder="Default"
               />
               {topologyConfig.datacenter_id && (
                 <SelectField
@@ -2249,6 +2373,131 @@ export function TopologyManagement() {
             />
           </div>
         )}
+
+        {/* Management Switch */}
+        <div style={{ marginTop: '16px' }}>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'end' }}>
+            <SelectField
+              label="Mgmt Switch Distribution"
+              name="mgmt_switch_distribution"
+              value={topologyConfig.mgmt_switch_distribution}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, mgmt_switch_distribution: e.target.value as typeof c.mgmt_switch_distribution }))}
+              options={[
+                { value: 'per-row', label: 'Per Row' },
+                { value: 'per-rack', label: 'Per Rack' },
+                { value: 'per-hall', label: 'Per Hall' },
+                { value: 'count-per-row', label: 'Count per Row' },
+              ]}
+            />
+            {topologyConfig.mgmt_switch_distribution === 'count-per-row' && (
+              <FormField
+                label="Switches / Row"
+                name="mgmt_switches_per_row"
+                type="number"
+                value={String(topologyConfig.mgmt_switches_per_row)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, mgmt_switches_per_row: Math.max(1, parseInt(e.target.value) || 1) }))}
+                min={1}
+              />
+            )}
+            <ModelSelector
+              label="Mgmt Switch Model"
+              name="mgmt_switch_model"
+              value={topologyConfig.mgmt_switch_model}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, mgmt_switch_model: e.target.value }))}
+              placeholder="CCS-720XP-48ZC2 (default)"
+            />
+          </div>
+        </div>
+
+        {/* GPU Clusters */}
+        <div style={{ marginTop: '16px' }}>
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'end' }}>
+            <FormField
+              label="GPU Clusters"
+              name="gpu_cluster_count"
+              type="number"
+              value={String(topologyConfig.gpu_cluster_count)}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, gpu_cluster_count: Math.max(0, parseInt(e.target.value) || 0) }))}
+              min={0}
+            />
+            {topologyConfig.gpu_cluster_count > 0 && (
+              <>
+                <ModelSelector
+                  label="GPU Model"
+                  name="gpu_model"
+                  value={topologyConfig.gpu_model}
+                  onChange={(e) => setTopologyConfig(c => ({ ...c, gpu_model: e.target.value }))}
+                  variant="gpu"
+                />
+                <FormField
+                  label="Nodes / Cluster"
+                  name="gpu_nodes_per_cluster"
+                  type="number"
+                  value={String(topologyConfig.gpu_nodes_per_cluster)}
+                  onChange={(e) => setTopologyConfig(c => ({ ...c, gpu_nodes_per_cluster: Math.max(1, parseInt(e.target.value) || 1) }))}
+                  min={1}
+                />
+                <FormField
+                  label="GPUs / Node"
+                  name="gpus_per_node"
+                  type="number"
+                  value={String(topologyConfig.gpus_per_node)}
+                  onChange={(e) => setTopologyConfig(c => ({ ...c, gpus_per_node: Math.max(1, parseInt(e.target.value) || 1) }))}
+                  min={1}
+                />
+                <SelectField
+                  label="Interconnect"
+                  name="gpu_interconnect"
+                  value={topologyConfig.gpu_interconnect}
+                  onChange={(e) => setTopologyConfig(c => ({ ...c, gpu_interconnect: e.target.value }))}
+                  options={[
+                    { value: 'InfiniBand', label: 'InfiniBand' },
+                    { value: 'InfinityFabric', label: 'Infinity Fabric' },
+                    { value: 'RoCE', label: 'RoCE' },
+                    { value: 'Ethernet', label: 'Ethernet' },
+                  ]}
+                />
+              </>
+            )}
+          </div>
+          {topologyConfig.gpu_cluster_count > 0 && (
+            <>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'end', marginTop: '8px', flexWrap: 'wrap' }}>
+                {Array.from({ length: topologyConfig.gpu_cluster_count }, (_, i) => (
+                  <SelectField
+                    key={i}
+                    label={`Cluster ${i + 1} VRF`}
+                    name={`gpu_vrf_${i}`}
+                    value={topologyConfig.gpu_vrf_ids[i] || ''}
+                    onChange={(e) => setTopologyConfig(c => {
+                      const ids = [...c.gpu_vrf_ids];
+                      while (ids.length <= i) ids.push('');
+                      ids[i] = e.target.value;
+                      return { ...c, gpu_vrf_ids: ids };
+                    })}
+                    options={ipam.vrfs.map(v => ({ value: String(v.id), label: v.name }))}
+                    placeholder="None"
+                  />
+                ))}
+                <Checkbox
+                  label="Include Leaf Uplinks"
+                  checked={topologyConfig.gpu_include_leaf_uplinks}
+                  onChange={(checked) => setTopologyConfig(c => ({ ...c, gpu_include_leaf_uplinks: checked }))}
+                />
+                <Checkbox
+                  label="Include Fabric Cabling"
+                  checked={topologyConfig.gpu_include_fabric_cabling}
+                  onChange={(checked) => setTopologyConfig(c => ({ ...c, gpu_include_fabric_cabling: checked }))}
+                />
+              </div>
+              <p className="settings-hint" style={{ marginTop: '4px' }}>
+                {topologyConfig.gpu_cluster_count} cluster(s) x {topologyConfig.gpu_nodes_per_cluster} nodes = {topologyConfig.gpu_cluster_count * topologyConfig.gpu_nodes_per_cluster} GPU nodes
+                ({topologyConfig.gpu_cluster_count * topologyConfig.gpu_nodes_per_cluster * topologyConfig.gpus_per_node} total GPUs),
+                striped across {topologyConfig.architecture === 'clos' ? 'leaf' : 'access'} switches
+              </p>
+            </>
+          )}
+        </div>
       </FormDialog>
 
       {/* Build Preview Modal */}
@@ -2285,7 +2534,77 @@ export function TopologyManagement() {
             <div><strong>Fabric Links:</strong> {previewData.fabric_links.length}</div>
             {previewData.racks.length > 0 && <div><strong>Racks:</strong> {previewData.racks.length}</div>}
             <div><strong>Placement:</strong> {previewData.tier3_placement === 'top' ? 'Top of Rack' : previewData.tier3_placement === 'middle' ? 'Middle of Rack' : 'Bottom of Rack'}</div>
+            {previewData.gpu_clusters && previewData.gpu_clusters.length > 0 && (
+              <div><strong>GPU Clusters:</strong> {previewData.gpu_clusters.length} ({previewData.gpu_clusters.reduce((sum, c) => sum + c.node_count * c.gpus_per_node, 0)} GPUs)</div>
+            )}
           </div>
+
+          {/* Bandwidth ratios between tiers */}
+          {(() => {
+            const hostRoleMap = new Map<string, string>();
+            for (const dev of previewData.devices) {
+              hostRoleMap.set(dev.hostname, dev.device_type === 'external' ? 'external' : dev.role);
+            }
+            const pairCounts = new Map<string, number>();
+            for (const link of previewData.fabric_links) {
+              const rA = hostRoleMap.get(link.side_a_hostname) || 'unknown';
+              const rB = hostRoleMap.get(link.side_b_hostname) || 'unknown';
+              const p = [rA, rB].sort().join('|');
+              pairCounts.set(p, (pairCounts.get(p) || 0) + 1);
+            }
+            if (previewData.gpu_clusters) {
+              for (const cl of previewData.gpu_clusters) {
+                for (const link of cl.leaf_uplink_links || []) {
+                  const rA = hostRoleMap.get(link.side_a_hostname) || 'unknown';
+                  const rB = hostRoleMap.get(link.side_b_hostname) || 'unknown';
+                  const p = [rA, rB].sort().join('|');
+                  pairCounts.set(p, (pairCounts.get(p) || 0) + 1);
+                }
+              }
+            }
+            if (pairCounts.size === 0) return null;
+            const rLabel: Record<string, string> = {
+              'external': 'External', 'super-spine': 'Super-Spine', 'spine': 'Spine',
+              'leaf': 'Leaf', 'core': 'Core', 'distribution': 'Distribution', 'access': 'Access',
+              'gpu-node': 'GPU Node',
+            };
+            const rOrder = ['external', 'super-spine', 'spine', 'core', 'distribution', 'leaf', 'access', 'gpu-node'];
+            const rCounts = new Map<string, number>();
+            for (const dev of previewData.devices) {
+              const r = dev.device_type === 'external' ? 'external' : dev.role;
+              rCounts.set(r, (rCounts.get(r) || 0) + 1);
+            }
+            const sorted = [...pairCounts.entries()].sort((a, b) => {
+              const [a1, a2] = a[0].split('|');
+              const [b1, b2] = b[0].split('|');
+              return (rOrder.indexOf(a1) + rOrder.indexOf(a2)) - (rOrder.indexOf(b1) + rOrder.indexOf(b2));
+            });
+            return (
+              <div style={{
+                display: 'flex', gap: '16px', flexWrap: 'wrap', padding: '8px 16px',
+                background: 'var(--color-bg-secondary, #1a1a2e)', borderRadius: '6px', marginBottom: '16px',
+                fontSize: '12px',
+              }}>
+                {sorted.map(([pair, count]) => {
+                  const [r1, r2] = pair.split('|');
+                  const lower = rOrder.indexOf(r1) > rOrder.indexOf(r2) ? r1 : r2;
+                  const lowerCount = rCounts.get(lower) || 1;
+                  const ratio = count / lowerCount;
+                  const totalBw = count * 100;
+                  return (
+                    <div key={pair} style={{ whiteSpace: 'nowrap' }}>
+                      <strong>{rLabel[r1] || r1}</strong>
+                      <span style={{ opacity: 0.5, margin: '0 4px' }}>&harr;</span>
+                      <strong>{rLabel[r2] || r2}</strong>
+                      <span style={{ opacity: 0.7, marginLeft: '6px' }}>
+                        {count} links &middot; {totalBw >= 1000 ? `${totalBw / 1000}T` : `${totalBw}G`} &middot; {ratio}:1/{rLabel[lower] || lower}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Editable devices table */}
           <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
@@ -2306,7 +2625,7 @@ export function TopologyManagement() {
                 {previewEdits.map((device) => (
                   <tr key={device.index}>
                     <td>
-                      <span className={`status-badge status-badge-${device.role === 'spine' || device.role === 'distribution' ? 'online' : device.role === 'leaf' || device.role === 'access' ? 'provisioning' : 'offline'}`}>
+                      <span className={`status-badge status-badge-${device.role === 'spine' || device.role === 'distribution' ? 'online' : device.role === 'leaf' || device.role === 'access' ? 'provisioning' : device.role === 'gpu-node' ? 'unknown' : 'offline'}`}>
                         {device.role}
                       </span>
                     </td>
@@ -2319,29 +2638,41 @@ export function TopologyManagement() {
                       />
                     </td>
                     <td>
-                      <input
-                        type="text"
-                        value={device.loopback}
-                        onChange={(e) => handlePreviewDeviceEdit(device.index, 'loopback', e.target.value)}
-                        style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
-                      />
+                      {device.role === 'external' || device.role === 'gpu-node' ? (
+                        <span style={{ opacity: 0.4 }}>—</span>
+                      ) : (
+                        <input
+                          type="text"
+                          value={device.loopback}
+                          onChange={(e) => handlePreviewDeviceEdit(device.index, 'loopback', e.target.value)}
+                          style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                        />
+                      )}
                     </td>
                     <td>
-                      <input
-                        type="number"
-                        value={device.asn}
-                        onChange={(e) => handlePreviewDeviceEdit(device.index, 'asn', parseInt(e.target.value) || 0)}
-                        style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
-                      />
+                      {device.role === 'gpu-node' ? (
+                        <span style={{ opacity: 0.4 }}>—</span>
+                      ) : (
+                        <input
+                          type="number"
+                          value={device.asn}
+                          onChange={(e) => handlePreviewDeviceEdit(device.index, 'asn', parseInt(e.target.value) || 0)}
+                          style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                        />
+                      )}
                     </td>
                     <td style={{ fontSize: '11px', opacity: 0.7 }}>{device.model}</td>
                     <td>
-                      <input
-                        type="text"
-                        value={device.mgmt_ip}
-                        onChange={(e) => handlePreviewDeviceEdit(device.index, 'mgmt_ip', e.target.value)}
-                        style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
-                      />
+                      {device.role === 'external' || device.role === 'gpu-node' ? (
+                        <span style={{ opacity: 0.4 }}>—</span>
+                      ) : (
+                        <input
+                          type="text"
+                          value={device.mgmt_ip}
+                          onChange={(e) => handlePreviewDeviceEdit(device.index, 'mgmt_ip', e.target.value)}
+                          style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                        />
+                      )}
                     </td>
                     {previewData.racks.length > 0 && (
                       <td>
@@ -2434,6 +2765,71 @@ export function TopologyManagement() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* GPU cluster links (collapsible) */}
+          {previewData.gpu_clusters && previewData.gpu_clusters.length > 0 && (
+            previewData.gpu_clusters.some(c => (c.leaf_uplink_links?.length ?? 0) > 0 || (c.fabric_links?.length ?? 0) > 0) && (
+              <div style={{ marginTop: '8px' }}>
+                <button
+                  onClick={() => setShowGpuLinks(!showGpuLinks)}
+                  style={{
+                    background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer',
+                    fontSize: '13px', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px',
+                  }}
+                >
+                  <Icon name={showGpuLinks ? 'expand_less' : 'expand_more'} size={16} />
+                  {showGpuLinks ? 'Hide' : 'Show'} GPU cluster links ({previewData.gpu_clusters.reduce((s, c) => s + (c.leaf_uplink_links?.length ?? 0) + (c.fabric_links?.length ?? 0), 0)})
+                </button>
+                {showGpuLinks && previewData.gpu_clusters.map((cluster, ci) => (
+                  <div key={ci} style={{ marginTop: '8px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>
+                      {cluster.name} — {cluster.gpu_model} ({cluster.node_count} nodes, {cluster.interconnect})
+                    </div>
+                    {cluster.leaf_uplink_links.length > 0 && (
+                      <div style={{ overflowX: 'auto', maxHeight: '200px', overflowY: 'auto', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '11px', opacity: 0.7, marginBottom: '2px' }}>Leaf Uplinks ({cluster.leaf_uplink_links.length})</div>
+                        <table className="table" style={{ width: '100%', fontSize: '11px' }}>
+                          <thead><tr><th>GPU Node</th><th>Port</th><th>IP</th><th>Leaf</th><th>Port</th><th>IP</th><th>Length</th></tr></thead>
+                          <tbody>
+                            {cluster.leaf_uplink_links.map((link, li) => (
+                              <tr key={li}>
+                                <td>{link.side_a_hostname}</td>
+                                <td style={{ opacity: 0.7 }}>{link.side_a_interface}</td>
+                                <td><code style={{ fontSize: '10px' }}>{link.side_a_ip}</code></td>
+                                <td>{link.side_b_hostname}</td>
+                                <td style={{ opacity: 0.7 }}>{link.side_b_interface}</td>
+                                <td><code style={{ fontSize: '10px' }}>{link.side_b_ip}</code></td>
+                                <td style={{ opacity: 0.7 }}>{link.cable_length_meters != null ? `${link.cable_length_meters}m` : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {cluster.fabric_links.length > 0 && (
+                      <div style={{ overflowX: 'auto', maxHeight: '200px', overflowY: 'auto', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '11px', opacity: 0.7, marginBottom: '2px' }}>Fabric Links ({cluster.fabric_links.length})</div>
+                        <table className="table" style={{ width: '100%', fontSize: '11px' }}>
+                          <thead><tr><th>Node A</th><th>Port</th><th>Node B</th><th>Port</th><th>Length</th></tr></thead>
+                          <tbody>
+                            {cluster.fabric_links.map((link, li) => (
+                              <tr key={li}>
+                                <td>{link.side_a_hostname}</td>
+                                <td style={{ opacity: 0.7 }}>{link.side_a_interface}</td>
+                                <td>{link.side_b_hostname}</td>
+                                <td style={{ opacity: 0.7 }}>{link.side_b_interface}</td>
+                                <td style={{ opacity: 0.7 }}>{link.cable_length_meters != null ? `${link.cable_length_meters}m` : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </Modal>
       )}

@@ -136,6 +136,12 @@ impl DeviceRepo {
     }
 
     pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
+        // Clean up IPAM IP addresses assigned to this device
+        sqlx::query("DELETE FROM ipam_ip_addresses WHERE device_id = ?")
+            .bind(id)
+            .execute(pool)
+            .await?;
+
         let result = sqlx::query("DELETE FROM devices WHERE id = ?")
             .bind(id)
             .execute(pool)
@@ -171,7 +177,7 @@ impl DeviceRepo {
     }
 
     pub async fn delete_by_topology(pool: &Pool<Sqlite>, topology_id: i64) -> Result<u64> {
-        // Also clean up device variables for these devices
+        // Collect device IDs first for cleanup
         let device_ids: Vec<i64> = sqlx::query_scalar(
             "SELECT id FROM devices WHERE topology_id = ?",
         )
@@ -180,6 +186,12 @@ impl DeviceRepo {
         .await?;
 
         for id in &device_ids {
+            // Clean up IPAM IP addresses assigned to this device
+            sqlx::query("DELETE FROM ipam_ip_addresses WHERE device_id = ?")
+                .bind(id)
+                .execute(pool)
+                .await?;
+            // Clean up device variables
             sqlx::query("DELETE FROM device_variables WHERE device_id = ?")
                 .bind(id)
                 .execute(pool)

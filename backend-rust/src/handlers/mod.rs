@@ -20,6 +20,8 @@ pub mod docker;
 pub mod netbox;
 pub mod port_assignments;
 pub mod output_parsers;
+pub mod gpu_clusters;
+pub mod tenants;
 pub mod topologies;
 pub mod users;
 

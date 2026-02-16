@@ -100,3 +100,5 @@ export { useCredentials, type UseCredentialsOptions, type UseCredentialsReturn }
 export { useOutputParsers, type UseOutputParsersReturn } from './useOutputParsers';
 export { useDeviceRoles, type UseDeviceRolesReturn } from './useDeviceRoles';
 export { useUsers, type UseUsersReturn } from './useUsers';
+export { useGpuClusters, type UseGpuClustersOptions, type UseGpuClustersReturn } from './useGpuClusters';
+export { useTenants, type UseTenantsOptions, type UseTenantsReturn } from './useTenants';

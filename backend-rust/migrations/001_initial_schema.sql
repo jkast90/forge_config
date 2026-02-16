@@ -420,6 +420,17 @@ CREATE INDEX idx_ipam_halls_dc ON ipam_halls(datacenter_id);
 CREATE INDEX idx_ipam_rows_hall ON ipam_rows(hall_id);
 CREATE INDEX idx_ipam_racks_row ON ipam_racks(row_id);
 
+-- ── Tenants ────────────────────────────────────────────────────
+CREATE TABLE tenants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_tenants_name ON tenants(name);
+
 -- ── IPAM Roles & VRFs ────────────────────────────────────────
 CREATE TABLE ipam_roles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -433,12 +444,14 @@ CREATE TABLE ipam_vrfs (
     name TEXT NOT NULL UNIQUE,
     rd TEXT DEFAULT '',
     description TEXT DEFAULT '',
+    tenant_id INTEGER DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_ipam_roles_name ON ipam_roles(name);
 CREATE INDEX idx_ipam_vrfs_name ON ipam_vrfs(name);
+CREATE INDEX idx_ipam_vrfs_tenant ON ipam_vrfs(tenant_id);
 
 -- ── IPAM Prefixes ─────────────────────────────────────────────
 CREATE TABLE ipam_prefixes (
@@ -487,7 +500,7 @@ CREATE TABLE ipam_ip_addresses (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (prefix_id) REFERENCES ipam_prefixes(id) ON DELETE CASCADE,
-    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE SET NULL,
+    FOREIGN KEY (device_id) REFERENCES devices(id) ON DELETE CASCADE,
     FOREIGN KEY (vrf_id) REFERENCES ipam_vrfs(id) ON DELETE SET NULL
 );
 
@@ -515,3 +528,27 @@ CREATE TABLE ipam_tags (
 
 CREATE INDEX idx_ipam_tags_resource ON ipam_tags(resource_type, resource_id);
 CREATE INDEX idx_ipam_tags_kv ON ipam_tags(key, value);
+
+-- GPU Clusters
+CREATE TABLE gpu_clusters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    gpu_model TEXT NOT NULL DEFAULT 'MI300X',
+    node_count INTEGER NOT NULL DEFAULT 1,
+    gpus_per_node INTEGER NOT NULL DEFAULT 8,
+    interconnect_type TEXT NOT NULL DEFAULT 'InfiniBand',
+    status TEXT NOT NULL DEFAULT 'provisioning',
+    topology_id INTEGER DEFAULT NULL,
+    vrf_id INTEGER DEFAULT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (topology_id) REFERENCES topologies(id) ON DELETE SET NULL
+);
+CREATE INDEX idx_gpu_clusters_topology ON gpu_clusters(topology_id);
+CREATE INDEX idx_gpu_clusters_status ON gpu_clusters(status);
+CREATE INDEX idx_gpu_clusters_vrf ON gpu_clusters(vrf_id);
+
+-- ── Seed Data ────────────────────────────────────────────────
+INSERT INTO tenants (name, description, status) VALUES ('Default', 'Default tenant', 'active');
+INSERT INTO ipam_vrfs (name, rd, description, tenant_id) VALUES ('default', '65000:1', 'Default VRF', 1);

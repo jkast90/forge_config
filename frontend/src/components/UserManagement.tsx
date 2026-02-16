@@ -11,9 +11,10 @@ import { SideTabs } from './SideTabs';
 import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { Icon, PlusIcon, RefreshIcon, SpinnerIcon } from './Icon';
+import { ModelSelector } from './ModelSelector';
 import { Toggle } from './Toggle';
 
-type SystemTab = 'users' | 'branding' | 'naming';
+type SystemTab = 'users' | 'branding' | 'naming' | 'topology';
 
 const EMPTY_FORM: UserFormData = {
   username: '',
@@ -419,11 +420,98 @@ function DeviceNamingPanel() {
   );
 }
 
+function TopologyDefaultsPanel() {
+  const { settings, loading, load, save } = useSettings();
+  const [formData, setFormData] = useState<Settings | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (settings) {
+      setFormData({ ...settings });
+    }
+  }, [settings]);
+
+  const handleChange = useMemo(() => createChangeHandler<Settings>(
+    (name, value) => setFormData(prev => prev ? { ...prev, [name]: value } : prev)
+  ), []);
+
+  const handleSave = async () => {
+    if (!formData) return;
+    setSaving(true);
+    try {
+      await save(formData);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card
+      title="Topology Builder Defaults"
+      headerAction={
+        <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
+          {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      }
+    >
+      {loading ? (
+        <p>Loading settings...</p>
+      ) : !formData ? (
+        <p>Failed to load settings</p>
+      ) : (
+        <div className="settings-section">
+          <div className="form-row">
+            <ModelSelector
+              label="Default Spine Model"
+              name="default_spine_model"
+              value={formData.default_spine_model || ''}
+              onChange={handleChange}
+              placeholder="None"
+            />
+            <ModelSelector
+              label="Default Leaf Model"
+              name="default_leaf_model"
+              value={formData.default_leaf_model || ''}
+              onChange={handleChange}
+              placeholder="None"
+            />
+          </div>
+          <div className="form-row">
+            <ModelSelector
+              label="Default Mgmt Switch Model"
+              name="default_mgmt_switch_model"
+              value={formData.default_mgmt_switch_model || ''}
+              onChange={handleChange}
+              placeholder="None"
+            />
+            <ModelSelector
+              label="Default GPU Model"
+              name="default_gpu_model"
+              value={formData.default_gpu_model || ''}
+              onChange={handleChange}
+              variant="gpu"
+              placeholder="None"
+            />
+          </div>
+          <p className="settings-hint">
+            Pre-populate model fields when opening the topology builder. Leave blank to choose each time.
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function UserManagement() {
   const { users } = useUsers();
   const [activeTab, setActiveTab] = usePersistedTab<SystemTab>(
     'users',
-    ['users', 'branding', 'naming'],
+    ['users', 'branding', 'naming', 'topology'],
     'tab_system',
   );
 
@@ -431,6 +519,7 @@ export function UserManagement() {
     { id: 'users', label: 'Users', icon: 'people', count: users.length },
     { id: 'branding', label: 'Branding', icon: 'palette' },
     { id: 'naming', label: 'Device Naming', icon: 'badge' },
+    { id: 'topology', label: 'Topology Defaults', icon: 'hub' },
   ], [users.length]);
 
   return (
@@ -439,6 +528,7 @@ export function UserManagement() {
         {activeTab === 'users' && <UsersPanel />}
         {activeTab === 'branding' && <BrandingPanel />}
         {activeTab === 'naming' && <DeviceNamingPanel />}
+        {activeTab === 'topology' && <TopologyDefaultsPanel />}
       </SideTabs>
     </Card>
   );

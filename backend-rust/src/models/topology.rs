@@ -11,8 +11,10 @@ pub mod topology_role {
     pub const CORE: &str = "core";
     pub const DISTRIBUTION: &str = "distribution";
     pub const ACCESS: &str = "access";
+    // GPU infrastructure
+    pub const GPU_NODE: &str = "gpu-node";
 
-    pub const ALL: &[&str] = &[SUPER_SPINE, SPINE, LEAF, CORE, DISTRIBUTION, ACCESS];
+    pub const ALL: &[&str] = &[SUPER_SPINE, SPINE, LEAF, CORE, DISTRIBUTION, ACCESS, GPU_NODE];
 
     pub fn is_valid(role: &str) -> bool {
         role.is_empty() || ALL.contains(&role)

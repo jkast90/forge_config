@@ -12,6 +12,8 @@ mod templates;
 mod topology;
 mod output_parsers;
 mod vendors;
+mod gpu_cluster;
+mod tenant;
 
 pub use auth::*;
 pub use device_models::*;
@@ -27,3 +29,5 @@ pub use settings::*;
 pub use templates::*;
 pub use topology::*;
 pub use vendors::*;
+pub use gpu_cluster::*;
+pub use tenant::*;

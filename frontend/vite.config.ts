@@ -5,9 +5,9 @@ import { execSync } from 'child_process'
 
 function getGitCommit(): string {
   try {
-    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8', cwd: path.resolve(__dirname, '..') }).trim()
   } catch {
-    return 'dev'
+    return 'live build'
   }
 }
 

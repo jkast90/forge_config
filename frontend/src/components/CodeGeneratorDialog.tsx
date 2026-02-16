@@ -1,4 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useLocalAddresses } from '@core';
+import type { NetworkInterface } from '@core';
 import { Modal } from './Modal';
 import { Button } from './Button';
 import { Icon } from './Icon';
@@ -54,15 +56,17 @@ export function CodeGeneratorDialog({ isOpen, onClose }: Props) {
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory());
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { addresses, refresh: refreshAddresses } = useLocalAddresses();
 
   useEffect(() => {
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 100);
+      refreshAddresses();
     } else {
       setGeneratedImage(null);
       setError(null);
     }
-  }, [isOpen]);
+  }, [isOpen, refreshAddresses]);
 
   const generate = useCallback(async (value: string, type: CodeType, format: BarcodeFormat) => {
     if (!value.trim()) return;
@@ -153,6 +157,22 @@ export function CodeGeneratorDialog({ isOpen, onClose }: Props) {
     saveHistory([]);
   }, []);
 
+  const handleInterfaceClick = useCallback((ip: string) => {
+    const url = `http://${ip}:8080`;
+    setText(url);
+    setCodeType('qr');
+    generate(url, 'qr', barcodeFormat);
+  }, [generate, barcodeFormat]);
+
+  // Build flat list of non-loopback IPv4 interfaces
+  const serverInterfaces = addresses
+    .filter((iface: NetworkInterface) => !iface.is_loopback)
+    .flatMap((iface: NetworkInterface) =>
+      iface.addresses
+        .filter((addr: string) => !addr.includes(':'))
+        .map((addr: string) => ({ name: iface.name, ip: addr.split('/')[0] }))
+    );
+
   const handleDownload = useCallback(() => {
     if (!generatedImage) return;
     const link = document.createElement('a');
@@ -233,6 +253,42 @@ export function CodeGeneratorDialog({ isOpen, onClose }: Props) {
                   <option key={f.value} value={f.value}>{f.label} — {f.description}</option>
                 ))}
               </select>
+            </div>
+          )}
+
+          {/* Server Interfaces */}
+          {serverInterfaces.length > 0 && (
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', opacity: 0.5, marginBottom: '6px' }}>
+                Server Interfaces
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {serverInterfaces.map(({ name, ip }) => (
+                  <button
+                    key={`${name}-${ip}`}
+                    type="button"
+                    onClick={() => handleInterfaceClick(ip)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '4px 10px',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      background: 'var(--bg-secondary, rgba(128,128,128,0.05))',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      color: 'var(--color-text)',
+                      transition: 'all 0.15s ease',
+                    }}
+                    className="hover-highlight"
+                    title={`Generate QR for http://${ip}:8080`}
+                  >
+                    <span style={{ opacity: 0.5, fontWeight: 500 }}>{name}</span>
+                    <span style={{ fontFamily: 'monospace' }}>{ip}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

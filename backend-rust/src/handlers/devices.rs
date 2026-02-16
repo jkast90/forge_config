@@ -65,7 +65,7 @@ pub async fn create_device(
     // Validate topology_role if provided
     if let Some(ref role) = req.topology_role {
         if !crate::models::topology_role::is_valid(role) {
-            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf"));
+            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf, core, distribution, access, gpu-node"));
         }
     }
 
@@ -88,7 +88,7 @@ pub async fn update_device(
     // Validate topology_role if provided
     if let Some(ref role) = req.topology_role {
         if !crate::models::topology_role::is_valid(role) {
-            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf"));
+            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf, core, distribution, access, gpu-node"));
         }
     }
 

@@ -141,6 +141,7 @@ export const TOPOLOGY_ROLE_OPTIONS = [
   { value: 'super-spine', label: 'Super-Spine' },
   { value: 'spine', label: 'Spine' },
   { value: 'leaf', label: 'Leaf' },
+  { value: 'gpu-node', label: 'GPU Node' },
 ] as const;
 
 /**
@@ -171,6 +172,7 @@ export const VENDOR_CLASS_OPTIONS = [
   { value: 'OpenGear', label: 'OpenGear' },
   { value: 'FRRouting', label: 'FRRouting' },
   { value: 'GoBGP', label: 'GoBGP' },
+  { value: 'AMD', label: 'AMD' },
 ] as const;
 
 /**
@@ -181,3 +183,45 @@ export const CONFIG_METHOD_OPTIONS = [
   { value: 'http', label: 'HTTP', description: 'Fetch config via HTTP' },
   { value: 'both', label: 'Both', description: 'Try TFTP then HTTP' },
 ] as const;
+
+export const EMPTY_TENANT_FORM: import('../types').TenantFormData = {
+  name: '',
+  description: '',
+  status: 'active',
+};
+
+export const TENANT_STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+];
+
+export const EMPTY_GPU_CLUSTER_FORM: import('../types').GpuClusterFormData = {
+  name: '',
+  description: '',
+  gpu_model: 'MI300X',
+  node_count: '1',
+  gpus_per_node: '8',
+  interconnect_type: 'InfiniBand',
+  status: 'provisioning',
+  topology_id: '',
+  vrf_id: '',
+};
+
+export const GPU_MODEL_OPTIONS = [
+  { value: 'MI300X', label: 'AMD MI300X' },
+  { value: 'MI325X', label: 'AMD MI325X' },
+];
+
+export const INTERCONNECT_OPTIONS = [
+  { value: 'InfiniBand', label: 'InfiniBand' },
+  { value: 'InfinityFabric', label: 'Infinity Fabric' },
+  { value: 'RoCE', label: 'RoCE' },
+  { value: 'Ethernet', label: 'Ethernet' },
+];
+
+export const GPU_CLUSTER_STATUS_OPTIONS = [
+  { value: 'active', label: 'Active' },
+  { value: 'provisioning', label: 'Provisioning' },
+  { value: 'offline', label: 'Offline' },
+  { value: 'decommissioned', label: 'Decommissioned' },
+];

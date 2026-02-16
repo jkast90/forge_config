@@ -112,6 +112,17 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             default_template: "gobgp-bgp".to_string(),
         },
         DefaultVendor {
+            id: "amd".to_string(),
+            name: "AMD".to_string(),
+            backup_command: String::new(),
+            deploy_command: String::new(),
+            diff_command: String::new(),
+            ssh_port: 22,
+            mac_prefixes: vec![],
+            vendor_class: "AMD".to_string(),
+            default_template: String::new(),
+        },
+        DefaultVendor {
             id: "patch-panel".to_string(),
             name: "Patch Panel".to_string(),
             backup_command: String::new(),
@@ -2668,12 +2679,25 @@ pub(super) fn seed_device_model_params() -> Vec<(String, String, String, String,
     }
     let pp_192_rj45_layout = format!("[{}]", pp_192_rows.join(","));
 
+    // AMD MI300X/MI325X 8-GPU Node: 2x QSFP-DD 400G uplinks + 8x OSFP 400G fabric + Management
+    let gpu_uplink_ports = r#"{"col":1,"vendor_port_name":"Ethernet1","connector":"qsfp-dd","speed":400000,"role":"uplink"},{"col":2,"vendor_port_name":"Ethernet2","connector":"qsfp-dd","speed":400000,"role":"uplink"}"#;
+    let gpu_fabric_ports: Vec<String> = (1..=8).map(|i| {
+        format!(r#"{{"col":{},"vendor_port_name":"IB{}","connector":"osfp","speed":400000,"role":"lateral"}}"#, i, i)
+    }).collect();
+    let gpu_layout = format!(
+        r#"[{{"row":1,"sections":[{{"label":"QSFP-DD 400G","ports":[{}]}}]}},{{"row":2,"sections":[{{"label":"OSFP 400G","ports":[{}]}}]}},{{"row":3,"sections":[{{"label":"Management","ports":[{{"col":1,"vendor_port_name":"Management1","connector":"rj45","speed":1000,"role":"mgmt"}}]}}]}}]"#,
+        gpu_uplink_ports, gpu_fabric_ports.join(",")
+    );
+
     vec![
         ("arista-7050cx3-32s".into(), "arista".into(), "7050CX3-32S".into(), "Arista 7050CX3-32S".into(), 1, cx3_layout),
         ("arista-7050sx3-48yc8".into(), "arista".into(), "7050SX3-48YC8".into(), "Arista 7050SX3-48YC8".into(), 1, sx3_layout.clone()),
         ("arista-7280sr3-48yc8".into(), "arista".into(), "7280SR3-48YC8".into(), "Arista 7280SR3-48YC8".into(), 1, sx3_layout.clone()),
         ("arista-7280r3".into(), "arista".into(), "7280R3".into(), "Arista 7280R3".into(), 1, sx3_layout),
         ("arista-7020tr-48".into(), "arista".into(), "7020TR-48".into(), "Arista 7020TR-48".into(), 1, tr_layout),
+        // AMD GPU node models
+        ("amd-mi300x".into(), "amd".into(), "MI300X 8-GPU Node".into(), "AMD Instinct MI300X 8-GPU Node".into(), 4, gpu_layout.clone()),
+        ("amd-mi325x".into(), "amd".into(), "MI325X 8-GPU Node".into(), "AMD Instinct MI325X 8-GPU Node".into(), 4, gpu_layout),
         // Patch panel models
         ("pp-24-rj45".into(), "patch-panel".into(), "PP-24-RJ45".into(), "24-Port RJ45 Patch Panel".into(), 1, pp_24_rj45_layout),
         ("pp-48-rj45".into(), "patch-panel".into(), "PP-48-RJ45".into(), "48-Port RJ45 Patch Panel".into(), 2, pp_48_rj45_layout),

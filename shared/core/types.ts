@@ -29,7 +29,7 @@ export interface Device {
 }
 
 export type DeviceStatus = 'online' | 'offline' | 'provisioning' | 'unknown';
-export type TopologyRole = 'super-spine' | 'spine' | 'leaf' | 'core' | 'distribution' | 'access';
+export type TopologyRole = 'super-spine' | 'spine' | 'leaf' | 'core' | 'distribution' | 'access' | 'patch-panel' | 'gpu-node' | 'mgmt-switch';
 
 export interface DeviceFormData {
   mac: string;
@@ -85,6 +85,56 @@ export interface TopologyFormData {
   datacenter_id: string;
 }
 
+// GPU Cluster types
+export type GpuModel = 'MI300X' | 'MI325X';
+export type InterconnectType = 'InfiniBand' | 'InfinityFabric' | 'RoCE' | 'Ethernet';
+export type GpuClusterStatus = 'active' | 'provisioning' | 'offline' | 'decommissioned';
+
+export interface GpuCluster {
+  id: number;
+  name: string;
+  description?: string;
+  gpu_model: GpuModel;
+  node_count: number;
+  gpus_per_node: number;
+  interconnect_type: InterconnectType;
+  status: GpuClusterStatus;
+  topology_id?: number;
+  vrf_id?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GpuClusterFormData {
+  name: string;
+  description: string;
+  gpu_model: string;
+  node_count: string;
+  gpus_per_node: string;
+  interconnect_type: string;
+  status: string;
+  topology_id: string;
+  vrf_id: string;
+}
+
+// Tenant types
+export type TenantStatus = 'active' | 'inactive';
+
+export interface Tenant {
+  id: number;
+  name: string;
+  description?: string;
+  status: TenantStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantFormData {
+  name: string;
+  description: string;
+  status: string;
+}
+
 export interface Settings {
   default_ssh_user: string;
   default_ssh_pass: string;
@@ -106,6 +156,10 @@ export interface Settings {
   hostname_pattern: string;
   // Topology builder
   cable_slack_percent: number;
+  default_spine_model: string;
+  default_leaf_model: string;
+  default_mgmt_switch_model: string;
+  default_gpu_model: string;
 }
 
 export interface Branding {
@@ -638,6 +692,7 @@ export interface IpamVrf {
   name: string;
   rd?: string;
   description?: string;
+  tenant_id?: number;
   prefix_count?: number;
   created_at: string;
   updated_at: string;
@@ -764,7 +819,7 @@ export interface DeviceRoleFormData {
 
 // ========== Chassis / Port Layout Types ==========
 
-export type PortConnector = 'rj45' | 'sfp' | 'sfp+' | 'sfp28' | 'qsfp+' | 'qsfp28' | 'qsfp-dd';
+export type PortConnector = 'rj45' | 'sfp' | 'sfp+' | 'sfp28' | 'qsfp+' | 'qsfp28' | 'qsfp-dd' | 'osfp';
 
 export type PortSpeedMbps = 1000 | 2500 | 10000 | 25000 | 40000 | 50000 | 100000 | 400000;
 
@@ -828,6 +883,7 @@ export const PORT_CONNECTOR_OPTIONS = [
   { value: 'qsfp+', label: 'QSFP+' },
   { value: 'qsfp28', label: 'QSFP28' },
   { value: 'qsfp-dd', label: 'QSFP-DD' },
+  { value: 'osfp', label: 'OSFP' },
 ] as const;
 
 export const PORT_SPEED_OPTIONS = [

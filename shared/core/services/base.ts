@@ -130,7 +130,7 @@ export class BaseService {
 
   constructor(config?: ServiceConfig) {
     this.config = config || globalConfig;
-    this.fetchFn = this.config.fetch || ((...args) => fetch(...args));
+    this.fetchFn = this.config.fetch || ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
   }
 
   protected async getBaseUrl(): Promise<string> {

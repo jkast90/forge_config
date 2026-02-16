@@ -202,6 +202,66 @@ const ARISTA_7020TR_48: ChassisLayout = {
 };
 
 // ---------------------------------------------------------------------------
+// AMD MI300X 8-GPU Node
+// 2x QSFP-DD 400G (leaf uplinks) + 8x OSFP 400G (GPU fabric) + 1x RJ45 Mgmt
+// ---------------------------------------------------------------------------
+const AMD_MI300X: ChassisLayout = {
+  vendor_id: 'amd',
+  model: 'MI300X 8-GPU Node',
+  display_name: 'AMD Instinct MI300X 8-GPU Node',
+  rack_units: 4,
+  rows: [
+    {
+      row: 1,
+      sections: [
+        {
+          label: 'QSFP-DD 400G',
+          ports: [
+            { col: 1, vendor_port_name: 'Ethernet1', connector: 'qsfp-dd' as const, speed: 400000 as const, role: 'uplink' as const },
+            { col: 2, vendor_port_name: 'Ethernet2', connector: 'qsfp-dd' as const, speed: 400000 as const, role: 'uplink' as const },
+          ],
+        },
+      ],
+    },
+    {
+      row: 2,
+      sections: [
+        {
+          label: 'OSFP 400G',
+          ports: Array.from({ length: 8 }, (_, i) => ({
+            col: i + 1,
+            vendor_port_name: `IB${i + 1}`,
+            connector: 'osfp' as const,
+            speed: 400000 as const,
+            role: 'lateral' as const,
+          })),
+        },
+      ],
+    },
+    {
+      row: 3,
+      sections: [
+        {
+          label: 'Management',
+          ports: [
+            { col: 1, vendor_port_name: 'Management1', connector: 'rj45' as const, speed: 1000 as const, role: 'mgmt' as const },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// AMD MI325X 8-GPU Node (same layout as MI300X, different ASIC)
+// ---------------------------------------------------------------------------
+const AMD_MI325X: ChassisLayout = {
+  ...AMD_MI300X,
+  model: 'MI325X 8-GPU Node',
+  display_name: 'AMD Instinct MI325X 8-GPU Node',
+};
+
+// ---------------------------------------------------------------------------
 // Registry & lookup helpers
 // ---------------------------------------------------------------------------
 
@@ -210,6 +270,8 @@ export const SWITCH_MODELS: Record<string, ChassisLayout> = {
   'arista:7050SX3-48YC8': ARISTA_7050SX3_48YC8,
   'arista:7280SR3-48YC8': ARISTA_7280SR3_48YC8,
   'arista:7020TR-48': ARISTA_7020TR_48,
+  'amd:MI300X 8-GPU Node': AMD_MI300X,
+  'amd:MI325X 8-GPU Node': AMD_MI325X,
 };
 
 export function getChassisLayout(vendorId: string, model: string): ChassisLayout | undefined {

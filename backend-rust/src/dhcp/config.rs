@@ -319,22 +319,22 @@ log-queries
         let port_assignments = self.store.list_port_assignments(device.id).await.unwrap_or_default();
         let mut vrf_map: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
         for pa in &port_assignments {
-            if let Some(ref vrf_id) = pa.vrf_id {
-                if vrf_id.is_empty() { continue; }
+            if let Some(vrf_id) = pa.vrf_id {
+                let vrf_key = vrf_id.to_string();
                 let iface = serde_json::json!({
                     "port_name": pa.port_name,
                     "remote_device": pa.remote_device_hostname.clone().unwrap_or_default(),
                     "remote_port": pa.remote_port_name,
                     "description": pa.description.clone().unwrap_or_default(),
                 });
-                if let Some(existing) = vrf_map.get_mut(vrf_id) {
+                if let Some(existing) = vrf_map.get_mut(&vrf_key) {
                     if let Some(arr) = existing.get_mut("interfaces").and_then(|v| v.as_array_mut()) {
                         arr.push(iface);
                     }
                 } else {
-                    vrf_map.insert(vrf_id.clone(), serde_json::json!({
+                    vrf_map.insert(vrf_key.clone(), serde_json::json!({
                         "id": vrf_id,
-                        "name": pa.vrf_name.clone().unwrap_or_else(|| vrf_id.clone()),
+                        "name": pa.vrf_name.clone().unwrap_or(vrf_key),
                         "interfaces": [iface],
                     }));
                 }

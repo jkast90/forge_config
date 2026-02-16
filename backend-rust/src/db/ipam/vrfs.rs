@@ -69,11 +69,12 @@ impl IpamVrfRepo {
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateIpamVrfRequest) -> Result<IpamVrf> {
         let now = Utc::now();
         let result = sqlx::query(
-            "INSERT INTO ipam_vrfs (name, rd, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+            "INSERT INTO ipam_vrfs (name, rd, description, tenant_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
         )
         .bind(&req.name)
         .bind(req.rd.as_deref().unwrap_or(""))
         .bind(req.description.as_deref().unwrap_or(""))
+        .bind(req.tenant_id)
         .bind(now).bind(now)
         .execute(pool).await?;
         let new_id = result.last_insert_rowid();

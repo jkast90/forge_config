@@ -21,7 +21,7 @@ fn map_row(row: &SqliteRow) -> PortAssignment {
         remote_device_type: none_if_empty(row.get("remote_device_type")),
         patch_panel_a_hostname: none_if_empty(row.get("patch_panel_a_hostname")),
         patch_panel_b_hostname: none_if_empty(row.get("patch_panel_b_hostname")),
-        vrf_id: none_if_empty(row.get("vrf_id")),
+        vrf_id: row.try_get::<Option<i64>, _>("vrf_id").ok().flatten(),
         vrf_name: none_if_empty(row.try_get("vrf_name").unwrap_or_default()),
         cable_length_meters: row.try_get::<Option<f64>, _>("cable_length_meters").ok().flatten(),
         created_at: row.get("created_at"),

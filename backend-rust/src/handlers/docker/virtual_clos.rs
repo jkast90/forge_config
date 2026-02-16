@@ -167,6 +167,7 @@ pub(super) async fn compute_clos_preview(
             rack_name,
             rack_index: rack_idx,
             rack_position: pos,
+            device_type: None,
         });
         dev_index += 1;
     }
@@ -199,6 +200,7 @@ pub(super) async fn compute_clos_preview(
             rack_name,
             rack_index: rack_idx,
             rack_position: pos,
+            device_type: None,
         });
         dev_index += 1;
     }
@@ -224,11 +226,12 @@ pub(super) async fn compute_clos_preview(
             rack_name,
             rack_index: rack_idx,
             rack_position: pos,
+            device_type: None,
         });
         dev_index += 1;
     }
 
-    // External devices (not assigned to racks)
+    // External devices (not assigned to racks, no loopback/mgmt)
     let external_names = &req.tier1_names;
     for i in 1..=external_count {
         let hostname = external_names.get(i - 1)
@@ -239,13 +242,14 @@ pub(super) async fn compute_clos_preview(
             index: dev_index,
             hostname,
             role: "external".to_string(),
-            loopback: format!("10.255.2.{}", i),
+            loopback: String::new(),
             asn: 64999_u32.saturating_sub(i as u32 - 1),
             model: "7280R3".to_string(),
-            mgmt_ip: format!("172.20.2.{}", 10 + i),
+            mgmt_ip: String::new(),
             rack_name: None,
             rack_index: None,
             rack_position: None,
+            device_type: Some("external".to_string()),
         });
         dev_index += 1;
     }
@@ -454,14 +458,239 @@ pub(super) async fn compute_clos_preview(
         }
     }
 
-    // ── 8. Return response ──────────────────────────────────────────────
+    // ── 8. Compute GPU cluster assignments + GPU node devices ──────────
+    let gpu_clusters = if req.gpu_cluster_count > 0 {
+        let leaf_devs: Vec<(usize, String, Option<usize>, Option<i32>)> = devices.iter()
+            .filter(|d| d.role == "leaf")
+            .map(|d| (d.index, d.hostname.clone(), d.rack_index, d.rack_position))
+            .collect();
+        let total_leaves = leaf_devs.len();
+        let gpu_model_name = format!("{} 8-GPU Node", req.gpu_model);
+        let topology_name_slug = if req.topology_name.is_empty() {
+            VIRTUAL_CLOS_TOPOLOGY_NAME.to_string()
+        } else {
+            req.topology_name.clone()
+        };
+        let topology_name_slug = topology_name_slug.to_lowercase().replace(' ', "-");
+
+        let mut clusters: Vec<TopologyPreviewGpuCluster> = Vec::new();
+
+        for ci in 0..req.gpu_cluster_count {
+            let mut device_indices: Vec<usize> = Vec::new();
+            let mut leaf_uplink_links: Vec<TopologyPreviewLink> = Vec::new();
+            let mut cluster_fabric_links: Vec<TopologyPreviewLink> = Vec::new();
+            let mut leaf_assignments: Vec<String> = Vec::new();
+
+            // Create GPU node devices, striped across leaf racks
+            for ni in 0..req.gpu_nodes_per_cluster {
+                let leaf_idx = (ci * req.gpu_nodes_per_cluster + ni) % total_leaves.max(1);
+                let (_, leaf_hostname, leaf_rack_idx, leaf_rack_pos) = leaf_devs.get(leaf_idx)
+                    .cloned()
+                    .unwrap_or((0, String::new(), None, None));
+                leaf_assignments.push(leaf_hostname.clone());
+
+                let gpu_hostname = format!("{}-gpu-{}-n{}", topology_name_slug, ci + 1, ni + 1);
+
+                // Place GPU node in same rack as its assigned leaf, 4U below leaf
+                let gpu_rack_name = leaf_rack_idx.and_then(|ri| leaf_rack_names.get(ri).cloned());
+                let gpu_rack_pos = leaf_rack_pos.map(|p| p + 4 + (ni as i32 * 4));
+
+                devices.push(TopologyPreviewDevice {
+                    index: dev_index,
+                    hostname: gpu_hostname.clone(),
+                    role: "gpu-node".to_string(),
+                    loopback: String::new(),
+                    asn: 0,
+                    model: gpu_model_name.clone(),
+                    mgmt_ip: format!("172.20.5.{}", 10 + ci * req.gpu_nodes_per_cluster + ni + 1),
+                    rack_name: gpu_rack_name,
+                    rack_index: leaf_rack_idx,
+                    rack_position: gpu_rack_pos,
+                    device_type: Some("internal".to_string()),
+                });
+                device_indices.push(dev_index);
+                dev_index += 1;
+
+                // Leaf uplink links (2 per GPU node)
+                if req.gpu_include_leaf_uplinks && !leaf_hostname.is_empty() {
+                    let leaf_dev = leaf_devs.get(leaf_idx);
+                    for ul in 0..2u32 {
+                        let net = p2p_base + link_counter * 2;
+                        let gpu_ip = crate::utils::u32_to_ipv4(net);
+                        let leaf_ip = crate::utils::u32_to_ipv4(net + 1);
+                        let subnet = format!("{}/31", gpu_ip);
+                        let cable_length_meters = leaf_dev.map(|(_, _, lri, lrp)| {
+                            estimate_cable_length(
+                                leaf_rack_idx, gpu_rack_pos,
+                                *lri, *lrp,
+                                racks_per_row, req.row_spacing_cm, settings.cable_slack_percent,
+                            )
+                        }).flatten();
+
+                        leaf_uplink_links.push(TopologyPreviewLink {
+                            side_a_hostname: gpu_hostname.clone(),
+                            side_a_interface: format!("Ethernet{}", ul + 1),
+                            side_a_ip: gpu_ip,
+                            side_b_hostname: leaf_hostname.clone(),
+                            side_b_interface: format!("Ethernet{}", 33 + ci * req.gpu_nodes_per_cluster * 2 + ni * 2 + ul as usize),
+                            side_b_ip: leaf_ip,
+                            subnet,
+                            cable_length_meters,
+                        });
+                        link_counter += 1;
+                    }
+                }
+            }
+
+            // GPU fabric links — full mesh within cluster
+            if req.gpu_include_fabric_cabling && req.gpu_nodes_per_cluster > 1 {
+                let is_ib = req.gpu_interconnect == "InfiniBand" || req.gpu_interconnect == "InfinityFabric";
+                let mut port_counters: Vec<usize> = vec![0; req.gpu_nodes_per_cluster];
+
+                for a in 0..req.gpu_nodes_per_cluster {
+                    for b in (a + 1)..req.gpu_nodes_per_cluster {
+                        let a_port = port_counters[a];
+                        let b_port = port_counters[b];
+                        port_counters[a] += 1;
+                        port_counters[b] += 1;
+
+                        let a_if = if is_ib { format!("IB{}", a_port + 1) } else { format!("Ethernet{}", a_port + 3) };
+                        let b_if = if is_ib { format!("IB{}", b_port + 1) } else { format!("Ethernet{}", b_port + 3) };
+
+                        let a_dev = &devices[device_indices[a]];
+                        let b_dev = &devices[device_indices[b]];
+
+                        let cable_length_meters = estimate_cable_length(
+                            a_dev.rack_index, a_dev.rack_position,
+                            b_dev.rack_index, b_dev.rack_position,
+                            racks_per_row, req.row_spacing_cm, settings.cable_slack_percent,
+                        );
+
+                        cluster_fabric_links.push(TopologyPreviewLink {
+                            side_a_hostname: a_dev.hostname.clone(),
+                            side_a_interface: a_if,
+                            side_a_ip: String::new(),
+                            side_b_hostname: b_dev.hostname.clone(),
+                            side_b_interface: b_if,
+                            side_b_ip: String::new(),
+                            subnet: String::new(),
+                            cable_length_meters,
+                        });
+                    }
+                }
+            }
+
+            clusters.push(TopologyPreviewGpuCluster {
+                name: format!("gpu-cluster-{}", ci + 1),
+                gpu_model: req.gpu_model.clone(),
+                node_count: req.gpu_nodes_per_cluster,
+                gpus_per_node: req.gpus_per_node,
+                interconnect: req.gpu_interconnect.clone(),
+                leaf_assignments,
+                device_indices,
+                leaf_uplink_links,
+                fabric_links: cluster_fabric_links,
+            });
+        }
+        clusters
+    } else {
+        Vec::new()
+    };
+
+    // ── 9. Add management switches based on distribution setting ────────
+    let mgmt_model = if req.mgmt_switch_model.is_empty() { "CCS-720XP-48ZC2".to_string() } else { req.mgmt_switch_model.clone() };
+    let topology_name_for_mgmt = if req.topology_name.is_empty() { VIRTUAL_CLOS_TOPOLOGY_NAME } else { &req.topology_name };
+    let mgmt_dist = if req.mgmt_switch_distribution.is_empty() { "per-row" } else { &req.mgmt_switch_distribution };
+    let mgmt_count_per_row = req.mgmt_switches_per_row.max(1);
+    let mut mgmt_counter: usize = 0;
+    for h in 1..=hall_count {
+        let _hall_name = format!("Hall {}", h);
+        // Per-hall: one mgmt switch for the entire hall, placed in first rack of first row
+        if mgmt_dist == "per-hall" {
+            let row_name = format!("Hall {} Row 1", h);
+            let first_rack = racks.iter().find(|rk| rk.row_name == row_name);
+            let (rack_name, rack_idx) = match first_rack {
+                Some(rk) => (Some(rk.name.clone()), Some(rk.index)),
+                None => (None, None),
+            };
+            mgmt_counter += 1;
+            devices.push(TopologyPreviewDevice {
+                index: dev_index,
+                hostname: format!("{}-mgmt-h{}", topology_name_for_mgmt, h),
+                role: "mgmt-switch".to_string(),
+                loopback: String::new(),
+                asn: 0,
+                model: mgmt_model.clone(),
+                mgmt_ip: format!("172.20.2.{}", 10 + mgmt_counter),
+                rack_name,
+                rack_index: rack_idx,
+                rack_position: Some(41),
+                device_type: Some("internal".to_string()),
+            });
+            dev_index += 1;
+            continue;
+        }
+        for r in 1..=rows_per_hall {
+            let row_name = format!("Hall {} Row {}", h, r);
+            if mgmt_dist == "per-rack" {
+                // Per-rack: one mgmt switch in each rack of the row
+                let row_racks: Vec<_> = racks.iter().filter(|rk| rk.row_name == row_name).collect();
+                for (ri, rack) in row_racks.iter().enumerate() {
+                    mgmt_counter += 1;
+                    devices.push(TopologyPreviewDevice {
+                        index: dev_index,
+                        hostname: format!("{}-mgmt-h{}-r{}-rk{}", topology_name_for_mgmt, h, r, ri + 1),
+                        role: "mgmt-switch".to_string(),
+                        loopback: String::new(),
+                        asn: 0,
+                        model: mgmt_model.clone(),
+                        mgmt_ip: format!("172.20.2.{}", 10 + mgmt_counter),
+                        rack_name: Some(rack.name.clone()),
+                        rack_index: Some(rack.index),
+                        rack_position: Some(41),
+                        device_type: Some("internal".to_string()),
+                    });
+                    dev_index += 1;
+                }
+            } else {
+                // Per-row (default) or count-per-row
+                let count = if mgmt_dist == "count-per-row" { mgmt_count_per_row } else { 1 };
+                let first_rack = racks.iter().find(|rk| rk.row_name == row_name);
+                let (rack_name, rack_idx) = match first_rack {
+                    Some(rk) => (Some(rk.name.clone()), Some(rk.index)),
+                    None => (None, None),
+                };
+                for m in 1..=count {
+                    mgmt_counter += 1;
+                    let suffix = if count > 1 { format!("-{}", m) } else { String::new() };
+                    devices.push(TopologyPreviewDevice {
+                        index: dev_index,
+                        hostname: format!("{}-mgmt-h{}-r{}{}", topology_name_for_mgmt, h, r, suffix),
+                        role: "mgmt-switch".to_string(),
+                        loopback: String::new(),
+                        asn: 0,
+                        model: mgmt_model.clone(),
+                        mgmt_ip: format!("172.20.2.{}", 10 + mgmt_counter),
+                        rack_name: rack_name.clone(),
+                        rack_index: rack_idx,
+                        rack_position: Some(41 - m as i32 + 1),
+                        device_type: Some("internal".to_string()),
+                    });
+                    dev_index += 1;
+                }
+            }
+        }
+    }
+
+    // ── 10. Return response ──────────────────────────────────────────────
     Ok(TopologyPreviewResponse {
         architecture: "clos".to_string(),
-        topology_name: "DC1 CLOS Fabric".to_string(),
+        topology_name: if req.topology_name.is_empty() { VIRTUAL_CLOS_TOPOLOGY_NAME.to_string() } else { req.topology_name.clone() },
         devices,
         fabric_links,
         racks,
         tier3_placement: placement.to_string(),
+        gpu_clusters,
     })
 }
 
@@ -540,6 +769,7 @@ pub async fn build_virtual_clos(
     };
     let region = region.as_str();
     let row_spacing_cm = req.row_spacing_cm;
+    let topo_name = if req.topology_name.is_empty() { VIRTUAL_CLOS_TOPOLOGY_NAME.to_string() } else { req.topology_name.clone() };
 
     // Super-spine fields
     let ss_enabled = req.super_spine_enabled;
@@ -564,25 +794,26 @@ pub async fn build_virtual_clos(
 
     // Detect vendor from image (FRR vs Arista)
     let use_frr = spawn_containers && is_frr_image(&ceos_image);
-    let vendor_id = if use_frr { "frr" } else { "arista" };
+    let vendor_name = if use_frr { "frr" } else { "arista" };
+    let vendor_id = match state.store.get_vendor_by_name(vendor_name).await? {
+        Some(v) => v.id.to_string(),
+        None => vendor_name.to_string(),
+    };
 
     // Look up device roles to resolve config_template + group_names per topology role
     let mut role_templates: HashMap<String, String> = HashMap::new();
     let mut role_group_names: HashMap<String, Vec<String>> = HashMap::new();
     for role_name in ["spine", "leaf", "external", "super-spine"] {
         // Try vendor-prefixed name first (e.g. "arista-spine"), then plain role name
-        let device_role_name = format!("{}-{}", vendor_id, role_name);
+        let device_role_name = format!("{}-{}", vendor_name, role_name);
         let found_role = match state.store.find_device_role_by_name(&device_role_name).await {
             Ok(Some(r)) => Some(r),
             _ => state.store.find_device_role_by_name(role_name).await.ok().flatten(),
         };
         if let Some(role) = found_role {
-            if let Some(tnames) = &role.template_names {
-                if let Some(first) = tnames.first() {
-                    // Derive base template: "arista-eos-leaf" → "arista-eos"
-                    let base = first.strip_suffix(&format!("-{}", role_name))
-                        .unwrap_or(first);
-                    role_templates.insert(role_name.to_string(), base.to_string());
+            if let Some(tids) = &role.template_ids {
+                if let Some(first_id) = tids.first() {
+                    role_templates.insert(role_name.to_string(), first_id.to_string());
                 }
             }
             if !role.group_names.is_empty() {
@@ -593,7 +824,7 @@ pub async fn build_virtual_clos(
 
     // Create topology
     let topo_req = crate::models::CreateTopologyRequest {
-        name: VIRTUAL_CLOS_TOPOLOGY_NAME.to_string(),
+        name: topo_name.clone(),
         description: Some(if ss_enabled {
             format!("{}-spine / {}-leaf / {}-super-spine / {}-external ({}-pod) Arista virtual fabric",
                 spine_count, leaf_count, ss_count, external_count, pod_count)
@@ -624,6 +855,10 @@ pub async fn build_virtual_clos(
     let mut all_racks: Vec<(i64, i64, i64)> = Vec::new();
     // Map row_id -> patch panel device ID for port assignment wiring
     let mut patch_panels: HashMap<i64, i64> = HashMap::new();
+    // Management switch entries: (hall_id, row_id, rack_id or None, device_id)
+    let mut mgmt_switches: Vec<(i64, i64, Option<i64>, i64)> = Vec::new();
+    // Map row_id -> first rack ID (for patch panel placement)
+    let mut row_first_rack: HashMap<i64, i64> = HashMap::new();
 
     if let Some(dc_id) = datacenter_id {
         for h in 1..=hall_count {
@@ -668,6 +903,7 @@ pub async fn build_virtual_clos(
                             Ok(rack) => {
                                 spine_racks.push((hall_id, row_id, rack.id));
                                 all_racks.push((hall_id, row_id, rack.id));
+                                row_first_rack.entry(row_id).or_insert(rack.id);
                             }
                             Err(e) => {
                                 tracing::warn!("Failed to create spine rack: {}", e);
@@ -684,6 +920,7 @@ pub async fn build_virtual_clos(
                         Ok(rack) => {
                             rack_placements.push((hall_id, row_id, rack.id));
                             all_racks.push((hall_id, row_id, rack.id));
+                            row_first_rack.entry(row_id).or_insert(rack.id);
                         }
                         Err(e) => {
                             tracing::warn!("Failed to create rack hall-{}-row-{}-rack-{}: {}", h, r, k, e);
@@ -691,7 +928,8 @@ pub async fn build_virtual_clos(
                     }
                 }
 
-                // Create a patch panel device for this row
+                // Create a patch panel device for this row, placed in rack 1
+                let pp_rack_id = row_first_rack.get(&row_id).copied();
                 let pp_hostname = format!("vclos-hall-{}-row-{}-pp", h, r);
                 let pp_req = crate::models::CreateDeviceRequest {
                     mac: String::new(),
@@ -704,12 +942,12 @@ pub async fn build_virtual_clos(
                     ssh_user: None,
                     ssh_pass: None,
                     topology_id: Some(topo_id),
-                    topology_role: None,
+                    topology_role: Some("patch-panel".to_string()),
                     device_type: Some("external".to_string()),
                     hall_id: Some(hall_id),
                     row_id: Some(row_id),
-                    rack_id: None,
-                    rack_position: None,
+                    rack_id: pp_rack_id,
+                    rack_position: Some(42),
                 };
                 match state.store.create_device(&pp_req).await {
                     Ok(pp_dev) => {
@@ -717,6 +955,87 @@ pub async fn build_virtual_clos(
                     }
                     Err(e) => {
                         tracing::warn!("Failed to create patch panel {}: {}", pp_hostname, e);
+                    }
+                }
+
+            }
+        }
+    }
+
+    // Create management switches based on distribution setting
+    {
+        let mgmt_model = if req.mgmt_switch_model.is_empty() { "CCS-720XP-48ZC2".to_string() } else { req.mgmt_switch_model.clone() };
+        let mgmt_dist = if req.mgmt_switch_distribution.is_empty() { "per-row" } else { req.mgmt_switch_distribution.as_str() };
+        let mgmt_count_per_row = req.mgmt_switches_per_row.max(1);
+        let mut mgmt_counter: usize = 0;
+
+        // Helper closure to create a mgmt switch device
+        let create_mgmt = |counter: usize, hostname: &str, hall_id: i64, row_id: i64, rack_id: Option<i64>, rack_pos: i32| {
+            crate::models::CreateDeviceRequest {
+                mac: generate_arista_mac(),
+                ip: format!("172.20.2.{}", 10 + counter),
+                hostname: hostname.to_string(),
+                vendor: Some(vendor_id.to_string()),
+                model: Some(mgmt_model.clone()),
+                serial_number: Some(format!("SN-VCLOS-{}", hostname)),
+                config_template: String::new(),
+                ssh_user: Some("admin".to_string()),
+                ssh_pass: Some("admin".to_string()),
+                topology_id: Some(topo_id),
+                topology_role: Some("mgmt-switch".to_string()),
+                device_type: Some("internal".to_string()),
+                hall_id: Some(hall_id),
+                row_id: Some(row_id),
+                rack_id,
+                rack_position: Some(rack_pos),
+            }
+        };
+
+        if mgmt_dist == "per-hall" {
+            // One mgmt switch per hall, placed in first rack of first row
+            for &(hall_id, row_id, _) in rack_placements.iter() {
+                // Find the first row in this hall (smallest row_id)
+                let first_row = rack_placements.iter().filter(|(h, _, _)| *h == hall_id).map(|(_, r, _)| *r).min();
+                if first_row != Some(row_id) { continue; }
+                // Only create once per hall
+                if mgmt_switches.iter().any(|(h, _, _, _)| *h == hall_id) { continue; }
+                mgmt_counter += 1;
+                let rack_id = row_first_rack.get(&row_id).copied();
+                let hostname = format!("vclos-mgmt-h{}", mgmt_switches.len() + 1);
+                let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, rack_id, 41);
+                match state.store.create_device(&req).await {
+                    Ok(dev) => { mgmt_switches.push((hall_id, row_id, None, dev.id)); }
+                    Err(e) => { tracing::warn!("Failed to create mgmt switch {}: {}", hostname, e); }
+                }
+            }
+        } else if mgmt_dist == "per-rack" {
+            // One mgmt switch per rack
+            for &(hall_id, row_id, rack_id) in &all_racks {
+                mgmt_counter += 1;
+                let hostname = format!("vclos-mgmt-{}", mgmt_counter);
+                let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, Some(rack_id), 41);
+                match state.store.create_device(&req).await {
+                    Ok(dev) => { mgmt_switches.push((hall_id, row_id, Some(rack_id), dev.id)); }
+                    Err(e) => { tracing::warn!("Failed to create mgmt switch {}: {}", hostname, e); }
+                }
+            }
+        } else {
+            // per-row (default) or count-per-row
+            let count = if mgmt_dist == "count-per-row" { mgmt_count_per_row } else { 1 };
+            // Collect unique (hall_id, row_id) pairs
+            let mut seen_rows: Vec<(i64, i64)> = Vec::new();
+            for &(hall_id, row_id, _) in &all_racks {
+                if seen_rows.contains(&(hall_id, row_id)) { continue; }
+                seen_rows.push((hall_id, row_id));
+                let rack_id = row_first_rack.get(&row_id).copied();
+                for m in 1..=count {
+                    mgmt_counter += 1;
+                    let suffix = if count > 1 { format!("-{}", m) } else { String::new() };
+                    let hostname = format!("vclos-mgmt-{}{}", mgmt_counter, suffix);
+                    let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, rack_id, 41 - m as i32 + 1);
+                    match state.store.create_device(&req).await {
+                        Ok(dev) => { mgmt_switches.push((hall_id, row_id, None, dev.id)); }
+                        Err(e) => { tracing::warn!("Failed to create mgmt switch {}: {}", hostname, e); }
                     }
                 }
             }
@@ -1512,9 +1831,9 @@ pub async fn build_virtual_clos(
         }
     }
 
-    // External↔spine or External↔SS port assignments (no patch panel — externals are in spine rack)
+    // Spine↔SS and External↔SS/Spine port assignments
     if ss_enabled {
-        // Spine↔SS port assignments
+        // Spine↔SS port assignments (intra-rack, no patch panel)
         for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
             for (ssi, (ss_device_id, ss)) in super_spines.iter().enumerate() {
                 for link in 0..spine_to_ss_ratio {
@@ -1566,12 +1885,13 @@ pub async fn build_virtual_clos(
             }
         }
 
-        // External↔SS port assignments
+        // External↔SS port assignments (routed through patch panel)
         let ss_all_ports = model_100g_ports.get(&ss_model_name).cloned().unwrap_or_default();
         let ss_downlink_count = total_spines * spine_to_ss_ratio;
         let ss_uplink_ports_vec: Vec<String> = ss_all_ports.iter().skip(ss_downlink_count).cloned().collect();
         for (ei, (ext_device_id, ext)) in externals.iter().enumerate() {
             for (ssi, (ss_device_id, ss)) in super_spines.iter().enumerate() {
+                let ss_pp_id = ss.row_id.and_then(|rid| patch_panels.get(&rid)).copied();
                 for link in 0..uplinks_per_spine {
                     let ext_port_idx = ssi * uplinks_per_spine + link;
                     let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
@@ -1587,15 +1907,25 @@ pub async fn build_virtual_clos(
                         racks_per_row, row_spacing_cm, cable_slack_percent,
                     );
 
+                    let (pp_a_id, pp_a_port, pp_b_id, pp_b_port) = if let Some(pp_id) = ss_pp_id {
+                        let port_num = pp_port_counters.entry(pp_id).or_insert(0);
+                        let a_port_num = *port_num + 1;
+                        let b_port_num = *port_num + 2;
+                        *port_num += 2;
+                        (Some(pp_id), Some(format!("Port {}", a_port_num)), Some(pp_id), Some(format!("Port {}", b_port_num)))
+                    } else {
+                        (None, None, None, None)
+                    };
+
                     let ext_pa = crate::models::SetPortAssignmentRequest {
                         port_name: ext_if.clone(),
                         remote_device_id: Some(*ss_device_id),
                         remote_port_name: ss_if.clone(),
                         description: Some(format!("{} <-> {} uplink {}", ext.hostname, ss.hostname, link + 1)),
-                        patch_panel_a_id: None,
-                        patch_panel_a_port: None,
-                        patch_panel_b_id: None,
-                        patch_panel_b_port: None,
+                        patch_panel_a_id: pp_a_id,
+                        patch_panel_a_port: pp_a_port.clone(),
+                        patch_panel_b_id: pp_b_id,
+                        patch_panel_b_port: pp_b_port.clone(),
                         vrf_id: None,
                         cable_length_meters: cable_len,
                     };
@@ -1607,10 +1937,10 @@ pub async fn build_virtual_clos(
                         remote_device_id: Some(*ext_device_id),
                         remote_port_name: ext_if,
                         description: Some(format!("{} <-> {} uplink {}", ss.hostname, ext.hostname, link + 1)),
-                        patch_panel_a_id: None,
-                        patch_panel_a_port: None,
-                        patch_panel_b_id: None,
-                        patch_panel_b_port: None,
+                        patch_panel_a_id: pp_b_id,
+                        patch_panel_a_port: pp_b_port,
+                        patch_panel_b_id: pp_a_id,
+                        patch_panel_b_port: pp_a_port,
                         vrf_id: None,
                         cable_length_meters: cable_len,
                     };
@@ -1621,9 +1951,10 @@ pub async fn build_virtual_clos(
             }
         }
     } else {
-        // Original external↔spine port assignments (no super-spine)
+        // External↔spine port assignments (routed through patch panel)
         for (ei, (ext_device_id, ext)) in externals.iter().enumerate() {
             for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
+                let spine_pp_id = spine.row_id.and_then(|rid| patch_panels.get(&rid)).copied();
                 for link in 0..uplinks_per_spine {
                     let ext_port_idx = si * uplinks_per_spine + link;
                     let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
@@ -1639,16 +1970,26 @@ pub async fn build_virtual_clos(
                         racks_per_row, row_spacing_cm, cable_slack_percent,
                     );
 
+                    let (pp_a_id, pp_a_port, pp_b_id, pp_b_port) = if let Some(pp_id) = spine_pp_id {
+                        let port_num = pp_port_counters.entry(pp_id).or_insert(0);
+                        let a_port_num = *port_num + 1;
+                        let b_port_num = *port_num + 2;
+                        *port_num += 2;
+                        (Some(pp_id), Some(format!("Port {}", a_port_num)), Some(pp_id), Some(format!("Port {}", b_port_num)))
+                    } else {
+                        (None, None, None, None)
+                    };
+
                     // External-side
                     let ext_pa = crate::models::SetPortAssignmentRequest {
                         port_name: ext_if.clone(),
                         remote_device_id: Some(*spine_device_id),
                         remote_port_name: spine_if.clone(),
                         description: Some(format!("{} <-> {} uplink {}", ext.hostname, spine.hostname, link + 1)),
-                        patch_panel_a_id: None,
-                        patch_panel_a_port: None,
-                        patch_panel_b_id: None,
-                        patch_panel_b_port: None,
+                        patch_panel_a_id: pp_a_id,
+                        patch_panel_a_port: pp_a_port.clone(),
+                        patch_panel_b_id: pp_b_id,
+                        patch_panel_b_port: pp_b_port.clone(),
                         vrf_id: None,
                         cable_length_meters: cable_len,
                     };
@@ -1661,10 +2002,10 @@ pub async fn build_virtual_clos(
                         remote_device_id: Some(*ext_device_id),
                         remote_port_name: ext_if,
                         description: Some(format!("{} <-> {} uplink {}", spine.hostname, ext.hostname, link + 1)),
-                        patch_panel_a_id: None,
-                        patch_panel_a_port: None,
-                        patch_panel_b_id: None,
-                        patch_panel_b_port: None,
+                        patch_panel_a_id: pp_b_id,
+                        patch_panel_a_port: pp_b_port,
+                        patch_panel_b_id: pp_a_id,
+                        patch_panel_b_port: pp_a_port,
                         vrf_id: None,
                         cable_length_meters: cable_len,
                     };
@@ -1943,9 +2284,281 @@ pub async fn build_virtual_clos(
         }
     }
 
+    // Create GPU clusters, GPU node devices, and port assignments
+    if req.gpu_cluster_count > 0 {
+        let leaf_created: Vec<(i64, &VNode)> = created_ids.iter()
+            .filter(|(_, n)| n.role == "leaf")
+            .map(|(id, n)| (*id, n))
+            .collect();
+        let total_leaves = leaf_created.len().max(1);
+        let gpu_model_name = format!("{} 8-GPU Node", req.gpu_model);
+        let topology_slug = topo_name.to_lowercase().replace(' ', "-");
+
+        for ci in 0..req.gpu_cluster_count {
+            let cluster_vrf_id = req.gpu_vrf_ids.get(ci).copied().filter(|&id| id > 0);
+            let cluster_name = format!("{}-gpu-{}", topology_slug, ci + 1);
+            let description = format!(
+                "{} x {} ({} GPUs/node), {} interconnect — striped across {} leaves",
+                req.gpu_nodes_per_cluster, req.gpu_model, req.gpus_per_node,
+                req.gpu_interconnect, total_leaves.min(req.gpu_nodes_per_cluster)
+            );
+            let gpu_req = crate::models::CreateGpuClusterRequest {
+                name: cluster_name.clone(),
+                description: Some(description),
+                gpu_model: req.gpu_model.clone(),
+                node_count: req.gpu_nodes_per_cluster as i32,
+                gpus_per_node: req.gpus_per_node as i32,
+                interconnect_type: req.gpu_interconnect.clone(),
+                status: "provisioning".to_string(),
+                topology_id: Some(topo_id),
+                vrf_id: cluster_vrf_id,
+            };
+            match state.store.create_gpu_cluster(&gpu_req).await {
+                Ok(cluster) => {
+                    tracing::info!("Created GPU cluster {} (id={}) for topology {}", cluster.name, cluster.id, topo_id);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to create GPU cluster: {}", e);
+                }
+            }
+
+            // Create GPU node Device records
+            let mut gpu_device_ids: Vec<i64> = Vec::new();
+            for ni in 0..req.gpu_nodes_per_cluster {
+                let leaf_idx = (ci * req.gpu_nodes_per_cluster + ni) % total_leaves;
+                let (_, leaf_node) = &leaf_created[leaf_idx];
+                let gpu_hostname = format!("{}-gpu-{}-n{}", topology_slug, ci + 1, ni + 1);
+
+                // Apply overrides if present
+                let ov_dev = overrides.as_ref().and_then(|ov| {
+                    ov.devices.iter().find(|d| d.hostname == gpu_hostname)
+                });
+                let final_hostname = ov_dev.map(|d| d.hostname.clone()).unwrap_or(gpu_hostname.clone());
+                let final_rack_pos = leaf_node.rack_position.map(|p| p + 4 + (ni as i32 * 4));
+
+                let dev_req = crate::models::CreateDeviceRequest {
+                    mac: generate_mac(),
+                    ip: format!("172.20.5.{}", 10 + ci * req.gpu_nodes_per_cluster + ni + 1),
+                    hostname: final_hostname,
+                    vendor: Some("amd".to_string()),
+                    model: Some(gpu_model_name.clone()),
+                    serial_number: Some(format!("SN-GPU-{}", gpu_hostname)),
+                    config_template: String::new(),
+                    ssh_user: None,
+                    ssh_pass: None,
+                    topology_id: Some(topo_id),
+                    topology_role: Some("gpu-node".to_string()),
+                    device_type: Some("internal".to_string()),
+                    hall_id: leaf_node.hall_id,
+                    row_id: leaf_node.row_id,
+                    rack_id: leaf_node.rack_id,
+                    rack_position: final_rack_pos,
+                };
+                match state.store.create_device(&dev_req).await {
+                    Ok(dev) => {
+                        gpu_device_ids.push(dev.id);
+                        result_devices.push(TopologyBuildDevice {
+                            hostname: dev_req.hostname.clone(),
+                            role: "gpu-node".to_string(),
+                            mac: dev_req.mac,
+                            ip: dev_req.ip,
+                            container_name: String::new(),
+                        });
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to create GPU node device {}: {}", gpu_hostname, e);
+                        gpu_device_ids.push(0);
+                    }
+                }
+            }
+
+            // Create leaf uplink port assignments (GPU node Ethernet1/2 → Leaf ports)
+            if req.gpu_include_leaf_uplinks {
+                for ni in 0..req.gpu_nodes_per_cluster {
+                    let gpu_dev_id = gpu_device_ids[ni];
+                    if gpu_dev_id == 0 { continue; }
+                    let leaf_idx = (ci * req.gpu_nodes_per_cluster + ni) % total_leaves;
+                    let (leaf_dev_id, leaf_node) = &leaf_created[leaf_idx];
+                    let gpu_host = format!("{}-gpu-{}-n{}", topology_slug, ci + 1, ni + 1);
+
+                    for ul in 0..2usize {
+                        let gpu_port = format!("Ethernet{}", ul + 1);
+                        let leaf_port = format!("Ethernet{}", 33 + ci * req.gpu_nodes_per_cluster * 2 + ni * 2 + ul);
+                        let cable_len = estimate_cable_length(
+                            leaf_node.rack_id.map(|_| leaf_idx), leaf_node.rack_position,
+                            leaf_node.rack_id.map(|_| leaf_idx), leaf_node.rack_position.map(|p| p + 4 + (ni as i32 * 4)),
+                            racks_per_row, row_spacing_cm, cable_slack_percent,
+                        );
+
+                        // GPU side
+                        let gpu_pa = crate::models::SetPortAssignmentRequest {
+                            port_name: gpu_port.clone(),
+                            remote_device_id: Some(*leaf_dev_id),
+                            remote_port_name: leaf_port.clone(),
+                            description: Some(format!("GPU uplink to {}", leaf_node.hostname)),
+                            patch_panel_a_id: None,
+                            patch_panel_a_port: None,
+                            patch_panel_b_id: None,
+                            patch_panel_b_port: None,
+                            vrf_id: cluster_vrf_id,
+                            cable_length_meters: cable_len,
+                        };
+                        if let Err(e) = state.store.set_port_assignment(gpu_dev_id, &gpu_pa).await {
+                            tracing::warn!("Failed to create GPU uplink port assignment: {}", e);
+                        }
+
+                        // Leaf side
+                        let leaf_pa = crate::models::SetPortAssignmentRequest {
+                            port_name: leaf_port,
+                            remote_device_id: Some(gpu_dev_id),
+                            remote_port_name: gpu_port,
+                            description: Some(format!("GPU node {} uplink", gpu_host)),
+                            patch_panel_a_id: None,
+                            patch_panel_a_port: None,
+                            patch_panel_b_id: None,
+                            patch_panel_b_port: None,
+                            vrf_id: cluster_vrf_id,
+                            cable_length_meters: cable_len,
+                        };
+                        if let Err(e) = state.store.set_port_assignment(*leaf_dev_id, &leaf_pa).await {
+                            tracing::warn!("Failed to create leaf GPU port assignment: {}", e);
+                        }
+                    }
+                }
+            }
+
+            // Create GPU fabric port assignments (full mesh within cluster)
+            if req.gpu_include_fabric_cabling && req.gpu_nodes_per_cluster > 1 {
+                let is_ib = req.gpu_interconnect == "InfiniBand" || req.gpu_interconnect == "InfinityFabric";
+                let mut port_counters: Vec<usize> = vec![0; req.gpu_nodes_per_cluster];
+                for a in 0..req.gpu_nodes_per_cluster {
+                    for b in (a + 1)..req.gpu_nodes_per_cluster {
+                        let a_port_idx = port_counters[a];
+                        let b_port_idx = port_counters[b];
+                        port_counters[a] += 1;
+                        port_counters[b] += 1;
+
+                        let a_if = if is_ib { format!("IB{}", a_port_idx + 1) } else { format!("Ethernet{}", a_port_idx + 3) };
+                        let b_if = if is_ib { format!("IB{}", b_port_idx + 1) } else { format!("Ethernet{}", b_port_idx + 3) };
+
+                        let a_dev_id = gpu_device_ids[a];
+                        let b_dev_id = gpu_device_ids[b];
+                        if a_dev_id == 0 || b_dev_id == 0 { continue; }
+
+                        let a_pa = crate::models::SetPortAssignmentRequest {
+                            port_name: a_if.clone(),
+                            remote_device_id: Some(b_dev_id),
+                            remote_port_name: b_if.clone(),
+                            description: Some("GPU fabric link".to_string()),
+                            patch_panel_a_id: None,
+                            patch_panel_a_port: None,
+                            patch_panel_b_id: None,
+                            patch_panel_b_port: None,
+                            vrf_id: None,
+                            cable_length_meters: None,
+                        };
+                        if let Err(e) = state.store.set_port_assignment(a_dev_id, &a_pa).await {
+                            tracing::warn!("Failed to create GPU fabric port assignment: {}", e);
+                        }
+
+                        let b_pa = crate::models::SetPortAssignmentRequest {
+                            port_name: b_if,
+                            remote_device_id: Some(a_dev_id),
+                            remote_port_name: a_if,
+                            description: Some("GPU fabric link".to_string()),
+                            patch_panel_a_id: None,
+                            patch_panel_a_port: None,
+                            patch_panel_b_id: None,
+                            patch_panel_b_port: None,
+                            vrf_id: None,
+                            cable_length_meters: None,
+                        };
+                        if let Err(e) = state.store.set_port_assignment(b_dev_id, &b_pa).await {
+                            tracing::warn!("Failed to create GPU fabric port assignment: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Create management switch port assignments (OOB mgmt ports)
+    // Each mgmt switch connects to devices based on distribution:
+    //   per-rack: only devices in the same rack
+    //   per-row/per-hall/count-per-row: all devices in the same row (round-robin across mgmt switches)
+    {
+        let mut mgmt_port_counters: HashMap<i64, usize> = HashMap::new(); // mgmt_device_id -> next port number
+        for (dev_id, node) in &created_ids {
+            if node.role == "patch-panel" || node.device_type.as_deref() == Some("external") || node.role == "mgmt-switch" {
+                continue;
+            }
+            let row_id = match node.row_id { Some(r) => r, None => continue };
+            let rack_id = node.rack_id;
+
+            // Find matching mgmt switch(es) for this device
+            let matching: Vec<i64> = mgmt_switches.iter()
+                .filter(|(_, ms_row, ms_rack, _)| {
+                    if *ms_row != row_id { return false; }
+                    // If mgmt switch has a specific rack_id, only match devices in that rack
+                    if let Some(mr) = ms_rack {
+                        rack_id == Some(*mr)
+                    } else {
+                        true
+                    }
+                })
+                .map(|(_, _, _, dev)| *dev)
+                .collect();
+
+            if matching.is_empty() { continue; }
+
+            // Round-robin: pick mgmt switch with fewest assignments
+            let mgmt_switch_id = *matching.iter()
+                .min_by_key(|&&id| mgmt_port_counters.get(&id).copied().unwrap_or(0))
+                .unwrap();
+
+            let port_num = mgmt_port_counters.entry(mgmt_switch_id).or_insert(0);
+            *port_num += 1;
+            let pn = *port_num;
+
+            // Mgmt switch -> device
+            let mgmt_pa = crate::models::SetPortAssignmentRequest {
+                port_name: format!("Ethernet{}", pn),
+                remote_device_id: Some(*dev_id),
+                remote_port_name: "Management0".to_string(),
+                description: Some(format!("OOB management: {}", node.hostname)),
+                patch_panel_a_id: None,
+                patch_panel_a_port: None,
+                patch_panel_b_id: None,
+                patch_panel_b_port: None,
+                vrf_id: None,
+                cable_length_meters: None,
+            };
+            if let Err(e) = state.store.set_port_assignment(mgmt_switch_id, &mgmt_pa).await {
+                tracing::warn!("Failed to create mgmt switch port assignment for {}: {}", node.hostname, e);
+            }
+
+            // Device -> mgmt switch (reverse direction)
+            let dev_pa = crate::models::SetPortAssignmentRequest {
+                port_name: "Management0".to_string(),
+                remote_device_id: Some(mgmt_switch_id),
+                remote_port_name: format!("Ethernet{}", pn),
+                description: Some("OOB management uplink".to_string()),
+                patch_panel_a_id: None,
+                patch_panel_a_port: None,
+                patch_panel_b_id: None,
+                patch_panel_b_port: None,
+                vrf_id: None,
+                cable_length_meters: None,
+            };
+            if let Err(e) = state.store.set_port_assignment(*dev_id, &dev_pa).await {
+                tracing::warn!("Failed to create device mgmt port assignment for {}: {}", node.hostname, e);
+            }
+        }
+    }
+
     Ok(Json(TopologyBuildResponse {
         topology_id: topo_id,
-        topology_name: VIRTUAL_CLOS_TOPOLOGY_NAME.to_string(),
+        topology_name: topo_name,
         devices: result_devices,
         fabric_links,
     }))

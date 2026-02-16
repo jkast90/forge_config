@@ -3,6 +3,7 @@ import type { Theme } from '@core';
 import { THEME_OPTIONS } from '@core';
 import { Icon } from './Icon';
 import { Drawer } from './Drawer';
+import { Tooltip } from './Tooltip';
 
 export type { Theme };
 
@@ -56,12 +57,13 @@ interface ThemeSelectorToggleProps {
 
 export function ThemeSelectorToggle({ currentIcon, onClick }: ThemeSelectorToggleProps) {
   return (
-    <button
-      className="icon-button"
-      onClick={onClick}
-      title="Change theme"
-    >
-      <Icon name={currentIcon} size={20} />
-    </button>
+    <Tooltip content="Theme">
+      <button
+        className="icon-button"
+        onClick={onClick}
+      >
+        <Icon name={currentIcon} size={20} />
+      </button>
+    </Tooltip>
   );
 }

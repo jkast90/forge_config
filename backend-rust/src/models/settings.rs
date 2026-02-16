@@ -30,6 +30,15 @@ pub struct Settings {
     // Topology builder
     #[serde(default = "default_cable_slack_percent")]
     pub cable_slack_percent: i32,
+    // Topology builder defaults
+    #[serde(default)]
+    pub default_spine_model: Option<String>,
+    #[serde(default)]
+    pub default_leaf_model: Option<String>,
+    #[serde(default)]
+    pub default_mgmt_switch_model: Option<String>,
+    #[serde(default)]
+    pub default_gpu_model: Option<String>,
 }
 
 fn default_hostname_pattern() -> String {
@@ -56,6 +65,10 @@ impl Default for Settings {
             logo_url: None,
             hostname_pattern: default_hostname_pattern(),
             cable_slack_percent: default_cable_slack_percent(),
+            default_spine_model: None,
+            default_leaf_model: None,
+            default_mgmt_switch_model: None,
+            default_gpu_model: None,
         }
     }
 }

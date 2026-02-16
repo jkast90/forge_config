@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Json,
 };
 use std::sync::Arc;
@@ -57,12 +57,16 @@ pub async fn update_topology(
     Ok(Json(topology))
 }
 
-/// Delete a topology (unassigns devices, does NOT delete them)
+/// Delete a topology. Pass ?delete_devices=true to also delete all devices in the topology.
 pub async fn delete_topology(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<axum::http::StatusCode, ApiError> {
+    if params.get("delete_devices").map(|v| v == "true").unwrap_or(false) {
+        state.store.delete_devices_by_topology(id).await?;
+    }
     state.store.delete_topology(id).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }

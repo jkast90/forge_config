@@ -14,6 +14,7 @@ import {
   DevicesPage,
   DropdownSelect,
   ErrorBoundary,
+  Tenants,
   HelpTour,
   Notifications,
   NotificationPopup,
@@ -68,6 +69,7 @@ const PAGES: DropdownOption[] = [
   { id: 'ipam', label: 'IPAM', icon: 'lan', description: 'IP Address Management' },
   { id: 'jobs', label: 'Jobs', icon: 'schedule', description: 'Actions, job history, templates, credentials' },
   { id: 'locations', label: 'Locations', icon: 'account_tree', description: 'Regions, campuses, datacenters' },
+  { id: 'tenants', label: 'Tenants', icon: 'group', description: 'Tenants, VRFs, GPU clusters' },
   { id: 'topologies', label: 'Topologies', icon: 'hub', description: 'Network topologies' },
   { id: 'system', label: 'System', icon: 'settings', description: 'Users, branding, device naming' },
   { id: 'vendors-models', label: 'Vendors & Models', icon: 'business', description: 'Vendors, DHCP options, device models' },
@@ -157,7 +159,6 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
   const [apiHistoryHighlight, setApiHistoryHighlight] = useState<number | null>(null);
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [spawningTestHost, setSpawningTestHost] = useState(false);
   const [showScratchPad, setShowScratchPad] = useState(false);
   const [showCodeGenerator, setShowCodeGenerator] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -247,34 +248,6 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
     onDeviceDiscovered: handleDeviceDiscovered,
   });
 
-  // Clear discovery tracking so all devices will be treated as new
-  const handleClearDiscovery = useCallback(async () => {
-    try {
-      const services = getServices();
-      await services.discovery.clearTracking();
-      addNotification('success', 'Discovery tracking cleared', navigateAction('View Discovery', 'devices', 'discovery'));
-    } catch (err) {
-      console.error('Clear discovery error:', err);
-      const msg = err instanceof Error ? err.message : String(err);
-      addNotification('error', `Failed to clear discovery: ${msg}`);
-    }
-  }, []);
-
-  // Spawn a test host container
-  const handleSpawnTestHost = useCallback(async () => {
-    setSpawningTestHost(true);
-    try {
-      const services = getServices();
-      const container = await services.testContainers.spawn({});
-      addNotification('success', `Test host spawned: ${container.hostname} (${container.ip})`, navigateAction('View Containers', 'devices', 'containers'));
-    } catch (err) {
-      console.error('Spawn test host error:', err);
-      const msg = err instanceof Error ? err.message : String(err);
-      addNotification('error', `Failed to spawn test host: ${msg}`);
-    } finally {
-      setSpawningTestHost(false);
-    }
-  }, []);
 
   const handleSubmitDevice = async (device: Partial<Device>) => {
     if (editingDevice) {
@@ -303,6 +276,10 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
         <div className="header-content">
           <img src={settings?.logo_url || defaultLogo} alt="Logo" className="header-logo" />
           <h1>{settings?.app_name || 'ForgeConfig'}</h1>
+          <div className="header-meta">
+            {username && <div className="header-meta-row"><span className="header-meta-label">user:</span> {username}</div>}
+            <div className="header-meta-row"><span className="header-meta-label">commit:</span> {__COMMIT_HASH__}</div>
+          </div>
           <div className="header-controls">
             <Tooltip content="Notifications" position="bottom">
               <button
@@ -369,6 +346,10 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
           />
         )}
 
+        {activePage === 'tenants' && (
+          <Tenants />
+        )}
+
         {activePage === 'topologies' && (
           <TopologyManagement />
         )}
@@ -414,36 +395,6 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
                 <Icon name="qr_code_2" size={20} />
               </button>
             </Tooltip>
-          </div>
-          <span className="footer-commit">{__COMMIT_HASH__}</span>
-          <div className="footer-actions">
-            <Tooltip content="Spawn test host">
-              <button
-                className="icon-button"
-                onClick={handleSpawnTestHost}
-                disabled={spawningTestHost}
-              >
-                {spawningTestHost ? <SpinnerIcon size={20} /> : <Icon name="add_circle" size={20} />}
-              </button>
-            </Tooltip>
-            {activePage !== 'discovery' && (
-              <Tooltip content="Reset discovery tracking">
-                <button
-                  className="icon-button"
-                  onClick={handleClearDiscovery}
-                >
-                  <Icon name="restart_alt" size={20} />
-                </button>
-              </Tooltip>
-            )}
-            <Tooltip content="Telemetry">
-              <button
-                className="icon-button"
-                onClick={() => { setShowTelemetry(true); modalRoute.openModal('telemetry'); }}
-              >
-                <Icon name="insights" size={20} />
-              </button>
-            </Tooltip>
             <Tooltip content="API call history">
               <button
                 className="icon-button"
@@ -452,6 +403,16 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
                 <Icon name="history" size={20} />
               </button>
             </Tooltip>
+            <Tooltip content="Telemetry">
+              <button
+                className="icon-button"
+                onClick={() => { setShowTelemetry(true); modalRoute.openModal('telemetry'); }}
+              >
+                <Icon name="insights" size={20} />
+              </button>
+            </Tooltip>
+          </div>
+          <div className="footer-actions">
             <Tooltip content="Settings">
               <button
                 className="icon-button"

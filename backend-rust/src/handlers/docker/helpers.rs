@@ -112,7 +112,51 @@ pub struct UnifiedTopologyRequest {
     // Physical spacing for cable length estimation
     #[serde(default = "default_row_spacing")]
     pub row_spacing_cm: usize,
+
+    // User-provided topology name (falls back to architecture default if empty)
+    #[serde(default)]
+    pub topology_name: String,
+
+    // GPU cluster configuration
+    #[serde(default)]
+    pub gpu_cluster_count: usize,
+    #[serde(default = "default_gpu_model")]
+    pub gpu_model: String,
+    #[serde(default = "default_gpus_per_node")]
+    pub gpus_per_node: usize,
+    #[serde(default = "default_gpu_nodes_per_cluster")]
+    pub gpu_nodes_per_cluster: usize,
+    #[serde(default = "default_interconnect")]
+    pub gpu_interconnect: String,
+
+    // Per-cluster VRF assignment (indexed by cluster position)
+    #[serde(default)]
+    pub gpu_vrf_ids: Vec<i64>,
+
+    // GPU cabling options
+    #[serde(default = "default_true")]
+    pub gpu_include_leaf_uplinks: bool,
+    #[serde(default = "default_true")]
+    pub gpu_include_fabric_cabling: bool,
+
+    // Management switch configuration
+    #[serde(default)]
+    pub mgmt_switch_model: String,
+    /// Distribution: "per-row" (default), "per-rack", "per-hall", or "count-per-row"
+    #[serde(default = "default_mgmt_distribution")]
+    pub mgmt_switch_distribution: String,
+    /// Count of mgmt switches per row (only used when distribution = "count-per-row")
+    #[serde(default = "default_one")]
+    pub mgmt_switches_per_row: usize,
 }
+
+fn default_mgmt_distribution() -> String { "per-row".to_string() }
+fn default_true() -> bool { true }
+
+fn default_gpu_model() -> String { "MI300X".to_string() }
+fn default_gpus_per_node() -> usize { 8 }
+fn default_gpu_nodes_per_cluster() -> usize { 8 }
+fn default_interconnect() -> String { "InfiniBand".to_string() }
 fn default_architecture() -> String { "clos".to_string() }
 fn default_external_count() -> usize { 2 }
 fn default_ratio() -> usize { 2 }
@@ -355,6 +399,8 @@ pub struct TopologyPreviewDevice {
     pub rack_name: Option<String>,
     pub rack_index: Option<usize>,
     pub rack_position: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_type: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -379,6 +425,26 @@ pub struct TopologyPreviewRack {
     pub rack_type: String,
 }
 
+#[derive(Serialize, Clone)]
+pub struct TopologyPreviewGpuCluster {
+    pub name: String,
+    pub gpu_model: String,
+    pub node_count: usize,
+    pub gpus_per_node: usize,
+    pub interconnect: String,
+    /// Leaf hostnames this cluster's nodes are striped across
+    pub leaf_assignments: Vec<String>,
+    /// Indices into the main devices array for this cluster's GPU nodes
+    #[serde(default)]
+    pub device_indices: Vec<usize>,
+    /// Leaf uplink links (GPU node Ethernet → Leaf port)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leaf_uplink_links: Vec<TopologyPreviewLink>,
+    /// GPU fabric links (IB mesh within the cluster)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fabric_links: Vec<TopologyPreviewLink>,
+}
+
 #[derive(Serialize)]
 pub struct TopologyPreviewResponse {
     pub architecture: String,
@@ -387,6 +453,8 @@ pub struct TopologyPreviewResponse {
     pub fabric_links: Vec<TopologyPreviewLink>,
     pub racks: Vec<TopologyPreviewRack>,
     pub tier3_placement: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gpu_clusters: Vec<TopologyPreviewGpuCluster>,
 }
 
 /// Request to build a topology with optional user overrides from preview
@@ -401,6 +469,8 @@ pub struct TopologyBuildWithOverrides {
 #[derive(Deserialize)]
 pub struct TopologyOverrides {
     pub devices: Vec<TopologyPreviewDevice>,
+    #[serde(default)]
+    pub racks: Option<Vec<TopologyPreviewRack>>,
 }
 
 /// Build a tar archive in memory containing files
