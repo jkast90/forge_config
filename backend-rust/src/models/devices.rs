@@ -27,7 +27,7 @@ pub struct Device {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ssh_pass: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub topology_id: Option<String>,
+    pub topology_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub topology_role: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,7 +71,7 @@ pub struct CreateDeviceRequest {
     #[serde(default)]
     pub ssh_pass: Option<String>,
     #[serde(default)]
-    pub topology_id: Option<String>,
+    pub topology_id: Option<i64>,
     #[serde(default)]
     pub topology_role: Option<String>,
     #[serde(default)]
@@ -104,7 +104,7 @@ pub struct UpdateDeviceRequest {
     #[serde(default)]
     pub ssh_pass: Option<String>,
     #[serde(default)]
-    pub topology_id: Option<String>,
+    pub topology_id: Option<i64>,
     #[serde(default)]
     pub topology_role: Option<String>,
     #[serde(default)]

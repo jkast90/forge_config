@@ -1,8 +1,8 @@
 mod containers;
-mod clos_lab;
 mod virtual_clos;
+mod three_tier;
 mod helpers;
 
 pub use containers::*;
-pub use clos_lab::*;
 pub use virtual_clos::*;
+pub use three_tier::*;

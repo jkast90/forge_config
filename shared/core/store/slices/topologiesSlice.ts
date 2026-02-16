@@ -24,12 +24,12 @@ export const createTopology = createAsyncThunk('topologies/create', async (data:
 
 export const updateTopology = createAsyncThunk(
   'topologies/update',
-  async ({ id, data }: { id: string; data: Partial<Topology> }) => {
+  async ({ id, data }: { id: number | string; data: Partial<Topology> }) => {
     return getServices().topologies.update(id, data);
   }
 );
 
-export const deleteTopology = createAsyncThunk('topologies/delete', async (id: string) => {
+export const deleteTopology = createAsyncThunk('topologies/delete', async (id: number | string) => {
   await getServices().topologies.remove(id);
   return id;
 });

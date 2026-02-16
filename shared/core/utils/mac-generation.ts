@@ -77,7 +77,7 @@ export function getVendorPrefixOptions(vendors?: Vendor[]): VendorPrefixOption[]
       (v.mac_prefixes || []).slice(0, 2).map((p, i) => ({
         value: p,
         label: i === 0 ? v.name : `${v.name} (alt)`,
-        vendor: v.id,
+        vendor: String(v.id),
       }))
     ),
   ];
@@ -86,13 +86,13 @@ export function getVendorPrefixOptions(vendors?: Vendor[]): VendorPrefixOption[]
 /**
  * Get DHCP vendor class identifier for a vendor ID
  * Uses vendor data from cache instead of hardcoded values
- * @param vendorId - Vendor ID (e.g., "cisco")
+ * @param vendorId - Vendor ID
  * @returns Vendor class identifier or empty string if not found
  */
-export function getVendorClassForVendor(vendorId: string): string {
+export function getVendorClassForVendor(vendorId: string | number): string {
   const vendors = getVendorCache();
   if (vendors) {
-    const vendor = vendors.find((v) => v.id.toLowerCase() === vendorId.toLowerCase());
+    const vendor = vendors.find((v) => String(v.id) === String(vendorId));
     if (vendor?.vendor_class) {
       return vendor.vendor_class;
     }

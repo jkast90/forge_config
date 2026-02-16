@@ -16,6 +16,7 @@ import type {
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Checkbox } from './Checkbox';
 import { IconButton } from './IconButton';
 import { InfoSection } from './InfoSection';
 import { LoadingState } from './LoadingState';
@@ -205,12 +206,12 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
 
   const dcOptions = useMemo(() => [
     { value: '', label: '(none)' },
-    ...datacenters.map(d => ({ value: d.id, label: d.name })),
+    ...datacenters.map(d => ({ value: String(d.id), label: d.name })),
   ], [datacenters]);
 
   const vrfOptions = useMemo(() => [
     { value: '', label: '(Global)' },
-    ...vrfs.map(v => ({ value: v.id, label: `${v.name}${v.rd ? ' (' + v.rd + ')' : ''}` })),
+    ...vrfs.map(v => ({ value: String(v.id), label: `${v.name}${v.rd ? ' (' + v.rd + ')' : ''}` })),
   ], [vrfs]);
 
   const parentOptions = useMemo(() => [
@@ -229,7 +230,7 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
   const handleOpenCreateChild = useCallback((parentId: number) => {
     setEditingPrefix(null);
     const parent = prefixes.find(p => p.id === parentId);
-    setPrefixForm({ prefix: '', description: '', status: 'active', is_supernet: false, role_ids: [], parent_id: String(parentId), datacenter_id: '', vlan_id: '', vrf_id: parent?.vrf_id || '' });
+    setPrefixForm({ prefix: '', description: '', status: 'active', is_supernet: false, role_ids: [], parent_id: String(parentId), datacenter_id: '', vlan_id: '', vrf_id: parent?.vrf_id != null ? String(parent.vrf_id) : '' });
     setShowPrefixForm(true);
   }, [prefixes]);
 
@@ -242,9 +243,9 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
       is_supernet: p.is_supernet,
       role_ids: p.role_ids || [],
       parent_id: p.parent_id != null ? String(p.parent_id) : '',
-      datacenter_id: p.datacenter_id || '',
+      datacenter_id: p.datacenter_id != null ? String(p.datacenter_id) : '',
       vlan_id: p.vlan_id?.toString() || '',
-      vrf_id: p.vrf_id || '',
+      vrf_id: p.vrf_id != null ? String(p.vrf_id) : '',
     });
     setShowPrefixForm(true);
   }, []);
@@ -444,21 +445,19 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Roles</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {roles.map(r => (
-                <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={prefixForm.role_ids.includes(r.id)}
-                    onChange={(e) => {
-                      setPrefixForm(f => ({
-                        ...f,
-                        role_ids: e.target.checked
-                          ? [...f.role_ids, r.id]
-                          : f.role_ids.filter(id => id !== r.id),
-                      }));
-                    }}
-                  />
-                  {r.name}
-                </label>
+                <Checkbox
+                  key={r.id}
+                  label={r.name}
+                  checked={prefixForm.role_ids.includes(r.id)}
+                  onChange={(checked) => {
+                    setPrefixForm(f => ({
+                      ...f,
+                      role_ids: checked
+                        ? [...f.role_ids, r.id]
+                        : f.role_ids.filter(id => id !== r.id),
+                    }));
+                  }}
+                />
               ))}
             </div>
             {roles.length === 0 && <span style={{ fontSize: '12px', opacity: 0.5 }}>No roles defined</span>}
@@ -482,19 +481,17 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Roles</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {roles.map(r => (
-                <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={allocateIpRoles.includes(r.id)}
-                    onChange={(e) => {
-                      setAllocateIpRoles(prev => e.target.checked
-                        ? [...prev, r.id]
-                        : prev.filter(id => id !== r.id)
-                      );
-                    }}
-                  />
-                  {r.name}
-                </label>
+                <Checkbox
+                  key={r.id}
+                  label={r.name}
+                  checked={allocateIpRoles.includes(String(r.id))}
+                  onChange={(checked) => {
+                    setAllocateIpRoles(prev => checked
+                      ? [...prev, String(r.id)]
+                      : prev.filter(id => id !== String(r.id))
+                    );
+                  }}
+                />
               ))}
             </div>
           </div>
@@ -651,7 +648,8 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showForm, setShowForm] = useState(false);
   const [editingIp, setEditingIp] = useState<IpamIpAddress | null>(null);
-  const [form, setForm] = useState<IpamIpAddressFormData>({ id: '', address: '', prefix_id: '', description: '', status: 'active', role_ids: [], dns_name: '', device_id: '', interface_name: '', vrf_id: '' });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [form, setForm] = useState<IpamIpAddressFormData>({ address: '', prefix_id: '', description: '', status: 'active', role_ids: [], dns_name: '', device_id: '', interface_name: '', vrf_id: '' });
 
   const prefixOptions = useMemo(() => [
     { value: '', label: 'Select a prefix...' },
@@ -659,7 +657,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
   ], [prefixes]);
 
   const roleOptions = useMemo(() =>
-    roles.map(r => ({ value: r.id, label: r.name })),
+    roles.map(r => ({ value: String(r.id), label: r.name })),
   [roles]);
 
   const deviceOptions = useMemo(() => [
@@ -669,19 +667,20 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
 
   const vrfOptions = useMemo(() => [
     { value: '', label: '(Global)' },
-    ...vrfs.map(v => ({ value: v.id, label: `${v.name}${v.rd ? ' (' + v.rd + ')' : ''}` })),
+    ...vrfs.map(v => ({ value: String(v.id), label: `${v.name}${v.rd ? ' (' + v.rd + ')' : ''}` })),
   ], [vrfs]);
 
   const handleOpenCreate = useCallback(() => {
     setEditingIp(null);
-    setForm({ id: '', address: '', prefix_id: '', description: '', status: 'active', role_ids: [], dns_name: '', device_id: '', interface_name: '', vrf_id: '' });
+    setEditingId(null);
+    setForm({ address: '', prefix_id: '', description: '', status: 'active', role_ids: [], dns_name: '', device_id: '', interface_name: '', vrf_id: '' });
     setShowForm(true);
   }, []);
 
   const handleOpenEdit = useCallback((ip: IpamIpAddress) => {
     setEditingIp(ip);
+    setEditingId(ip.id);
     setForm({
-      id: ip.id,
       address: ip.address,
       prefix_id: String(ip.prefix_id),
       description: ip.description || '',
@@ -690,7 +689,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
       dns_name: ip.dns_name || '',
       device_id: ip.device_id != null ? String(ip.device_id) : '',
       interface_name: ip.interface_name || '',
-      vrf_id: ip.vrf_id || '',
+      vrf_id: ip.vrf_id != null ? String(ip.vrf_id) : '',
     });
     setShowForm(true);
   }, []);
@@ -700,21 +699,19 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
       addNotification('error', 'Address and Prefix are required');
       return;
     }
-    const id = form.id.trim() || `ip-${slugify(form.address)}`;
-    const data: IpamIpAddressFormData = { ...form, id };
 
     let success: boolean;
     if (editingIp) {
-      success = await ipam.updateIpAddress(editingIp.id, data);
+      success = await ipam.updateIpAddress(String(editingIp.id), form);
     } else {
-      success = await ipam.createIpAddress(data);
+      success = await ipam.createIpAddress(form);
     }
     if (success) setShowForm(false);
   }, [form, editingIp, ipam]);
 
   const handleDelete = useCallback(async (ip: IpamIpAddress) => {
     if (!(await confirm({ title: 'Delete IP Address', message: `Delete IP ${ip.address}?`, confirmText: 'Delete', destructive: true }))) return;
-    await ipam.deleteIpAddress(ip.id);
+    await ipam.deleteIpAddress(String(ip.id));
   }, [ipam]);
 
   const columns: TableColumn<IpamIpAddress>[] = useMemo(() => [
@@ -760,7 +757,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
 
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editingIp ? 'Edit IP Address' : 'Create IP Address'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editingIp ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={form.id} onChange={(e) => setForm(f => ({ ...f, id: e.target.value }))} disabled={!!editingIp} placeholder="Auto-generated if empty" />
+          {/* ID is auto-generated by the server */}
           <ValidatedInput label="Address" name="address" value={form.address} onChange={(e) => setForm(f => ({ ...f, address: e.target.value }))} placeholder="e.g., 10.0.0.1" validate={validators.ip} />
           <SelectField label="Prefix" name="prefix_id" value={form.prefix_id} onChange={(e) => setForm(f => ({ ...f, prefix_id: e.target.value }))} options={prefixOptions} />
           <FormField label="Description" name="desc" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
@@ -768,23 +765,24 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Roles</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {roleOptions.map(opt => (
-                <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={form.role_ids.includes(opt.value)}
-                    onChange={(e) => {
+              {roleOptions.map(opt => {
+                const numericId = Number(opt.value);
+                return (
+                  <Checkbox
+                    key={opt.value}
+                    label={opt.label}
+                    checked={form.role_ids.includes(numericId)}
+                    onChange={(checked) => {
                       setForm(f => ({
                         ...f,
-                        role_ids: e.target.checked
-                          ? [...f.role_ids, opt.value]
-                          : f.role_ids.filter(id => id !== opt.value),
+                        role_ids: checked
+                          ? [...f.role_ids, numericId]
+                          : f.role_ids.filter(id => id !== numericId),
                       }));
                     }}
                   />
-                  {opt.label}
-                </label>
-              ))}
+                );
+              })}
             </div>
             {roleOptions.length === 0 && <span style={{ fontSize: '12px', opacity: 0.5 }}>No roles defined</span>}
           </div>
@@ -837,7 +835,7 @@ function VrfsTab({ vrfs, ipam }: {
 
   const handleDelete = useCallback(async (vrf: IpamVrf) => {
     if (!(await confirm({ title: 'Delete VRF', message: `Delete VRF "${vrf.name}"? Prefixes in this VRF will become global.`, confirmText: 'Delete', destructive: true }))) return;
-    await ipam.deleteVrf(vrf.id);
+    await ipam.deleteVrf(String(vrf.id));
   }, [ipam]);
 
   const columns: TableColumn<IpamVrf>[] = useMemo(() => [
@@ -920,7 +918,7 @@ function RolesTab({ roles, ipam }: {
 
   const handleDelete = useCallback(async (role: IpamRole) => {
     if (!(await confirm({ title: 'Delete Role', message: `Delete role "${role.name}"?`, confirmText: 'Delete', destructive: true }))) return;
-    await ipam.deleteRole(role.id);
+    await ipam.deleteRole(String(role.id));
   }, [ipam]);
 
   const columns: TableColumn<IpamRole>[] = useMemo(() => [

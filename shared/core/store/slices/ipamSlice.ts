@@ -52,11 +52,11 @@ export const createRegion = createAsyncThunk('ipam/createRegion', async (data: I
   return getServices().ipam.createRegion(data);
 });
 
-export const updateRegion = createAsyncThunk('ipam/updateRegion', async ({ id, data }: { id: string; data: IpamRegionFormData }) => {
+export const updateRegion = createAsyncThunk('ipam/updateRegion', async ({ id, data }: { id: number | string; data: IpamRegionFormData }) => {
   return getServices().ipam.updateRegion(id, data);
 });
 
-export const deleteRegion = createAsyncThunk('ipam/deleteRegion', async (id: string) => {
+export const deleteRegion = createAsyncThunk('ipam/deleteRegion', async (id: number | string) => {
   await getServices().ipam.deleteRegion(id);
   return id;
 });
@@ -70,11 +70,11 @@ export const createCampus = createAsyncThunk('ipam/createCampus', async (data: I
   return getServices().ipam.createCampus(data);
 });
 
-export const updateCampus = createAsyncThunk('ipam/updateCampus', async ({ id, data }: { id: string; data: IpamCampusFormData }) => {
+export const updateCampus = createAsyncThunk('ipam/updateCampus', async ({ id, data }: { id: number | string; data: IpamCampusFormData }) => {
   return getServices().ipam.updateCampus(id, data);
 });
 
-export const deleteCampus = createAsyncThunk('ipam/deleteCampus', async (id: string) => {
+export const deleteCampus = createAsyncThunk('ipam/deleteCampus', async (id: number | string) => {
   await getServices().ipam.deleteCampus(id);
   return id;
 });
@@ -88,11 +88,11 @@ export const createDatacenter = createAsyncThunk('ipam/createDatacenter', async 
   return getServices().ipam.createDatacenter(data);
 });
 
-export const updateDatacenter = createAsyncThunk('ipam/updateDatacenter', async ({ id, data }: { id: string; data: IpamDatacenterFormData }) => {
+export const updateDatacenter = createAsyncThunk('ipam/updateDatacenter', async ({ id, data }: { id: number | string; data: IpamDatacenterFormData }) => {
   return getServices().ipam.updateDatacenter(id, data);
 });
 
-export const deleteDatacenter = createAsyncThunk('ipam/deleteDatacenter', async (id: string) => {
+export const deleteDatacenter = createAsyncThunk('ipam/deleteDatacenter', async (id: number | string) => {
   await getServices().ipam.deleteDatacenter(id);
   return id;
 });
@@ -106,11 +106,11 @@ export const createHall = createAsyncThunk('ipam/createHall', async (data: IpamH
   return getServices().ipam.createHall(data);
 });
 
-export const updateHall = createAsyncThunk('ipam/updateHall', async ({ id, data }: { id: string; data: IpamHallFormData }) => {
+export const updateHall = createAsyncThunk('ipam/updateHall', async ({ id, data }: { id: number | string; data: IpamHallFormData }) => {
   return getServices().ipam.updateHall(id, data);
 });
 
-export const deleteHall = createAsyncThunk('ipam/deleteHall', async (id: string) => {
+export const deleteHall = createAsyncThunk('ipam/deleteHall', async (id: number | string) => {
   await getServices().ipam.deleteHall(id);
   return id;
 });
@@ -124,11 +124,11 @@ export const createRow = createAsyncThunk('ipam/createRow', async (data: IpamRow
   return getServices().ipam.createRow(data);
 });
 
-export const updateRow = createAsyncThunk('ipam/updateRow', async ({ id, data }: { id: string; data: IpamRowFormData }) => {
+export const updateRow = createAsyncThunk('ipam/updateRow', async ({ id, data }: { id: number | string; data: IpamRowFormData }) => {
   return getServices().ipam.updateRow(id, data);
 });
 
-export const deleteRow = createAsyncThunk('ipam/deleteRow', async (id: string) => {
+export const deleteRow = createAsyncThunk('ipam/deleteRow', async (id: number | string) => {
   await getServices().ipam.deleteRow(id);
   return id;
 });
@@ -142,11 +142,11 @@ export const createRack = createAsyncThunk('ipam/createRack', async (data: IpamR
   return getServices().ipam.createRack(data);
 });
 
-export const updateRack = createAsyncThunk('ipam/updateRack', async ({ id, data }: { id: string; data: IpamRackFormData }) => {
+export const updateRack = createAsyncThunk('ipam/updateRack', async ({ id, data }: { id: number | string; data: IpamRackFormData }) => {
   return getServices().ipam.updateRack(id, data);
 });
 
-export const deleteRack = createAsyncThunk('ipam/deleteRack', async (id: string) => {
+export const deleteRack = createAsyncThunk('ipam/deleteRack', async (id: number | string) => {
   await getServices().ipam.deleteRack(id);
   return id;
 });
@@ -156,11 +156,11 @@ export const fetchRoles = createAsyncThunk('ipam/fetchRoles', async () => {
   return getServices().ipam.listRoles();
 });
 
-export const createRole = createAsyncThunk('ipam/createRole', async (data: { id: string; name: string; description?: string }) => {
+export const createRole = createAsyncThunk('ipam/createRole', async (data: { id: number | string; name: string; description?: string }) => {
   return getServices().ipam.createRole(data);
 });
 
-export const deleteRole = createAsyncThunk('ipam/deleteRole', async (id: string) => {
+export const deleteRole = createAsyncThunk('ipam/deleteRole', async (id: number | string) => {
   await getServices().ipam.deleteRole(id);
   return id;
 });
@@ -170,11 +170,11 @@ export const fetchVrfs = createAsyncThunk('ipam/fetchVrfs', async () => {
   return getServices().ipam.listVrfs();
 });
 
-export const createVrf = createAsyncThunk('ipam/createVrf', async (data: { id: string; name: string; rd?: string; description?: string }) => {
+export const createVrf = createAsyncThunk('ipam/createVrf', async (data: { id: number | string; name: string; rd?: string; description?: string }) => {
   return getServices().ipam.createVrf(data);
 });
 
-export const deleteVrf = createAsyncThunk('ipam/deleteVrf', async (id: string) => {
+export const deleteVrf = createAsyncThunk('ipam/deleteVrf', async (id: number | string) => {
   await getServices().ipam.deleteVrf(id);
   return id;
 });
@@ -206,11 +206,11 @@ export const createIpAddress = createAsyncThunk('ipam/createIpAddress', async (d
   return getServices().ipam.createIpAddress(data);
 });
 
-export const updateIpAddress = createAsyncThunk('ipam/updateIpAddress', async ({ id, data }: { id: string; data: IpamIpAddressFormData }) => {
+export const updateIpAddress = createAsyncThunk('ipam/updateIpAddress', async ({ id, data }: { id: number | string; data: IpamIpAddressFormData }) => {
   return getServices().ipam.updateIpAddress(id, data);
 });
 
-export const deleteIpAddress = createAsyncThunk('ipam/deleteIpAddress', async (id: string) => {
+export const deleteIpAddress = createAsyncThunk('ipam/deleteIpAddress', async (id: number | string) => {
   await getServices().ipam.deleteIpAddress(id);
   return id;
 });

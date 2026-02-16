@@ -12,7 +12,7 @@ export class VendorService extends BaseService {
     return this.get<Vendor[]>('/vendors/defaults');
   }
 
-  async getById(id: string): Promise<Vendor> {
+  async getById(id: number | string): Promise<Vendor> {
     return this.get<Vendor>(`/vendors/${encodeURIComponent(id)}`);
   }
 
@@ -20,11 +20,11 @@ export class VendorService extends BaseService {
     return this.post<Vendor>('/vendors', vendor);
   }
 
-  async update(id: string, vendor: Partial<Vendor>): Promise<Vendor> {
+  async update(id: number | string, vendor: Partial<Vendor>): Promise<Vendor> {
     return this.put<Vendor>(`/vendors/${encodeURIComponent(id)}`, vendor);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: number | string): Promise<void> {
     return this.delete<void>(`/vendors/${encodeURIComponent(id)}`);
   }
 
@@ -33,7 +33,7 @@ export class VendorService extends BaseService {
     return this.get<VendorAction[]>('/vendor-actions');
   }
 
-  async listActions(vendorId: string): Promise<VendorAction[]> {
+  async listActions(vendorId: number | string): Promise<VendorAction[]> {
     return this.get<VendorAction[]>(`/vendors/${encodeURIComponent(vendorId)}/actions`);
   }
 
@@ -41,15 +41,15 @@ export class VendorService extends BaseService {
     return this.post<VendorAction>('/vendor-actions', data);
   }
 
-  async updateAction(id: string, data: Partial<VendorAction>): Promise<VendorAction> {
+  async updateAction(id: number | string, data: Partial<VendorAction>): Promise<VendorAction> {
     return this.put<VendorAction>(`/vendor-actions/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteAction(id: string): Promise<void> {
+  async deleteAction(id: number | string): Promise<void> {
     return this.delete<void>(`/vendor-actions/${encodeURIComponent(id)}`);
   }
 
-  async runAction(id: string): Promise<Job> {
+  async runAction(id: number | string): Promise<Job> {
     return this.post<Job>(`/vendor-actions/${encodeURIComponent(id)}/run`, {});
   }
 }

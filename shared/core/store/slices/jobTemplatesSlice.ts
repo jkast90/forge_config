@@ -24,12 +24,12 @@ export const createJobTemplate = createAsyncThunk('jobTemplates/create', async (
 
 export const updateJobTemplate = createAsyncThunk(
   'jobTemplates/update',
-  async ({ id, req }: { id: string; req: CreateJobTemplateRequest }) => {
+  async ({ id, req }: { id: number | string; req: CreateJobTemplateRequest }) => {
     return getServices().jobTemplates.update(id, req);
   }
 );
 
-export const deleteJobTemplate = createAsyncThunk('jobTemplates/delete', async (id: string) => {
+export const deleteJobTemplate = createAsyncThunk('jobTemplates/delete', async (id: number | string) => {
   await getServices().jobTemplates.remove(id);
   return id;
 });

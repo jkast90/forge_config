@@ -38,7 +38,6 @@ export function VendorManagement() {
   const form = useModalForm<Vendor, VendorFormData>({
     emptyFormData: { ...EMPTY_VENDOR_FORM, mac_prefixes: [] },
     itemToFormData: (vendor) => ({
-      id: vendor.id,
       name: vendor.name,
       backup_command: vendor.backup_command,
       deploy_command: vendor.deploy_command || '',
@@ -50,9 +49,9 @@ export function VendorManagement() {
       vendor_class: vendor.vendor_class || '',
       default_template: vendor.default_template || '',
     }),
-    onCreate: (data) => createVendor({ ...data, id: data.id || slugify(data.name) }),
+    onCreate: (data) => createVendor({ ...data, name: data.name || slugify(data.name) }),
     onUpdate: (id, data) => updateVendor(id, data),
-    getItemId: (v) => v.id,
+    getItemId: (v) => String(v.id),
     modalName: 'vendor-form',
   });
 
@@ -63,7 +62,7 @@ export function VendorManagement() {
     if (modalRoute.isModal('vendor-form') && !form.isOpen) {
       const id = modalRoute.getParam('id');
       if (id) {
-        const vendor = vendors.find(v => v.id === id);
+        const vendor = vendors.find(v => String(v.id) === id);
         if (vendor) {
           form.openEdit(vendor);
         } else if (vendors.length > 0) {
@@ -191,15 +190,17 @@ export function VendorManagement() {
               required
               disabled={form.isEditing}
             />
-            <FormField
-              label="Vendor ID"
-              name="id"
-              type="text"
-              value={form.formData.id}
-              onChange={form.handleChange}
-              placeholder="acme (auto-generated)"
-              disabled={form.isEditing}
-            />
+            {form.isEditing && form.editingItem && (
+              <FormField
+                label="Vendor ID"
+                name="id"
+                type="text"
+                value={String(form.editingItem.id)}
+                onChange={() => {}}
+                placeholder="acme (auto-generated)"
+                disabled
+              />
+            )}
             <FormField
               label="Backup Command *"
               name="backup_command"
@@ -230,7 +231,6 @@ export function VendorManagement() {
               value={form.formData.diff_command}
               onChange={form.handleChange}
               placeholder="configure session ztp-diff\n{CONFIG}\nshow session-config diffs\nabort"
-              rows={3}
             />
             <FormField
               label="Vendor Class (DHCP Option 60)"

@@ -57,28 +57,28 @@ export interface UseIpamReturn {
   refreshIpAddresses: () => Promise<void>;
   // Regions
   createRegion: (data: IpamRegionFormData) => Promise<boolean>;
-  updateRegion: (id: string, data: IpamRegionFormData) => Promise<boolean>;
-  deleteRegion: (id: string) => Promise<boolean>;
+  updateRegion: (id: number | string, data: IpamRegionFormData) => Promise<boolean>;
+  deleteRegion: (id: number | string) => Promise<boolean>;
   // Campuses
   createCampus: (data: IpamCampusFormData) => Promise<boolean>;
-  updateCampus: (id: string, data: IpamCampusFormData) => Promise<boolean>;
-  deleteCampus: (id: string) => Promise<boolean>;
+  updateCampus: (id: number | string, data: IpamCampusFormData) => Promise<boolean>;
+  deleteCampus: (id: number | string) => Promise<boolean>;
   // Datacenters
   createDatacenter: (data: IpamDatacenterFormData) => Promise<boolean>;
-  updateDatacenter: (id: string, data: IpamDatacenterFormData) => Promise<boolean>;
-  deleteDatacenter: (id: string) => Promise<boolean>;
+  updateDatacenter: (id: number | string, data: IpamDatacenterFormData) => Promise<boolean>;
+  deleteDatacenter: (id: number | string) => Promise<boolean>;
   // Halls
   createHall: (data: IpamHallFormData) => Promise<boolean>;
-  updateHall: (id: string, data: IpamHallFormData) => Promise<boolean>;
-  deleteHall: (id: string) => Promise<boolean>;
+  updateHall: (id: number | string, data: IpamHallFormData) => Promise<boolean>;
+  deleteHall: (id: number | string) => Promise<boolean>;
   // Rows
   createRow: (data: IpamRowFormData) => Promise<boolean>;
-  updateRow: (id: string, data: IpamRowFormData) => Promise<boolean>;
-  deleteRow: (id: string) => Promise<boolean>;
+  updateRow: (id: number | string, data: IpamRowFormData) => Promise<boolean>;
+  deleteRow: (id: number | string) => Promise<boolean>;
   // Racks
   createRack: (data: IpamRackFormData) => Promise<boolean>;
-  updateRack: (id: string, data: IpamRackFormData) => Promise<boolean>;
-  deleteRack: (id: string) => Promise<boolean>;
+  updateRack: (id: number | string, data: IpamRackFormData) => Promise<boolean>;
+  deleteRack: (id: number | string) => Promise<boolean>;
   // Roles
   createRole: (data: { id: string; name: string; description?: string }) => Promise<boolean>;
   deleteRole: (id: string) => Promise<boolean>;
@@ -162,7 +162,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const updateRegion = useCallback(async (id: string, data: IpamRegionFormData): Promise<boolean> => {
+  const updateRegion = useCallback(async (id: number | string, data: IpamRegionFormData): Promise<boolean> => {
     try {
       await dispatch(updateRegionThunk({ id, data })).unwrap();
       addNotification('success', 'Region updated', navigateAction('View Locations', 'locations'));
@@ -174,7 +174,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const deleteRegion = useCallback(async (id: string): Promise<boolean> => {
+  const deleteRegion = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteRegionThunk(id)).unwrap();
       addNotification('success', 'Region deleted', navigateAction('View Locations', 'locations'));
@@ -201,7 +201,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const updateCampus = useCallback(async (id: string, data: IpamCampusFormData): Promise<boolean> => {
+  const updateCampus = useCallback(async (id: number | string, data: IpamCampusFormData): Promise<boolean> => {
     try {
       await dispatch(updateCampusThunk({ id, data })).unwrap();
       addNotification('success', 'Campus updated', navigateAction('View Locations', 'locations'));
@@ -213,7 +213,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const deleteCampus = useCallback(async (id: string): Promise<boolean> => {
+  const deleteCampus = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteCampusThunk(id)).unwrap();
       addNotification('success', 'Campus deleted', navigateAction('View Locations', 'locations'));
@@ -241,7 +241,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const updateDatacenter = useCallback(async (id: string, data: IpamDatacenterFormData): Promise<boolean> => {
+  const updateDatacenter = useCallback(async (id: number | string, data: IpamDatacenterFormData): Promise<boolean> => {
     try {
       await dispatch(updateDatacenterThunk({ id, data })).unwrap();
       addNotification('success', 'Datacenter updated', navigateAction('View Locations', 'locations'));
@@ -253,7 +253,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const deleteDatacenter = useCallback(async (id: string): Promise<boolean> => {
+  const deleteDatacenter = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteDatacenterThunk(id)).unwrap();
       addNotification('success', 'Datacenter deleted', navigateAction('View Locations', 'locations'));
@@ -280,7 +280,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const updateHall = useCallback(async (id: string, data: IpamHallFormData): Promise<boolean> => {
+  const updateHall = useCallback(async (id: number | string, data: IpamHallFormData): Promise<boolean> => {
     try {
       await dispatch(updateHallThunk({ id, data })).unwrap();
       addNotification('success', 'Hall updated', navigateAction('View Locations', 'locations'));
@@ -292,7 +292,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const deleteHall = useCallback(async (id: string): Promise<boolean> => {
+  const deleteHall = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteHallThunk(id)).unwrap();
       addNotification('success', 'Hall deleted', navigateAction('View Locations', 'locations'));
@@ -319,7 +319,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const updateRow = useCallback(async (id: string, data: IpamRowFormData): Promise<boolean> => {
+  const updateRow = useCallback(async (id: number | string, data: IpamRowFormData): Promise<boolean> => {
     try {
       await dispatch(updateRowThunk({ id, data })).unwrap();
       addNotification('success', 'Row updated', navigateAction('View Locations', 'locations'));
@@ -331,7 +331,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const deleteRow = useCallback(async (id: string): Promise<boolean> => {
+  const deleteRow = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteRowThunk(id)).unwrap();
       addNotification('success', 'Row deleted', navigateAction('View Locations', 'locations'));
@@ -358,7 +358,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const updateRack = useCallback(async (id: string, data: IpamRackFormData): Promise<boolean> => {
+  const updateRack = useCallback(async (id: number | string, data: IpamRackFormData): Promise<boolean> => {
     try {
       await dispatch(updateRackThunk({ id, data })).unwrap();
       addNotification('success', 'Rack updated', navigateAction('View Locations', 'locations'));
@@ -370,7 +370,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const deleteRack = useCallback(async (id: string): Promise<boolean> => {
+  const deleteRack = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteRackThunk(id)).unwrap();
       addNotification('success', 'Rack deleted', navigateAction('View Locations', 'locations'));

@@ -6,7 +6,7 @@ export class CredentialService extends BaseService {
     return this.get<Credential[]>('/credentials');
   }
 
-  async getById(id: string): Promise<Credential> {
+  async getById(id: number | string): Promise<Credential> {
     return this.get<Credential>(`/credentials/${encodeURIComponent(id)}`);
   }
 
@@ -14,11 +14,11 @@ export class CredentialService extends BaseService {
     return this.post<Credential>('/credentials', data);
   }
 
-  async update(id: string, data: CredentialFormData): Promise<Credential> {
+  async update(id: number | string, data: CredentialFormData): Promise<Credential> {
     return this.put<Credential>(`/credentials/${encodeURIComponent(id)}`, data);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: number | string): Promise<void> {
     return this.delete<void>(`/credentials/${encodeURIComponent(id)}`);
   }
 }

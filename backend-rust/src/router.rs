@@ -158,12 +158,11 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/docker/containers/:id", delete(handlers::docker::remove_container))
         .route("/api/docker/containers/:id/start", post(handlers::docker::start_container))
         .route("/api/docker/containers/:id/restart", post(handlers::docker::restart_container))
-        // CLOS lab routes
-        .route("/api/docker/clos-lab", post(handlers::docker::build_clos_lab))
-        .route("/api/docker/clos-lab", delete(handlers::docker::teardown_clos_lab))
-        // Virtual CLOS topology (device records only, no containers)
-        .route("/api/virtual-clos", post(handlers::docker::build_virtual_clos))
-        .route("/api/virtual-clos", delete(handlers::docker::teardown_virtual_clos))
+        // Unified topology builder (CLOS or Hierarchical)
+        .route("/api/topology-builder", post(handlers::docker::build_topology))
+        .route("/api/topology-builder/preview", post(handlers::docker::preview_topology))
+        .route("/api/topology-builder/clos", delete(handlers::docker::teardown_virtual_clos))
+        .route("/api/topology-builder/hierarchical", delete(handlers::docker::teardown_three_tier))
         // IPAM Region routes
         .route("/api/ipam/regions", get(handlers::ipam::list_regions))
         .route("/api/ipam/regions", post(handlers::ipam::create_region))

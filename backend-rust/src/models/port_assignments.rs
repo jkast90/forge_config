@@ -34,6 +34,8 @@ pub struct PortAssignment {
     // Enriched via JOIN (not stored)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vrf_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cable_length_meters: Option<f64>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -58,6 +60,8 @@ pub struct SetPortAssignmentRequest {
     pub patch_panel_b_port: Option<String>,
     #[serde(default)]
     pub vrf_id: Option<String>,
+    #[serde(default)]
+    pub cable_length_meters: Option<f64>,
 }
 
 /// BulkPortAssignmentRequest for replacing all assignments for a device

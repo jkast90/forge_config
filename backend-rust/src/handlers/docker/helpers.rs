@@ -28,23 +28,50 @@ pub struct SpawnRequest {
     #[serde(default)]
     pub image: String,
     #[serde(default)]
-    pub topology_id: String,
+    pub topology_id: i64,
     #[serde(default)]
     pub topology_role: String,
 }
 
+/// Unified topology builder request — works for both CLOS and Hierarchical architectures.
+/// Generic tier fields are mapped to role names based on `architecture`.
 #[derive(Deserialize)]
-pub struct ClosLabRequest {
-    #[serde(default)]
-    pub image: String,
-}
+pub struct UnifiedTopologyRequest {
+    /// Architecture type: "clos" or "hierarchical"
+    #[serde(default = "default_architecture")]
+    pub architecture: String,
 
-#[derive(Deserialize)]
-pub struct VirtualClosRequest {
-    #[serde(default = "default_spine_count")]
-    pub spines: usize,
-    #[serde(default = "default_leaf_count")]
-    pub leaves: usize,
+    // External tier (CLOS only)
+    #[serde(default = "default_external_count")]
+    pub external_count: usize,
+    #[serde(default = "default_ratio")]
+    pub external_to_tier1_ratio: usize,
+
+    // Tier 1 (spine for CLOS, core for hierarchical)
+    #[serde(default = "default_tier1_count")]
+    pub tier1_count: usize,
+    #[serde(default = "default_ratio")]
+    pub tier1_to_tier2_ratio: usize,
+    #[serde(default)]
+    pub tier1_model: String,
+    #[serde(default)]
+    pub tier1_names: Vec<String>,
+
+    // Tier 2 (leaf for CLOS, distribution for hierarchical)
+    #[serde(default = "default_tier2_count")]
+    pub tier2_count: usize,
+    #[serde(default = "default_ratio")]
+    pub tier2_to_tier3_ratio: usize,
+    #[serde(default)]
+    pub tier2_model: String,
+
+    // Tier 3 (N/A for CLOS, access for hierarchical)
+    #[serde(default)]
+    pub tier3_count: usize,
+    #[serde(default)]
+    pub tier3_model: String,
+
+    // Location + rack layout
     #[serde(default)]
     pub region_id: Option<i64>,
     #[serde(default)]
@@ -57,51 +84,58 @@ pub struct VirtualClosRequest {
     pub rows_per_hall: usize,
     #[serde(default = "default_racks_per_row")]
     pub racks_per_row: usize,
-    #[serde(default = "default_leaves_per_rack")]
-    pub leaves_per_rack: usize,
-    #[serde(default = "default_external_devices")]
-    pub external_devices: usize,
-    #[serde(default = "default_uplinks_per_spine")]
-    pub uplinks_per_spine: usize,
-    #[serde(default = "default_links_per_leaf")]
-    pub links_per_leaf: usize,
-    /// Custom hostnames for external devices (one per external device)
-    #[serde(default)]
-    pub external_names: Vec<String>,
-    /// Device model for spines (default: 7050CX3-32S)
-    #[serde(default)]
-    pub spine_model: String,
-    /// Device model for leaves (default: 7050SX3-48YC8)
-    #[serde(default)]
-    pub leaf_model: String,
-    /// When true, also spawn cEOS Docker containers for each device
+    #[serde(default = "default_devices_per_rack")]
+    pub devices_per_rack: usize,
+
+    // Container spawning
     #[serde(default)]
     pub spawn_containers: bool,
-    /// cEOS image to use when spawning containers (default: ceosimage:latest)
     #[serde(default)]
     pub ceos_image: String,
+
+    // Rack placement strategy for the lowest-tier devices
+    #[serde(default)]
+    pub tier3_placement: String,  // "top", "middle", "bottom"; default "bottom"
+
+    // Super-spine tier (5-stage CLOS extension)
+    #[serde(default)]
+    pub super_spine_enabled: bool,
+    #[serde(default)]
+    pub super_spine_count: usize,
+    #[serde(default)]
+    pub super_spine_model: String,
+    #[serde(default = "default_ratio")]
+    pub spine_to_super_spine_ratio: usize,
+    #[serde(default = "default_one")]
+    pub pods: usize,
+
+    // Physical spacing for cable length estimation
+    #[serde(default = "default_row_spacing")]
+    pub row_spacing_cm: usize,
 }
-fn default_spine_count() -> usize { 2 }
-fn default_leaf_count() -> usize { 16 }
+fn default_architecture() -> String { "clos".to_string() }
+fn default_external_count() -> usize { 2 }
+fn default_ratio() -> usize { 2 }
+fn default_tier1_count() -> usize { 2 }
+fn default_tier2_count() -> usize { 16 }
 fn default_hall_count() -> usize { 1 }
 fn default_rows_per_hall() -> usize { 1 }
 fn default_racks_per_row() -> usize { 2 }
-fn default_leaves_per_rack() -> usize { 2 }
-fn default_uplinks_per_spine() -> usize { 2 }
-fn default_links_per_leaf() -> usize { 2 }
-fn default_external_devices() -> usize { 2 }
+fn default_devices_per_rack() -> usize { 2 }
+fn default_one() -> usize { 1 }
+fn default_row_spacing() -> usize { 120 } // 120cm (~4 feet) between rows
 
-/// Response from the CLOS lab build endpoint
+/// Response from the topology builder endpoint
 #[derive(Serialize)]
-pub struct ClosLabResponse {
-    pub topology_id: String,
+pub struct TopologyBuildResponse {
+    pub topology_id: i64,
     pub topology_name: String,
-    pub devices: Vec<ClosLabDevice>,
+    pub devices: Vec<TopologyBuildDevice>,
     pub fabric_links: Vec<String>,
 }
 
 #[derive(Serialize)]
-pub struct ClosLabDevice {
+pub struct TopologyBuildDevice {
     pub hostname: String,
     pub role: String,
     pub mac: String,
@@ -222,6 +256,152 @@ management ssh
 !
 end
 "#;
+
+/// Compute rack position based on placement strategy.
+/// - Bottom: positions 1, 2, 3, ... (traditional default)
+/// - Top: positions 42, 41, 40, ... (counting down from rack height)
+/// - Middle: positions centered around midpoint
+pub fn compute_rack_position(device_index_in_rack: usize, placement: &str, rack_height: i32) -> i32 {
+    match placement {
+        "top" => rack_height - device_index_in_rack as i32,
+        "middle" => (rack_height / 2) + device_index_in_rack as i32,
+        _ => device_index_in_rack as i32 + 1, // "bottom" = default
+    }
+}
+
+/// Estimate cable length in meters between two devices based on rack positions.
+/// Accounts for horizontal distance between racks, row spacing, and vertical
+/// distance within racks (distance from cable tray at top of rack).
+/// Returns None if either device has no rack assignment.
+///
+/// All internal math in centimeters for precision, output rounded to 1 decimal meter.
+pub fn estimate_cable_length(
+    rack_a_index: Option<usize>,
+    rack_a_position: Option<i32>,
+    rack_b_index: Option<usize>,
+    rack_b_position: Option<i32>,
+    racks_per_row: usize,
+    row_spacing_cm: usize,
+    slack_percent: i32,
+) -> Option<f64> {
+    let ra = rack_a_index?;
+    let rb = rack_b_index?;
+    let pos_a = rack_a_position.unwrap_or(1);
+    let pos_b = rack_b_position.unwrap_or(1);
+
+    // Constants (in cm)
+    const RACK_SLOT_CM: usize = 76; // 60cm rack + 8cm post clearance each side
+    const U_HEIGHT_CM: f64 = 4.445; // 1U = 4.445cm (1.75")
+    const RACK_HEIGHT_U: i32 = 42;
+
+    // Total racks per row including the spine rack at midpoint
+    let total_slots_per_row = racks_per_row + 1; // leaf racks + 1 spine rack
+
+    // Determine which row each rack is in
+    let row_a = ra / total_slots_per_row;
+    let row_b = rb / total_slots_per_row;
+    let pos_in_row_a = ra % total_slots_per_row;
+    let pos_in_row_b = rb % total_slots_per_row;
+
+    // Horizontal distance (cm)
+    let horizontal_cm = if row_a == row_b {
+        // Same row: count rack slots between them
+        let diff = if pos_in_row_a > pos_in_row_b {
+            pos_in_row_a - pos_in_row_b
+        } else {
+            pos_in_row_b - pos_in_row_a
+        };
+        (diff * RACK_SLOT_CM) as f64
+    } else {
+        // Different rows: distance within each row to aisle + row spacing
+        let row_diff = if row_a > row_b { row_a - row_b } else { row_b - row_a };
+        let dist_a = (pos_in_row_a * RACK_SLOT_CM) as f64;
+        let dist_b = (pos_in_row_b * RACK_SLOT_CM) as f64;
+        dist_a + dist_b + (row_diff * row_spacing_cm) as f64
+    };
+
+    // Vertical distance (cm): both devices' distance from cable tray (top of rack = U42)
+    let vert_a = (RACK_HEIGHT_U - pos_a) as f64 * U_HEIGHT_CM;
+    let vert_b = (RACK_HEIGHT_U - pos_b) as f64 * U_HEIGHT_CM;
+    let vertical_cm = if ra == rb {
+        // Same rack: just the difference between positions
+        (pos_a - pos_b).unsigned_abs() as f64 * U_HEIGHT_CM
+    } else {
+        // Different racks: both go up to tray
+        vert_a + vert_b
+    };
+
+    // Add slack for service loops, convert to meters
+    let raw_cm = horizontal_cm + vertical_cm;
+    let with_slack_cm = raw_cm * (1.0 + slack_percent as f64 / 100.0);
+    let meters = with_slack_cm / 100.0;
+    // Round to 1 decimal place
+    Some((meters * 10.0).round() / 10.0)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Topology Preview types — read-only computation of what a build will produce
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TopologyPreviewDevice {
+    pub index: usize,
+    pub hostname: String,
+    pub role: String,
+    pub loopback: String,
+    pub asn: u32,
+    pub model: String,
+    pub mgmt_ip: String,
+    pub rack_name: Option<String>,
+    pub rack_index: Option<usize>,
+    pub rack_position: Option<i32>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TopologyPreviewLink {
+    pub side_a_hostname: String,
+    pub side_a_interface: String,
+    pub side_a_ip: String,
+    pub side_b_hostname: String,
+    pub side_b_interface: String,
+    pub side_b_ip: String,
+    pub subnet: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cable_length_meters: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TopologyPreviewRack {
+    pub index: usize,
+    pub name: String,
+    pub hall_name: String,
+    pub row_name: String,
+    pub rack_type: String,
+}
+
+#[derive(Serialize)]
+pub struct TopologyPreviewResponse {
+    pub architecture: String,
+    pub topology_name: String,
+    pub devices: Vec<TopologyPreviewDevice>,
+    pub fabric_links: Vec<TopologyPreviewLink>,
+    pub racks: Vec<TopologyPreviewRack>,
+    pub tier3_placement: String,
+}
+
+/// Request to build a topology with optional user overrides from preview
+#[derive(Deserialize)]
+pub struct TopologyBuildWithOverrides {
+    #[serde(flatten)]
+    pub config: UnifiedTopologyRequest,
+    #[serde(default)]
+    pub overrides: Option<TopologyOverrides>,
+}
+
+#[derive(Deserialize)]
+pub struct TopologyOverrides {
+    pub devices: Vec<TopologyPreviewDevice>,
+}
 
 /// Build a tar archive in memory containing files
 pub(super) fn build_tar(files: &[(&str, &[u8], u32)]) -> Result<Vec<u8>, String> {

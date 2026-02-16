@@ -26,8 +26,8 @@ export interface UseVendorActionsReturn {
   error: string | null;
   refresh: () => Promise<void>;
   createAction: (data: Partial<VendorAction>) => Promise<boolean>;
-  updateAction: (id: string, data: Partial<VendorAction>) => Promise<boolean>;
-  deleteAction: (id: string) => Promise<boolean>;
+  updateAction: (id: number | string, data: Partial<VendorAction>) => Promise<boolean>;
+  deleteAction: (id: number | string) => Promise<boolean>;
 }
 
 export function useVendorActions(options: UseVendorActionsOptions = {}): UseVendorActionsReturn {
@@ -38,7 +38,7 @@ export function useVendorActions(options: UseVendorActionsOptions = {}): UseVend
   // Client-side vendor filtering
   const filteredActions = useMemo(() => {
     if (!vendorFilter || vendorFilter === 'all') return actions;
-    return actions.filter(a => a.vendor_id === vendorFilter);
+    return actions.filter(a => String(a.vendor_id) === vendorFilter);
   }, [actions, vendorFilter]);
 
   const refresh = useCallback(async () => {
@@ -69,7 +69,7 @@ export function useVendorActions(options: UseVendorActionsOptions = {}): UseVend
     }
   }, [dispatch]);
 
-  const updateAction = useCallback(async (id: string, data: Partial<VendorAction>): Promise<boolean> => {
+  const updateAction = useCallback(async (id: number | string, data: Partial<VendorAction>): Promise<boolean> => {
     try {
       await dispatch(updateVendorActionThunk({ id, data })).unwrap();
       addNotification('success', 'Action updated successfully', navigateAction('View Actions', 'jobs', 'actions'));
@@ -81,7 +81,7 @@ export function useVendorActions(options: UseVendorActionsOptions = {}): UseVend
     }
   }, [dispatch]);
 
-  const deleteAction = useCallback(async (id: string): Promise<boolean> => {
+  const deleteAction = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteVendorActionThunk(id)).unwrap();
       addNotification('success', 'Action deleted successfully', navigateAction('View Actions', 'jobs', 'actions'));

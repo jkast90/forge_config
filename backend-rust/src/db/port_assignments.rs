@@ -23,6 +23,7 @@ fn map_row(row: &SqliteRow) -> PortAssignment {
         patch_panel_b_hostname: none_if_empty(row.get("patch_panel_b_hostname")),
         vrf_id: none_if_empty(row.get("vrf_id")),
         vrf_name: none_if_empty(row.try_get("vrf_name").unwrap_or_default()),
+        cable_length_meters: row.try_get::<Option<f64>, _>("cable_length_meters").ok().flatten(),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     }
@@ -33,7 +34,7 @@ const SELECT_PORT_ASSIGNMENT: &str = r#"
            pa.remote_device_id, pa.remote_port_name, pa.description,
            pa.patch_panel_a_id, pa.patch_panel_a_port,
            pa.patch_panel_b_id, pa.patch_panel_b_port,
-           pa.vrf_id,
+           pa.vrf_id, pa.cable_length_meters,
            pa.created_at, pa.updated_at,
            rd.hostname AS remote_device_hostname,
            rd.device_type AS remote_device_type,
@@ -83,8 +84,8 @@ impl PortAssignmentRepo {
         sqlx::query(
             r#"
             INSERT INTO device_port_assignments (device_id, port_name, remote_device_id, remote_port_name, description,
-                patch_panel_a_id, patch_panel_a_port, patch_panel_b_id, patch_panel_b_port, vrf_id, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                patch_panel_a_id, patch_panel_a_port, patch_panel_b_id, patch_panel_b_port, vrf_id, cable_length_meters, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(device_id, port_name) DO UPDATE SET
                 remote_device_id = excluded.remote_device_id,
                 remote_port_name = excluded.remote_port_name,
@@ -94,6 +95,7 @@ impl PortAssignmentRepo {
                 patch_panel_b_id = excluded.patch_panel_b_id,
                 patch_panel_b_port = excluded.patch_panel_b_port,
                 vrf_id = excluded.vrf_id,
+                cable_length_meters = excluded.cable_length_meters,
                 updated_at = excluded.updated_at
             "#,
         )
@@ -107,6 +109,7 @@ impl PortAssignmentRepo {
         .bind(&req.patch_panel_b_id)
         .bind(&req.patch_panel_b_port)
         .bind(&req.vrf_id)
+        .bind(&req.cable_length_meters)
         .bind(now)
         .bind(now)
         .execute(pool)
@@ -140,8 +143,8 @@ impl PortAssignmentRepo {
             sqlx::query(
                 r#"
                 INSERT INTO device_port_assignments (device_id, port_name, remote_device_id, remote_port_name, description,
-                    patch_panel_a_id, patch_panel_a_port, patch_panel_b_id, patch_panel_b_port, vrf_id, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    patch_panel_a_id, patch_panel_a_port, patch_panel_b_id, patch_panel_b_port, vrf_id, cable_length_meters, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#,
             )
             .bind(device_id)
@@ -154,6 +157,7 @@ impl PortAssignmentRepo {
             .bind(&req.patch_panel_b_id)
             .bind(&req.patch_panel_b_port)
             .bind(&req.vrf_id)
+            .bind(&req.cable_length_meters)
             .bind(now)
             .bind(now)
             .execute(pool)

@@ -12,7 +12,7 @@ const SELECT_VENDOR: &str = r#"
            v.created_at, v.updated_at,
            COALESCE(COUNT(d.mac), 0) as device_count
     FROM vendors v
-    LEFT JOIN devices d ON d.vendor = CAST(v.id AS TEXT)
+    LEFT JOIN devices d ON d.vendor = v.name
 "#;
 
 /// Vendor database operations

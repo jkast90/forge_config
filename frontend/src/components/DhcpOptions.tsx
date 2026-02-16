@@ -16,6 +16,7 @@ import {
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Checkbox } from './Checkbox';
 import { useConfirm } from './ConfirmDialog';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
@@ -44,27 +45,25 @@ export function DhcpOptions() {
   const form = useModalForm<DhcpOption, DhcpOptionFormData>({
     emptyFormData: EMPTY_DHCP_OPTION_FORM,
     itemToFormData: (option) => ({
-      id: option.id,
       option_number: option.option_number,
       name: option.name,
       value: option.value,
       type: option.type,
-      vendor_id: option.vendor_id || '',
+      vendor_id: String(option.vendor_id || ''),
       description: option.description || '',
       enabled: option.enabled,
     }),
     onCreate: (data) => createOption({
       ...data,
-      id: data.id || generateId('opt'),
-      vendor_id: data.vendor_id || undefined,
+      vendor_id: Number(data.vendor_id) || undefined,
       description: data.description || undefined,
     }),
     onUpdate: (id, data) => updateOption(id, {
       ...data,
-      vendor_id: data.vendor_id || undefined,
+      vendor_id: Number(data.vendor_id) || undefined,
       description: data.description || undefined,
     }),
-    getItemId: (o) => o.id,
+    getItemId: (o) => String(o.id),
     modalName: 'dhcp-form',
   });
 
@@ -75,7 +74,7 @@ export function DhcpOptions() {
     if (modalRoute.isModal('dhcp-form') && !form.isOpen) {
       const id = modalRoute.getParam('id');
       if (id) {
-        const option = options.find(o => o.id === id);
+        const option = options.find(o => String(o.id) === id);
         if (option) {
           form.openEdit(option);
         } else if (options.length > 0) {
@@ -93,7 +92,7 @@ export function DhcpOptions() {
 
   // Filter options by vendor (client-side for immediate UI response)
   const filteredOptions = useMemo(
-    () => filterByVendor(options, filterVendor, (opt) => opt.vendor_id),
+    () => filterByVendor(options, filterVendor, (opt) => opt.vendor_id ? String(opt.vendor_id) : undefined),
     [options, filterVendor]
   );
 
@@ -106,14 +105,14 @@ export function DhcpOptions() {
     });
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
     const option = options.find((o) => o.id === id);
     if (option && await confirm({ title: 'Delete DHCP Option', message: `Delete DHCP option "${option.name}"?`, confirmText: 'Delete', destructive: true })) {
       await deleteOption(id);
     }
   };
 
-  const handleToggle = async (id: string) => {
+  const handleToggle = async (id: number) => {
     const option = options.find((o) => o.id === id);
     if (option) {
       await updateOption(id, { ...option, enabled: !option.enabled });
@@ -328,15 +327,12 @@ export function DhcpOptions() {
         />
 
         <div className="form-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              name="enabled"
-              checked={form.formData.enabled}
-              onChange={form.handleChange}
-            />
-            Enabled
-          </label>
+          <Checkbox
+            label="Enabled"
+            name="enabled"
+            checked={form.formData.enabled}
+            onChange={(checked) => form.setField('enabled', checked)}
+          />
         </div>
       </FormDialog>
 

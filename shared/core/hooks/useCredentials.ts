@@ -24,8 +24,8 @@ export interface UseCredentialsReturn {
   error: string | null;
   refresh: () => Promise<void>;
   createCredential: (data: CredentialFormData) => Promise<boolean>;
-  updateCredential: (id: string, data: CredentialFormData) => Promise<boolean>;
-  deleteCredential: (id: string) => Promise<boolean>;
+  updateCredential: (id: number | string, data: CredentialFormData) => Promise<boolean>;
+  deleteCredential: (id: number | string) => Promise<boolean>;
 }
 
 export function useCredentials(options: UseCredentialsOptions = {}): UseCredentialsReturn {
@@ -51,8 +51,7 @@ export function useCredentials(options: UseCredentialsOptions = {}): UseCredenti
 
   const createCredential = useCallback(async (data: CredentialFormData): Promise<boolean> => {
     try {
-      const payload = data.id ? data : { ...data, id: String(Date.now()) };
-      await dispatch(createCredentialThunk(payload)).unwrap();
+      await dispatch(createCredentialThunk(data)).unwrap();
       addNotification('success', 'Credential created successfully', navigateAction('View Credentials', 'config', 'credentials'));
       dispatch(fetchCredentials());
       return true;
@@ -62,7 +61,7 @@ export function useCredentials(options: UseCredentialsOptions = {}): UseCredenti
     }
   }, [dispatch]);
 
-  const updateCredential = useCallback(async (id: string, data: CredentialFormData): Promise<boolean> => {
+  const updateCredential = useCallback(async (id: number | string, data: CredentialFormData): Promise<boolean> => {
     try {
       await dispatch(updateCredentialThunk({ id, data })).unwrap();
       addNotification('success', 'Credential updated successfully', navigateAction('View Credentials', 'config', 'credentials'));
@@ -74,7 +73,7 @@ export function useCredentials(options: UseCredentialsOptions = {}): UseCredenti
     }
   }, [dispatch]);
 
-  const deleteCredential = useCallback(async (id: string): Promise<boolean> => {
+  const deleteCredential = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteCredentialThunk(id)).unwrap();
       addNotification('success', 'Credential deleted', navigateAction('View Credentials', 'config', 'credentials'));

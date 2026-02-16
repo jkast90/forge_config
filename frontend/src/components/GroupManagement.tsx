@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   useGroups,
   useDevices,
+  useDeviceRoles,
   addNotification,
 } from '@core';
 import type { Group, GroupFormData, GroupVariable } from '@core';
@@ -67,6 +68,7 @@ export function GroupManagement() {
   } = useGroups();
 
   const { devices } = useDevices();
+  const { deviceRoles } = useDeviceRoles();
 
   const selectedGroup = useMemo(() => {
     return groups.find(g => g.id === selectedGroupId) || null;
@@ -316,6 +318,12 @@ export function GroupManagement() {
     },
   ], [handleRemoveMember]);
 
+  // Find roles that auto-assign to the selected group
+  const rolesForGroup = useMemo(() => {
+    if (!selectedGroup) return [];
+    return deviceRoles.filter(r => r.group_names.includes(selectedGroup.name));
+  }, [selectedGroup, deviceRoles]);
+
   // Find the parent group name for display
   const parentGroupName = useMemo(() => {
     if (!selectedGroup?.parent_id) return null;
@@ -531,6 +539,35 @@ export function GroupManagement() {
                         searchPlaceholder="Filter devices..."
                       />
                     </LoadingState>
+                    {rolesForGroup.length > 0 && (
+                      <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, opacity: 0.6, marginBottom: '8px', textTransform: 'uppercase' }}>
+                          Auto-assigned via Roles
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {rolesForGroup.map(role => (
+                            <div key={role.id} style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              padding: '6px 10px',
+                              borderRadius: '6px',
+                              background: 'var(--bg-secondary, rgba(100, 149, 237, 0.08))',
+                              fontSize: '13px',
+                            }}>
+                              <Icon name="badge" size={14} />
+                              <span style={{ fontWeight: 500 }}>{role.name}</span>
+                              <span className="text-muted text-xs">
+                                ({role.group_names.join(', ')})
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '11px', opacity: 0.5, marginTop: '6px' }}>
+                          Devices with these roles are automatically added to this group.
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

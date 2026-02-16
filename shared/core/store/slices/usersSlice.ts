@@ -24,12 +24,12 @@ export const createUser = createAsyncThunk('users/create', async (data: UserForm
 
 export const updateUser = createAsyncThunk(
   'users/update',
-  async ({ id, data }: { id: string; data: Partial<UserFormData> }) => {
+  async ({ id, data }: { id: number | string; data: Partial<UserFormData> }) => {
     return getServices().users.update(id, data);
   }
 );
 
-export const deleteUser = createAsyncThunk('users/delete', async (id: string) => {
+export const deleteUser = createAsyncThunk('users/delete', async (id: number | string) => {
   await getServices().users.remove(id);
   return id;
 });

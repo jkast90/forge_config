@@ -34,6 +34,7 @@ export { TemplateService } from './templates';
 export type { DetectedVariable, TemplatizeResponse } from './templates';
 export { DiscoveryService } from './discovery';
 export { TestContainersService } from './testContainers';
+export type { UnifiedTopologyRequest, TopologyPreviewDevice, TopologyPreviewLink, TopologyPreviewRack, TopologyPreviewResponse } from './testContainers';
 export { NetBoxService } from './netbox';
 export type { NetBoxConfig, NetBoxStatus, NetBoxSyncResult, NetBoxManufacturer, NetBoxSite, NetBoxDeviceRole, NetBoxDevice, NetBoxVendorSyncResponse } from './netbox';
 export { TopologyService } from './topologies';

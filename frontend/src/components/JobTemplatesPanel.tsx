@@ -12,7 +12,7 @@ interface JobTemplatesPanelProps {
   templates: JobTemplate[];
   loading: boolean;
   deviceMap: Map<number, Device>;
-  actionMap: Map<string, { label: string }>;
+  actionMap: Map<string, { label: string; action_type?: string; webhook_url?: string; webhook_method?: string }>;
   onRun: (id: string) => Promise<boolean>;
   onEdit: (template: JobTemplate) => void;
   onDelete: (id: string) => Promise<boolean>;
@@ -22,12 +22,12 @@ interface JobTemplatesPanelProps {
 
 export function JobTemplatesPanel({ templates, loading, deviceMap, actionMap, onRun, onEdit, onDelete, onToggleEnabled, onRefresh }: JobTemplatesPanelProps) {
   const [showInfo, setShowInfo] = useState(false);
-  const [runningId, setRunningId] = useState<string | null>(null);
+  const [runningId, setRunningId] = useState<number | null>(null);
 
   const handleRun = async (t: JobTemplate) => {
     setRunningId(t.id);
     try {
-      await onRun(t.id);
+      await onRun(String(t.id));
     } finally {
       setRunningId(null);
     }
@@ -49,6 +49,29 @@ export function JobTemplatesPanel({ templates, loading, deviceMap, actionMap, on
       accessor: (t) => Cell.badge(t.job_type, getJobTypeBadgeVariant(t.job_type)),
       searchValue: (t) => t.job_type,
       width: '90px',
+    },
+    {
+      header: 'Command',
+      accessor: (t) => {
+        if (t.job_type === 'webhook' && t.action_id) {
+          const action = actionMap.get(String(t.action_id));
+          if (action) {
+            return <span>{action.label} <span className="text-muted text-xs">({action.webhook_method} {Cell.truncate(action.webhook_url || '', 30)})</span></span>;
+          }
+          return <span className="text-muted">Action #{t.action_id}</span>;
+        }
+        if (t.command) {
+          return <code className="text-xs">{Cell.truncate(t.command, 40)}</code>;
+        }
+        return <span className="text-muted">—</span>;
+      },
+      searchValue: (t) => {
+        if (t.job_type === 'webhook' && t.action_id) {
+          const action = actionMap.get(String(t.action_id));
+          return action ? `${action.label} ${action.webhook_method} ${action.webhook_url}` : String(t.action_id);
+        }
+        return t.command;
+      },
     },
     {
       header: 'Target',
@@ -87,7 +110,7 @@ export function JobTemplatesPanel({ templates, loading, deviceMap, actionMap, on
       searchable: false,
       width: '100px',
     },
-  ], [deviceMap]);
+  ], [deviceMap, actionMap]);
 
   const tableActions: TableAction<JobTemplate>[] = [
     {
@@ -114,7 +137,7 @@ export function JobTemplatesPanel({ templates, loading, deviceMap, actionMap, on
     {
       icon: <Icon name="delete" size={14} />,
       label: 'Delete',
-      onClick: (t: JobTemplate) => onDelete(t.id),
+      onClick: (t: JobTemplate) => onDelete(String(t.id)),
       variant: 'danger' as const,
       tooltip: 'Delete template',
     },

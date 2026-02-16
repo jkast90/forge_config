@@ -37,7 +37,7 @@ export function getVendorFilterOptions(
   return [
     { id: '', label: allLabel, icon: 'filter_list' },
     ...vendorList.map((v) => ({
-      id: v.id,
+      id: String(v.id),
       label: v.name,
       icon,
     })),
@@ -59,7 +59,7 @@ export function getVendorSelectOptions(
   return [
     { value: '', label: globalLabel },
     ...vendorList.map((v) => ({
-      value: v.id,
+      value: String(v.id),
       label: v.name,
     })),
   ];
@@ -68,13 +68,13 @@ export function getVendorSelectOptions(
 /**
  * Get vendor name from vendor ID
  * Uses vendors from cache (loaded from API) or accepts vendors directly
- * @param vendorId - Vendor ID (e.g., "cisco")
+ * @param vendorId - Vendor ID
  * @param vendors - Optional vendors array (uses cache if not provided)
- * @returns Vendor name (e.g., "Cisco") or the ID if not found
+ * @returns Vendor name or the ID as string if not found
  */
-export function getVendorName(vendorId: string, vendors?: Vendor[]): string {
+export function getVendorName(vendorId: string | number, vendors?: Vendor[]): string {
   const vendorList = vendors || getVendorCache() || [];
-  return vendorList.find((v) => v.id === vendorId)?.name || vendorId;
+  return vendorList.find((v) => String(v.id) === String(vendorId))?.name || String(vendorId);
 }
 
 /**

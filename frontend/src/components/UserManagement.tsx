@@ -54,7 +54,7 @@ function UsersPanel() {
     setSaving(true);
     try {
       const ok = editingUser
-        ? await updateUser(editingUser.id, {
+        ? await updateUser(String(editingUser.id), {
             username: formData.username,
             password: formData.password || undefined,
             enabled: formData.enabled,
@@ -97,7 +97,7 @@ function UsersPanel() {
     {
       icon: <Icon name="delete" size={14} />,
       label: 'Delete',
-      onClick: (u: User) => deleteUser(u.id),
+      onClick: (u: User) => deleteUser(String(u.id)),
       variant: 'danger',
       tooltip: 'Delete user',
       show: (u: User) => u.username !== currentUsername,
@@ -399,6 +399,19 @@ function DeviceNamingPanel() {
           <p className="settings-hint">
             Pattern for auto-generated device hostnames. Variables: <code>$region</code>, <code>$datacenter</code>, <code>$hall</code>, <code>$role</code> (spine, leaf, external), <code>#</code> (auto-incrementing number).
             Example: dc1-spine-1, dc1-leaf-2
+          </p>
+          <div className="form-row" style={{ marginTop: 16 }}>
+            <FormField
+              label="Cable Slack %"
+              name="cable_slack_percent"
+              type="number"
+              value={formData.cable_slack_percent ?? 20}
+              onChange={handleChange}
+              placeholder="20"
+            />
+          </div>
+          <p className="settings-hint">
+            Extra length added to estimated cable runs for service loops and routing slack. Applied during topology preview and build.
           </p>
         </div>
       )}

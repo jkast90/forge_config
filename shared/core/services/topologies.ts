@@ -6,7 +6,7 @@ export class TopologyService extends BaseService {
     return this.get<Topology[]>('/topologies');
   }
 
-  async getById(id: string): Promise<Topology> {
+  async getById(id: number | string): Promise<Topology> {
     return this.get<Topology>(`/topologies/${encodeURIComponent(id)}`);
   }
 
@@ -14,11 +14,11 @@ export class TopologyService extends BaseService {
     return this.post<Topology>('/topologies', topology);
   }
 
-  async update(id: string, topology: Partial<Topology>): Promise<Topology> {
+  async update(id: number | string, topology: Partial<Topology>): Promise<Topology> {
     return this.put<Topology>(`/topologies/${encodeURIComponent(id)}`, topology);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: number | string): Promise<void> {
     return this.delete<void>(`/topologies/${encodeURIComponent(id)}`);
   }
 }

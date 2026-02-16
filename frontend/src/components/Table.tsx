@@ -232,8 +232,7 @@ function ColumnFilter({ options, selected, onChange }: {
           <div className="column-filter-options">
             {filteredOptions.map((opt) => (
               <label key={opt} className="column-filter-option">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={selected.has(opt)}
                   onChange={() => toggle(opt)}
                 />

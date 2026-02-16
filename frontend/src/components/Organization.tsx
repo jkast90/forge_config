@@ -27,12 +27,12 @@ import { useConfirm } from './ConfirmDialog';
 
 type OrgTab = 'regions' | 'campuses' | 'datacenters' | 'halls' | 'rows' | 'racks';
 
-const EMPTY_REGION_FORM: IpamRegionFormData = { id: '', name: '', description: '' };
-const EMPTY_CAMPUS_FORM: IpamCampusFormData = { id: '', name: '', description: '', region_id: '' };
-const EMPTY_DATACENTER_FORM: IpamDatacenterFormData = { id: '', name: '', description: '', campus_id: '' };
-const EMPTY_HALL_FORM: IpamHallFormData = { id: '', name: '', description: '', datacenter_id: '' };
-const EMPTY_ROW_FORM: IpamRowFormData = { id: '', name: '', description: '', hall_id: '' };
-const EMPTY_RACK_FORM: IpamRackFormData = { id: '', name: '', description: '', row_id: '' };
+const EMPTY_REGION_FORM: IpamRegionFormData = { name: '', description: '' };
+const EMPTY_CAMPUS_FORM: IpamCampusFormData = { name: '', description: '', region_id: '' };
+const EMPTY_DATACENTER_FORM: IpamDatacenterFormData = { name: '', description: '', campus_id: '' };
+const EMPTY_HALL_FORM: IpamHallFormData = { name: '', description: '', datacenter_id: '' };
+const EMPTY_ROW_FORM: IpamRowFormData = { name: '', description: '', hall_id: '' };
+const EMPTY_RACK_FORM: IpamRackFormData = { name: '', description: '', row_id: '' };
 
 export function Locations() {
   const [activeTab, setActiveTab] = usePersistedTab<OrgTab>('regions', ['regions', 'campuses', 'datacenters', 'halls', 'rows', 'racks'], 'tab_locations');
@@ -97,13 +97,13 @@ function RegionsTab({ regions, ipam }: {
 
   const handleOpenEdit = useCallback((r: IpamRegion) => {
     setEditing(r);
-    setForm({ id: r.id, name: r.name, description: r.description || '' });
+    setForm({ name: r.name, description: r.description || '' });
     setShowForm(true);
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!form.id.trim() || !form.name.trim()) {
-      addNotification('error', 'ID and Name are required');
+    if (!form.name.trim()) {
+      addNotification('error', 'Name is required');
       return;
     }
     let success: boolean;
@@ -121,7 +121,7 @@ function RegionsTab({ regions, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamRegion>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamRegion) => row.id, searchValue: (row: IpamRegion) => row.id },
+    { header: 'ID', accessor: (row: IpamRegion) => row.id, searchValue: (row: IpamRegion) => String(row.id) },
     { header: 'Name', accessor: (row: IpamRegion) => row.name, searchValue: (row: IpamRegion) => row.name },
     { header: 'Description', accessor: (row: IpamRegion) => row.description || '', searchValue: (row: IpamRegion) => row.description || '' },
     { header: 'Campuses', accessor: (row: IpamRegion) => String(row.campus_count ?? 0) },
@@ -150,7 +150,6 @@ function RegionsTab({ regions, ipam }: {
       />
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Region' : 'Create Region'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={form.id} onChange={(e) => setForm(f => ({ ...f, id: e.target.value }))} disabled={!!editing} placeholder="e.g., us-east" />
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., US East" />
           <FormField label="Description" name="desc" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
         </div>
@@ -176,7 +175,7 @@ function CampusesTab({ campuses, regions, ipam }: {
 
   const regionOptions = useMemo(() => [
     { value: '', label: 'Select a region...' },
-    ...regions.map(r => ({ value: r.id, label: r.name })),
+    ...regions.map(r => ({ value: String(r.id), label: r.name })),
   ], [regions]);
 
   const handleOpenCreate = useCallback(() => {
@@ -187,13 +186,13 @@ function CampusesTab({ campuses, regions, ipam }: {
 
   const handleOpenEdit = useCallback((c: IpamCampus) => {
     setEditing(c);
-    setForm({ id: c.id, name: c.name, description: c.description || '', region_id: c.region_id });
+    setForm({ name: c.name, description: c.description || '', region_id: String(c.region_id) });
     setShowForm(true);
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!form.id.trim() || !form.name.trim() || !form.region_id) {
-      addNotification('error', 'ID, Name, and Region are required');
+    if (!form.name.trim() || !form.region_id) {
+      addNotification('error', 'Name and Region are required');
       return;
     }
     let success: boolean;
@@ -211,9 +210,9 @@ function CampusesTab({ campuses, regions, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamCampus>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamCampus) => row.id, searchValue: (row: IpamCampus) => row.id },
+    { header: 'ID', accessor: (row: IpamCampus) => row.id, searchValue: (row: IpamCampus) => String(row.id) },
     { header: 'Name', accessor: (row: IpamCampus) => row.name, searchValue: (row: IpamCampus) => row.name },
-    { header: 'Region', accessor: (row: IpamCampus) => row.region_name || row.region_id, searchValue: (row: IpamCampus) => `${row.region_name || ''} ${row.region_id}` },
+    { header: 'Region', accessor: (row: IpamCampus) => row.region_name || String(row.region_id), searchValue: (row: IpamCampus) => `${row.region_name || ''} ${row.region_id}` },
     { header: 'Description', accessor: (row: IpamCampus) => row.description || '', searchValue: (row: IpamCampus) => row.description || '' },
     { header: 'Datacenters', accessor: (row: IpamCampus) => String(row.datacenter_count ?? 0) },
   ], []);
@@ -241,7 +240,6 @@ function CampusesTab({ campuses, regions, ipam }: {
       />
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Campus' : 'Create Campus'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={form.id} onChange={(e) => setForm(f => ({ ...f, id: e.target.value }))} disabled={!!editing} placeholder="e.g., nyc" />
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., New York City" />
           <FormField label="Description" name="desc" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
           <SelectField label="Region" name="region_id" value={form.region_id} onChange={(e) => setForm(f => ({ ...f, region_id: e.target.value }))} options={regionOptions} />
@@ -268,7 +266,7 @@ function DatacentersTab({ datacenters, campuses, ipam }: {
 
   const campusOptions = useMemo(() => [
     { value: '', label: 'Select a campus...' },
-    ...campuses.map(c => ({ value: c.id, label: `${c.name} (${c.region_name || c.region_id})` })),
+    ...campuses.map(c => ({ value: String(c.id), label: `${c.name} (${c.region_name || c.region_id})` })),
   ], [campuses]);
 
   const handleOpenCreate = useCallback(() => {
@@ -279,13 +277,13 @@ function DatacentersTab({ datacenters, campuses, ipam }: {
 
   const handleOpenEdit = useCallback((d: IpamDatacenter) => {
     setEditing(d);
-    setForm({ id: d.id, name: d.name, description: d.description || '', campus_id: d.campus_id });
+    setForm({ name: d.name, description: d.description || '', campus_id: String(d.campus_id) });
     setShowForm(true);
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!form.id.trim() || !form.name.trim() || !form.campus_id) {
-      addNotification('error', 'ID, Name, and Campus are required');
+    if (!form.name.trim() || !form.campus_id) {
+      addNotification('error', 'Name and Campus are required');
       return;
     }
     let success: boolean;
@@ -303,9 +301,9 @@ function DatacentersTab({ datacenters, campuses, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamDatacenter>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamDatacenter) => row.id, searchValue: (row: IpamDatacenter) => row.id },
+    { header: 'ID', accessor: (row: IpamDatacenter) => row.id, searchValue: (row: IpamDatacenter) => String(row.id) },
     { header: 'Name', accessor: (row: IpamDatacenter) => row.name, searchValue: (row: IpamDatacenter) => row.name },
-    { header: 'Campus', accessor: (row: IpamDatacenter) => row.campus_name || row.campus_id, searchValue: (row: IpamDatacenter) => `${row.campus_name || ''} ${row.campus_id}` },
+    { header: 'Campus', accessor: (row: IpamDatacenter) => row.campus_name || String(row.campus_id), searchValue: (row: IpamDatacenter) => `${row.campus_name || ''} ${row.campus_id}` },
     { header: 'Region', accessor: (row: IpamDatacenter) => row.region_name || '', searchValue: (row: IpamDatacenter) => row.region_name || '' },
     { header: 'Description', accessor: (row: IpamDatacenter) => row.description || '', searchValue: (row: IpamDatacenter) => row.description || '' },
     { header: 'Halls', accessor: (row: IpamDatacenter) => String(row.hall_count ?? 0) },
@@ -334,7 +332,6 @@ function DatacentersTab({ datacenters, campuses, ipam }: {
       />
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Datacenter' : 'Create Datacenter'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={form.id} onChange={(e) => setForm(f => ({ ...f, id: e.target.value }))} disabled={!!editing} placeholder="e.g., dc-nyc-1" />
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., NYC DC1" />
           <FormField label="Description" name="desc" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
           <SelectField label="Campus" name="campus_id" value={form.campus_id} onChange={(e) => setForm(f => ({ ...f, campus_id: e.target.value }))} options={campusOptions} />
@@ -361,7 +358,7 @@ function HallsTab({ halls, datacenters, ipam }: {
 
   const dcOptions = useMemo(() => [
     { value: '', label: 'Select a datacenter...' },
-    ...datacenters.map(d => ({ value: d.id, label: `${d.name} (${d.campus_name || d.campus_id})` })),
+    ...datacenters.map(d => ({ value: String(d.id), label: `${d.name} (${d.campus_name || d.campus_id})` })),
   ], [datacenters]);
 
   const handleOpenCreate = useCallback(() => {
@@ -372,13 +369,13 @@ function HallsTab({ halls, datacenters, ipam }: {
 
   const handleOpenEdit = useCallback((h: IpamHall) => {
     setEditing(h);
-    setForm({ id: h.id, name: h.name, description: h.description || '', datacenter_id: h.datacenter_id });
+    setForm({ name: h.name, description: h.description || '', datacenter_id: String(h.datacenter_id) });
     setShowForm(true);
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!form.id.trim() || !form.name.trim() || !form.datacenter_id) {
-      addNotification('error', 'ID, Name, and Datacenter are required');
+    if (!form.name.trim() || !form.datacenter_id) {
+      addNotification('error', 'Name and Datacenter are required');
       return;
     }
     let success: boolean;
@@ -396,9 +393,9 @@ function HallsTab({ halls, datacenters, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamHall>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamHall) => row.id, searchValue: (row: IpamHall) => row.id },
+    { header: 'ID', accessor: (row: IpamHall) => row.id, searchValue: (row: IpamHall) => String(row.id) },
     { header: 'Name', accessor: (row: IpamHall) => row.name, searchValue: (row: IpamHall) => row.name },
-    { header: 'Datacenter', accessor: (row: IpamHall) => row.datacenter_name || row.datacenter_id, searchValue: (row: IpamHall) => `${row.datacenter_name || ''} ${row.datacenter_id}` },
+    { header: 'Datacenter', accessor: (row: IpamHall) => row.datacenter_name || String(row.datacenter_id), searchValue: (row: IpamHall) => `${row.datacenter_name || ''} ${row.datacenter_id}` },
     { header: 'Description', accessor: (row: IpamHall) => row.description || '', searchValue: (row: IpamHall) => row.description || '' },
     { header: 'Rows', accessor: (row: IpamHall) => String(row.row_count ?? 0) },
   ], []);
@@ -426,7 +423,6 @@ function HallsTab({ halls, datacenters, ipam }: {
       />
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Hall' : 'Create Hall'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={form.id} onChange={(e) => setForm(f => ({ ...f, id: e.target.value }))} disabled={!!editing} placeholder="e.g., hall-a" />
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Hall A" />
           <FormField label="Description" name="desc" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
           <SelectField label="Datacenter" name="datacenter_id" value={form.datacenter_id} onChange={(e) => setForm(f => ({ ...f, datacenter_id: e.target.value }))} options={dcOptions} />
@@ -453,7 +449,7 @@ function RowsTab({ rows, halls, ipam }: {
 
   const hallOptions = useMemo(() => [
     { value: '', label: 'Select a hall...' },
-    ...halls.map(h => ({ value: h.id, label: `${h.name} (${h.datacenter_name || h.datacenter_id})` })),
+    ...halls.map(h => ({ value: String(h.id), label: `${h.name} (${h.datacenter_name || h.datacenter_id})` })),
   ], [halls]);
 
   const handleOpenCreate = useCallback(() => {
@@ -464,13 +460,13 @@ function RowsTab({ rows, halls, ipam }: {
 
   const handleOpenEdit = useCallback((r: IpamRow) => {
     setEditing(r);
-    setForm({ id: r.id, name: r.name, description: r.description || '', hall_id: r.hall_id });
+    setForm({ name: r.name, description: r.description || '', hall_id: String(r.hall_id) });
     setShowForm(true);
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!form.id.trim() || !form.name.trim() || !form.hall_id) {
-      addNotification('error', 'ID, Name, and Hall are required');
+    if (!form.name.trim() || !form.hall_id) {
+      addNotification('error', 'Name and Hall are required');
       return;
     }
     let success: boolean;
@@ -488,9 +484,9 @@ function RowsTab({ rows, halls, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamRow>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamRow) => row.id, searchValue: (row: IpamRow) => row.id },
+    { header: 'ID', accessor: (row: IpamRow) => row.id, searchValue: (row: IpamRow) => String(row.id) },
     { header: 'Name', accessor: (row: IpamRow) => row.name, searchValue: (row: IpamRow) => row.name },
-    { header: 'Hall', accessor: (row: IpamRow) => row.hall_name || row.hall_id, searchValue: (row: IpamRow) => `${row.hall_name || ''} ${row.hall_id}` },
+    { header: 'Hall', accessor: (row: IpamRow) => row.hall_name || String(row.hall_id), searchValue: (row: IpamRow) => `${row.hall_name || ''} ${row.hall_id}` },
     { header: 'Description', accessor: (row: IpamRow) => row.description || '', searchValue: (row: IpamRow) => row.description || '' },
     { header: 'Racks', accessor: (row: IpamRow) => String(row.rack_count ?? 0) },
   ], []);
@@ -518,7 +514,6 @@ function RowsTab({ rows, halls, ipam }: {
       />
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Row' : 'Create Row'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={form.id} onChange={(e) => setForm(f => ({ ...f, id: e.target.value }))} disabled={!!editing} placeholder="e.g., row-1" />
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Row 1" />
           <FormField label="Description" name="desc" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
           <SelectField label="Hall" name="hall_id" value={form.hall_id} onChange={(e) => setForm(f => ({ ...f, hall_id: e.target.value }))} options={hallOptions} />
@@ -547,7 +542,7 @@ function RacksTab({ racks, rows, devices, ipam }: {
 
   const rowOptions = useMemo(() => [
     { value: '', label: 'Select a row...' },
-    ...rows.map(r => ({ value: r.id, label: `${r.name} (${r.hall_name || r.hall_id})` })),
+    ...rows.map(r => ({ value: String(r.id), label: `${r.name} (${r.hall_name || r.hall_id})` })),
   ], [rows]);
 
   const rackDevices = useMemo(() =>
@@ -563,13 +558,13 @@ function RacksTab({ racks, rows, devices, ipam }: {
 
   const handleOpenEdit = useCallback((rk: IpamRack) => {
     setEditing(rk);
-    setForm({ id: rk.id, name: rk.name, description: rk.description || '', row_id: rk.row_id });
+    setForm({ name: rk.name, description: rk.description || '', row_id: String(rk.row_id) });
     setShowForm(true);
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!form.id.trim() || !form.name.trim() || !form.row_id) {
-      addNotification('error', 'ID, Name, and Row are required');
+    if (!form.name.trim() || !form.row_id) {
+      addNotification('error', 'Name and Row are required');
       return;
     }
     let success: boolean;
@@ -587,9 +582,9 @@ function RacksTab({ racks, rows, devices, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamRack>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamRack) => row.id, searchValue: (row: IpamRack) => row.id },
+    { header: 'ID', accessor: (row: IpamRack) => row.id, searchValue: (row: IpamRack) => String(row.id) },
     { header: 'Name', accessor: (row: IpamRack) => row.name, searchValue: (row: IpamRack) => row.name },
-    { header: 'Row', accessor: (row: IpamRack) => row.row_name || row.row_id, searchValue: (row: IpamRack) => `${row.row_name || ''} ${row.row_id}` },
+    { header: 'Row', accessor: (row: IpamRack) => row.row_name || String(row.row_id), searchValue: (row: IpamRack) => `${row.row_name || ''} ${row.row_id}` },
     { header: 'Description', accessor: (row: IpamRack) => row.description || '', searchValue: (row: IpamRack) => row.description || '' },
     { header: 'Devices', accessor: (row: IpamRack) => String(row.device_count ?? 0) },
   ], []);
@@ -628,7 +623,6 @@ function RacksTab({ racks, rows, devices, ipam }: {
       />
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Rack' : 'Create Rack'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="id" value={form.id} onChange={(e) => setForm(f => ({ ...f, id: e.target.value }))} disabled={!!editing} placeholder="e.g., rack-01" />
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Rack 01" />
           <FormField label="Description" name="desc" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
           <SelectField label="Row" name="row_id" value={form.row_id} onChange={(e) => setForm(f => ({ ...f, row_id: e.target.value }))} options={rowOptions} />

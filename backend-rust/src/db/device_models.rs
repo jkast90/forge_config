@@ -9,7 +9,8 @@ const SELECT_DEVICE_MODEL: &str = r#"
            dm.created_at, dm.updated_at,
            COALESCE(COUNT(d.id), 0) as device_count
     FROM device_models dm
-    LEFT JOIN devices d ON d.model = dm.model AND d.vendor = CAST(dm.vendor_id AS TEXT)
+    LEFT JOIN vendors v ON v.id = dm.vendor_id
+    LEFT JOIN devices d ON d.model = dm.model AND d.vendor = v.name
 "#;
 
 fn map_device_model_row(row: &SqliteRow) -> DeviceModel {

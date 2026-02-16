@@ -8,7 +8,7 @@ export class TemplateService extends BaseService {
     return this.get<Template[]>('/templates');
   }
 
-  async getById(id: string): Promise<Template> {
+  async getById(id: number | string): Promise<Template> {
     return this.get<Template>(`/templates/${encodeURIComponent(id)}`);
   }
 
@@ -16,15 +16,15 @@ export class TemplateService extends BaseService {
     return this.post<Template>('/templates', template);
   }
 
-  async update(id: string, template: Partial<Template>): Promise<Template> {
+  async update(id: number | string, template: Partial<Template>): Promise<Template> {
     return this.put<Template>(`/templates/${encodeURIComponent(id)}`, template);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: number | string): Promise<void> {
     return this.delete<void>(`/templates/${encodeURIComponent(id)}`);
   }
 
-  async preview(id: string, data: {
+  async preview(id: number | string, data: {
     device: {
       mac: string;
       ip: string;

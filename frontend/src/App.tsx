@@ -8,6 +8,7 @@ import { SettingsDialog } from './components/SettingsDialog';
 import {
   ApiHistory,
   Button,
+  CodeGeneratorDialog,
   Dashboard,
   DataExplorer,
   DevicesPage,
@@ -158,6 +159,7 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
   const [showNotifications, setShowNotifications] = useState(false);
   const [spawningTestHost, setSpawningTestHost] = useState(false);
   const [showScratchPad, setShowScratchPad] = useState(false);
+  const [showCodeGenerator, setShowCodeGenerator] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const modalRoute = useModalRoute();
   const { unreadCount } = useNotificationHistory();
@@ -233,7 +235,7 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
     const vendorId = lookupVendorByMac(payload.mac);
     let vendorText = '';
     if (vendorId && vendorId !== 'local') {
-      const vendorInfo = vendors.find(v => v.id === vendorId);
+      const vendorInfo = vendors.find(v => String(v.id) === vendorId);
       vendorText = vendorInfo ? ` (${vendorInfo.name})` : ` (${vendorId})`;
     }
     addNotification('info', `New device discovered: ${payload.ip}${vendorText}`);
@@ -402,7 +404,17 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
 
       <footer className="footer">
         <div className="footer-content">
-          {inflightCount > 0 && <InflightIndicator count={inflightCount} />}
+          <div className="footer-left">
+            {inflightCount > 0 && <InflightIndicator count={inflightCount} />}
+            <Tooltip content="QR / Barcode Generator">
+              <button
+                className="icon-button"
+                onClick={() => setShowCodeGenerator(true)}
+              >
+                <Icon name="qr_code_2" size={20} />
+              </button>
+            </Tooltip>
+          </div>
           <span className="footer-commit">{__COMMIT_HASH__}</span>
           <div className="footer-actions">
             <Tooltip content="Spawn test host">
@@ -499,6 +511,11 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
       <ScratchPad
         isOpen={showScratchPad}
         onClose={() => setShowScratchPad(false)}
+      />
+
+      <CodeGeneratorDialog
+        isOpen={showCodeGenerator}
+        onClose={() => setShowCodeGenerator(false)}
       />
 
       <HelpTour

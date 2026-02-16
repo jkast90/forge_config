@@ -300,7 +300,7 @@ impl IpamRackRepo {
     pub async fn list(pool: &Pool<Sqlite>) -> Result<Vec<IpamRack>> {
         let rows = sqlx::query(
             r#"SELECT rk.*, r.name as row_name,
-                      COALESCE((SELECT COUNT(*) FROM devices WHERE rack_id = CAST(rk.id AS TEXT)), 0) as device_count
+                      COALESCE((SELECT COUNT(*) FROM devices WHERE rack_id = rk.id), 0) as device_count
                FROM ipam_racks rk
                LEFT JOIN ipam_rows r ON rk.row_id = r.id
                ORDER BY r.name, rk.name"#
@@ -311,7 +311,7 @@ impl IpamRackRepo {
     pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<IpamRack>> {
         let row = sqlx::query(
             r#"SELECT rk.*, r.name as row_name,
-                      COALESCE((SELECT COUNT(*) FROM devices WHERE rack_id = CAST(rk.id AS TEXT)), 0) as device_count
+                      COALESCE((SELECT COUNT(*) FROM devices WHERE rack_id = rk.id), 0) as device_count
                FROM ipam_racks rk
                LEFT JOIN ipam_rows r ON rk.row_id = r.id
                WHERE rk.id = ?"#

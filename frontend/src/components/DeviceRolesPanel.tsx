@@ -16,8 +16,8 @@ interface DeviceRolesPanelProps {
   groups: Group[];
   loading: boolean;
   onCreate: (data: DeviceRoleFormData) => Promise<boolean>;
-  onUpdate: (id: string, data: DeviceRoleFormData) => Promise<boolean>;
-  onDelete: (id: string) => Promise<boolean>;
+  onUpdate: (id: number | string, data: DeviceRoleFormData) => Promise<boolean>;
+  onDelete: (id: number | string) => Promise<boolean>;
   onRefresh: () => void;
 }
 
@@ -37,7 +37,6 @@ export function DeviceRolesPanel({ deviceRoles, templates, groups, loading, onCr
   const openEdit = (role: DeviceRole) => {
     setEditingRole(role);
     setFormData({
-      id: role.id,
       name: role.name,
       description: role.description || '',
       template_ids: role.template_ids || [],
@@ -70,7 +69,7 @@ export function DeviceRolesPanel({ deviceRoles, templates, groups, loading, onCr
     }
   };
 
-  const toggleTemplate = (templateId: string) => {
+  const toggleTemplate = (templateId: number) => {
     setFormData(prev => {
       const ids = prev.template_ids.includes(templateId)
         ? prev.template_ids.filter(id => id !== templateId)

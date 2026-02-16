@@ -27,11 +27,15 @@ pub struct Settings {
     // Device naming
     #[serde(default = "default_hostname_pattern")]
     pub hostname_pattern: String,
+    // Topology builder
+    #[serde(default = "default_cable_slack_percent")]
+    pub cable_slack_percent: i32,
 }
 
 fn default_hostname_pattern() -> String {
     "$datacenter-$role-#".to_string()
 }
+fn default_cable_slack_percent() -> i32 { 20 }
 
 impl Default for Settings {
     fn default() -> Self {
@@ -51,6 +55,7 @@ impl Default for Settings {
             app_name: None,
             logo_url: None,
             hostname_pattern: default_hostname_pattern(),
+            cable_slack_percent: default_cable_slack_percent(),
         }
     }
 }

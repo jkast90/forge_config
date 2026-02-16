@@ -20,7 +20,7 @@ function cleanPrefixData(data: IpamPrefixFormData): Record<string, unknown> {
     description: data.description || undefined,
     status: data.status,
     is_supernet: data.is_supernet,
-    role_ids: data.role_ids.filter(id => id !== ''),
+    role_ids: data.role_ids.filter(Boolean),
     parent_id: data.parent_id ? parseInt(data.parent_id, 10) || undefined : undefined,
     datacenter_id: data.datacenter_id || undefined,
     vlan_id: data.vlan_id ? parseInt(data.vlan_id, 10) || undefined : undefined,
@@ -28,14 +28,14 @@ function cleanPrefixData(data: IpamPrefixFormData): Record<string, unknown> {
   };
 }
 
-function cleanIpData(data: IpamIpAddressFormData): Record<string, unknown> {
+function cleanIpData(data: IpamIpAddressFormData & { id?: number }): Record<string, unknown> {
   return {
-    id: data.id,
+    ...(data.id != null ? { id: data.id } : {}),
     address: data.address,
     prefix_id: data.prefix_id ? parseInt(data.prefix_id, 10) : undefined,
     description: data.description || undefined,
     status: data.status,
-    role_ids: data.role_ids.filter(id => id !== ''),
+    role_ids: data.role_ids.filter(Boolean),
     dns_name: data.dns_name || undefined,
     device_id: data.device_id ? parseInt(data.device_id, 10) || undefined : undefined,
     interface_name: data.interface_name || undefined,
@@ -53,11 +53,11 @@ export class IpamService extends BaseService {
     return this.post<IpamRegion>('/ipam/regions', data);
   }
 
-  async updateRegion(id: string, data: IpamRegionFormData): Promise<IpamRegion> {
+  async updateRegion(id: number | string, data: IpamRegionFormData): Promise<IpamRegion> {
     return this.put<IpamRegion>(`/ipam/regions/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteRegion(id: string): Promise<void> {
+  async deleteRegion(id: number | string): Promise<void> {
     return this.delete<void>(`/ipam/regions/${encodeURIComponent(id)}`);
   }
 
@@ -70,11 +70,11 @@ export class IpamService extends BaseService {
     return this.post<IpamCampus>('/ipam/campuses', data);
   }
 
-  async updateCampus(id: string, data: IpamCampusFormData): Promise<IpamCampus> {
+  async updateCampus(id: number | string, data: IpamCampusFormData): Promise<IpamCampus> {
     return this.put<IpamCampus>(`/ipam/campuses/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteCampus(id: string): Promise<void> {
+  async deleteCampus(id: number | string): Promise<void> {
     return this.delete<void>(`/ipam/campuses/${encodeURIComponent(id)}`);
   }
 
@@ -87,11 +87,11 @@ export class IpamService extends BaseService {
     return this.post<IpamDatacenter>('/ipam/datacenters', data);
   }
 
-  async updateDatacenter(id: string, data: IpamDatacenterFormData): Promise<IpamDatacenter> {
+  async updateDatacenter(id: number | string, data: IpamDatacenterFormData): Promise<IpamDatacenter> {
     return this.put<IpamDatacenter>(`/ipam/datacenters/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteDatacenter(id: string): Promise<void> {
+  async deleteDatacenter(id: number | string): Promise<void> {
     return this.delete<void>(`/ipam/datacenters/${encodeURIComponent(id)}`);
   }
 
@@ -104,11 +104,11 @@ export class IpamService extends BaseService {
     return this.post<IpamHall>('/ipam/halls', data);
   }
 
-  async updateHall(id: string, data: IpamHallFormData): Promise<IpamHall> {
+  async updateHall(id: number | string, data: IpamHallFormData): Promise<IpamHall> {
     return this.put<IpamHall>(`/ipam/halls/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteHall(id: string): Promise<void> {
+  async deleteHall(id: number | string): Promise<void> {
     return this.delete<void>(`/ipam/halls/${encodeURIComponent(id)}`);
   }
 
@@ -121,11 +121,11 @@ export class IpamService extends BaseService {
     return this.post<IpamRow>('/ipam/rows', data);
   }
 
-  async updateRow(id: string, data: IpamRowFormData): Promise<IpamRow> {
+  async updateRow(id: number | string, data: IpamRowFormData): Promise<IpamRow> {
     return this.put<IpamRow>(`/ipam/rows/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteRow(id: string): Promise<void> {
+  async deleteRow(id: number | string): Promise<void> {
     return this.delete<void>(`/ipam/rows/${encodeURIComponent(id)}`);
   }
 
@@ -138,11 +138,11 @@ export class IpamService extends BaseService {
     return this.post<IpamRack>('/ipam/racks', data);
   }
 
-  async updateRack(id: string, data: IpamRackFormData): Promise<IpamRack> {
+  async updateRack(id: number | string, data: IpamRackFormData): Promise<IpamRack> {
     return this.put<IpamRack>(`/ipam/racks/${encodeURIComponent(id)}`, data);
   }
 
-  async deleteRack(id: string): Promise<void> {
+  async deleteRack(id: number | string): Promise<void> {
     return this.delete<void>(`/ipam/racks/${encodeURIComponent(id)}`);
   }
 
@@ -151,11 +151,11 @@ export class IpamService extends BaseService {
     return this.get<IpamRole[]>('/ipam/roles');
   }
 
-  async createRole(data: { id: string; name: string; description?: string }): Promise<IpamRole> {
+  async createRole(data: { id: number | string; name: string; description?: string }): Promise<IpamRole> {
     return this.post<IpamRole>('/ipam/roles', data);
   }
 
-  async deleteRole(id: string): Promise<void> {
+  async deleteRole(id: number | string): Promise<void> {
     return this.delete<void>(`/ipam/roles/${encodeURIComponent(id)}`);
   }
 
@@ -197,7 +197,7 @@ export class IpamService extends BaseService {
     return this.get<IpamIpAddress[]>('/ipam/ip-addresses');
   }
 
-  async getIpAddress(id: string): Promise<IpamIpAddress> {
+  async getIpAddress(id: number | string): Promise<IpamIpAddress> {
     return this.get<IpamIpAddress>(`/ipam/ip-addresses/${encodeURIComponent(id)}`);
   }
 
@@ -205,11 +205,11 @@ export class IpamService extends BaseService {
     return this.post<IpamIpAddress>('/ipam/ip-addresses', cleanIpData(data));
   }
 
-  async updateIpAddress(id: string, data: IpamIpAddressFormData): Promise<IpamIpAddress> {
+  async updateIpAddress(id: number | string, data: IpamIpAddressFormData): Promise<IpamIpAddress> {
     return this.put<IpamIpAddress>(`/ipam/ip-addresses/${encodeURIComponent(id)}`, cleanIpData(data));
   }
 
-  async deleteIpAddress(id: string): Promise<void> {
+  async deleteIpAddress(id: number | string): Promise<void> {
     return this.delete<void>(`/ipam/ip-addresses/${encodeURIComponent(id)}`);
   }
 
@@ -218,11 +218,11 @@ export class IpamService extends BaseService {
     return this.get<IpamVrf[]>('/ipam/vrfs');
   }
 
-  async createVrf(data: { id: string; name: string; rd?: string; description?: string }): Promise<IpamVrf> {
+  async createVrf(data: { id: number | string; name: string; rd?: string; description?: string }): Promise<IpamVrf> {
     return this.post<IpamVrf>('/ipam/vrfs', data);
   }
 
-  async deleteVrf(id: string): Promise<void> {
+  async deleteVrf(id: number | string): Promise<void> {
     return this.delete<void>(`/ipam/vrfs/${encodeURIComponent(id)}`);
   }
 

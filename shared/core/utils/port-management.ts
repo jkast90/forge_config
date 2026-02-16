@@ -102,7 +102,7 @@ export function findDeviceModel(
 ): DeviceModel | undefined {
   if (!device.vendor || !device.model) return undefined;
   return deviceModels.find(
-    (dm) => dm.vendor_id === device.vendor && dm.model === device.model
+    (dm) => String(dm.vendor_id) === String(device.vendor) && dm.model === device.model
   );
 }
 

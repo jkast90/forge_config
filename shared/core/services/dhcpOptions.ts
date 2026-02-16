@@ -12,7 +12,7 @@ export class DhcpOptionService extends BaseService {
     return this.get<DhcpOption[]>('/dhcp-options/defaults');
   }
 
-  async getById(id: string): Promise<DhcpOption> {
+  async getById(id: number | string): Promise<DhcpOption> {
     return this.get<DhcpOption>(`/dhcp-options/${encodeURIComponent(id)}`);
   }
 
@@ -20,11 +20,11 @@ export class DhcpOptionService extends BaseService {
     return this.post<DhcpOption>('/dhcp-options', option);
   }
 
-  async update(id: string, option: Partial<DhcpOption>): Promise<DhcpOption> {
+  async update(id: number | string, option: Partial<DhcpOption>): Promise<DhcpOption> {
     return this.put<DhcpOption>(`/dhcp-options/${encodeURIComponent(id)}`, option);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: number | string): Promise<void> {
     return this.delete<void>(`/dhcp-options/${encodeURIComponent(id)}`);
   }
 }

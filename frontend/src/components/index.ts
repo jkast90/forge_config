@@ -7,6 +7,7 @@ export { IconButton } from './IconButton';
 export { Card } from './Card';
 export { Checkbox } from './Checkbox';
 export { CloseButton } from './CloseButton';
+export { CodeGeneratorDialog } from './CodeGeneratorDialog';
 export { ConfirmDialog, useConfirm } from './ConfirmDialog';
 export { ConfigViewer } from './ConfigViewer';
 export { Dashboard } from './Dashboard';

@@ -380,24 +380,23 @@ export function DeviceModelManagement() {
   const vendorOptions = useMemo(() => {
     return [
       { value: '', label: 'Select vendor...' },
-      ...vendors.map((v) => ({ value: v.id, label: v.name })),
+      ...vendors.map((v) => ({ value: String(v.id), label: v.name })),
     ];
   }, [vendors]);
 
   const form = useModalForm<DeviceModel, DeviceModelFormData>({
     emptyFormData: { ...EMPTY_DEVICE_MODEL_FORM },
     itemToFormData: (model) => ({
-      id: model.id,
-      vendor_id: model.vendor_id,
+      vendor_id: String(model.vendor_id),
       model: model.model,
       display_name: model.display_name,
       rack_units: model.rack_units,
       layout: model.layout,
     }),
     onCreate: (data) =>
-      createDeviceModel({ ...data, id: data.id || slugify(`${data.vendor_id}-${data.model}`) }),
-    onUpdate: (id, data) => updateDeviceModel(id, data),
-    getItemId: (m) => m.id,
+      createDeviceModel({ ...data, vendor_id: Number(data.vendor_id) }),
+    onUpdate: (id, data) => updateDeviceModel(id, { ...data, vendor_id: Number(data.vendor_id) }),
+    getItemId: (m) => String(m.id),
     modalName: 'device-model-form',
   });
 
@@ -407,7 +406,7 @@ export function DeviceModelManagement() {
     if (modalRoute.isModal('device-model-form') && !form.isOpen) {
       const id = modalRoute.getParam('id');
       if (id) {
-        const model = deviceModels.find((m) => m.id === id);
+        const model = deviceModels.find((m) => String(m.id) === id);
         if (model) form.openEdit(model);
         else if (deviceModels.length > 0) modalRoute.closeModal();
       } else {
@@ -417,7 +416,7 @@ export function DeviceModelManagement() {
   }, [modalRoute.modal, deviceModels]);
 
   const handleDelete = async (model: DeviceModel) => {
-    await deleteDeviceModel(model.id);
+    await deleteDeviceModel(String(model.id));
   };
 
   const handleLayoutChange = useCallback(
@@ -441,7 +440,7 @@ export function DeviceModelManagement() {
     {
       header: 'Vendor',
       accessor: (m) => getVendorName(m.vendor_id, vendors),
-      searchValue: (m) => m.vendor_id,
+      searchValue: (m) => String(m.vendor_id),
     },
     {
       header: 'Ports',

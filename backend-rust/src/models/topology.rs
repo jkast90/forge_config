@@ -1,13 +1,18 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// Canonical CLOS topology role values
+/// Canonical topology role values
 pub mod topology_role {
+    // CLOS roles
     pub const SUPER_SPINE: &str = "super-spine";
     pub const SPINE: &str = "spine";
     pub const LEAF: &str = "leaf";
+    // Hierarchical (3-tier) roles
+    pub const CORE: &str = "core";
+    pub const DISTRIBUTION: &str = "distribution";
+    pub const ACCESS: &str = "access";
 
-    pub const ALL: &[&str] = &[SUPER_SPINE, SPINE, LEAF];
+    pub const ALL: &[&str] = &[SUPER_SPINE, SPINE, LEAF, CORE, DISTRIBUTION, ACCESS];
 
     pub fn is_valid(role: &str) -> bool {
         role.is_empty() || ALL.contains(&role)

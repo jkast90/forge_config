@@ -24,12 +24,12 @@ export const createDeviceRole = createAsyncThunk('deviceRoles/create', async (da
 
 export const updateDeviceRole = createAsyncThunk(
   'deviceRoles/update',
-  async ({ id, data }: { id: string; data: DeviceRoleFormData }) => {
+  async ({ id, data }: { id: number | string; data: DeviceRoleFormData }) => {
     return getServices().deviceRoles.update(id, data);
   }
 );
 
-export const deleteDeviceRole = createAsyncThunk('deviceRoles/delete', async (id: string) => {
+export const deleteDeviceRole = createAsyncThunk('deviceRoles/delete', async (id: number | string) => {
   await getServices().deviceRoles.remove(id);
   return id;
 });

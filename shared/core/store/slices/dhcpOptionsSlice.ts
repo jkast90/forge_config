@@ -24,12 +24,12 @@ export const createDhcpOption = createAsyncThunk('dhcpOptions/create', async (da
 
 export const updateDhcpOption = createAsyncThunk(
   'dhcpOptions/update',
-  async ({ id, data }: { id: string; data: Partial<DhcpOption> }) => {
+  async ({ id, data }: { id: number | string; data: Partial<DhcpOption> }) => {
     return getServices().dhcpOptions.update(id, data);
   }
 );
 
-export const deleteDhcpOption = createAsyncThunk('dhcpOptions/delete', async (id: string) => {
+export const deleteDhcpOption = createAsyncThunk('dhcpOptions/delete', async (id: number | string) => {
   await getServices().dhcpOptions.remove(id);
   return id;
 });

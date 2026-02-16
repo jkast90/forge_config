@@ -147,7 +147,7 @@ CREATE TABLE devices (
     config_template TEXT DEFAULT '',
     ssh_user TEXT DEFAULT '',
     ssh_pass TEXT DEFAULT '',
-    topology_id TEXT DEFAULT '',
+    topology_id INTEGER DEFAULT NULL,
     topology_role TEXT DEFAULT '',
     status TEXT DEFAULT 'offline',
     last_seen DATETIME,

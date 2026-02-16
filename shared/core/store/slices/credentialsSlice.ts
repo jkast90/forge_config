@@ -24,12 +24,12 @@ export const createCredential = createAsyncThunk('credentials/create', async (da
 
 export const updateCredential = createAsyncThunk(
   'credentials/update',
-  async ({ id, data }: { id: string; data: CredentialFormData }) => {
+  async ({ id, data }: { id: number | string; data: CredentialFormData }) => {
     return getServices().credentials.update(id, data);
   }
 );
 
-export const deleteCredential = createAsyncThunk('credentials/delete', async (id: string) => {
+export const deleteCredential = createAsyncThunk('credentials/delete', async (id: number | string) => {
   await getServices().credentials.remove(id);
   return id;
 });

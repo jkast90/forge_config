@@ -134,7 +134,7 @@ export function DevicePortAssignments({ device, onClose }: Props) {
     patch_panel_a_port: '',
     patch_panel_b_id: undefined,
     patch_panel_b_port: '',
-    vrf_id: '',
+    vrf_id: undefined,
   });
 
   const deviceModel = useMemo(() => findDeviceModel(device, deviceModels), [device.vendor, device.model, deviceModels]);
@@ -154,7 +154,7 @@ export function DevicePortAssignments({ device, onClose }: Props) {
 
   const vrfOptions = useMemo(() => {
     const opts = [{ value: '', label: '— None (default) —' }];
-    vrfs.forEach((v) => opts.push({ value: v.id, label: `${v.name}${v.rd ? ` (${v.rd})` : ''}` }));
+    vrfs.forEach((v) => opts.push({ value: String(v.id), label: `${v.name}${v.rd ? ` (${v.rd})` : ''}` }));
     return opts;
   }, [vrfs]);
 
@@ -200,7 +200,7 @@ export function DevicePortAssignments({ device, onClose }: Props) {
   const remoteDeviceModel = useMemo<DeviceModel | undefined>(() => {
     if (!remoteDevice?.vendor || !remoteDevice?.model) return undefined;
     return deviceModels.find(
-      (dm) => dm.vendor_id === remoteDevice.vendor && dm.model === remoteDevice.model
+      (dm) => String(dm.vendor_id) === remoteDevice.vendor && dm.model === remoteDevice.model
     );
   }, [remoteDevice, deviceModels]);
 
@@ -230,7 +230,7 @@ export function DevicePortAssignments({ device, onClose }: Props) {
       patch_panel_a_port: existing?.patch_panel_a_port || '',
       patch_panel_b_id: existing?.patch_panel_b_id,
       patch_panel_b_port: existing?.patch_panel_b_port || '',
-      vrf_id: existing?.vrf_id || '',
+      vrf_id: existing?.vrf_id || undefined,
     });
   };
 
@@ -485,8 +485,8 @@ export function DevicePortAssignments({ device, onClose }: Props) {
                     <SelectField
                       label="VRF"
                       name="vrf_id"
-                      value={editForm.vrf_id || ''}
-                      onChange={(e) => setEditForm({ ...editForm, vrf_id: e.target.value || undefined })}
+                      value={editForm.vrf_id != null ? String(editForm.vrf_id) : ''}
+                      onChange={(e) => setEditForm({ ...editForm, vrf_id: e.target.value ? Number(e.target.value) : undefined })}
                       options={vrfOptions}
                     />
                   )}

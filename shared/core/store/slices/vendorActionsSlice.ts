@@ -24,12 +24,12 @@ export const createVendorAction = createAsyncThunk('vendorActions/create', async
 
 export const updateVendorAction = createAsyncThunk(
   'vendorActions/update',
-  async ({ id, data }: { id: string; data: Partial<VendorAction> }) => {
+  async ({ id, data }: { id: number | string; data: Partial<VendorAction> }) => {
     return getServices().vendors.updateAction(id, data);
   }
 );
 
-export const deleteVendorAction = createAsyncThunk('vendorActions/delete', async (id: string) => {
+export const deleteVendorAction = createAsyncThunk('vendorActions/delete', async (id: number | string) => {
   await getServices().vendors.deleteAction(id);
   return id;
 });

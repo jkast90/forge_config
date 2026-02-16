@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { OutputParser, OutputParserFormData } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Checkbox } from './Checkbox';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { InfoSection } from './InfoSection';
@@ -246,14 +247,11 @@ export function OutputParsersPanel({ outputParsers, loading, onCreate, onUpdate,
           Each capture group in the regex maps to a name. Names are used as column headers when displaying parsed output.
         </div>
         <div className="form-group">
-          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input
-              type="checkbox"
-              checked={formData.enabled}
-              onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-            />
-            Enabled
-          </label>
+          <Checkbox
+            label="Enabled"
+            checked={formData.enabled}
+            onChange={(checked) => setFormData({ ...formData, enabled: checked })}
+          />
         </div>
 
         {/* Test Section */}

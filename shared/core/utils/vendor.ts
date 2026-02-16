@@ -42,7 +42,7 @@ export function lookupVendorByMac(mac: string, vendors?: Vendor[]): string | nul
       if (vendor.mac_prefixes) {
         for (const prefix of vendor.mac_prefixes) {
           if (prefix.toUpperCase() === oui) {
-            return vendor.id;
+            return String(vendor.id);
           }
         }
       }

@@ -17,8 +17,8 @@ export interface UseDeviceRolesReturn {
   error: string | null;
   refresh: () => Promise<void>;
   createDeviceRole: (data: DeviceRoleFormData) => Promise<boolean>;
-  updateDeviceRole: (id: string, data: DeviceRoleFormData) => Promise<boolean>;
-  deleteDeviceRole: (id: string) => Promise<boolean>;
+  updateDeviceRole: (id: number | string, data: DeviceRoleFormData) => Promise<boolean>;
+  deleteDeviceRole: (id: number | string) => Promise<boolean>;
 }
 
 export function useDeviceRoles(): UseDeviceRolesReturn {
@@ -35,8 +35,7 @@ export function useDeviceRoles(): UseDeviceRolesReturn {
 
   const createDeviceRole = useCallback(async (data: DeviceRoleFormData): Promise<boolean> => {
     try {
-      const payload = data.id ? data : { ...data, id: String(Date.now()) };
-      await dispatch(createDeviceRoleThunk(payload)).unwrap();
+      await dispatch(createDeviceRoleThunk(data)).unwrap();
       addNotification('success', 'Device role created', navigateAction('View Roles', 'config', 'roles'));
       dispatch(fetchDeviceRoles());
       return true;
@@ -46,7 +45,7 @@ export function useDeviceRoles(): UseDeviceRolesReturn {
     }
   }, [dispatch]);
 
-  const updateDeviceRole = useCallback(async (id: string, data: DeviceRoleFormData): Promise<boolean> => {
+  const updateDeviceRole = useCallback(async (id: number | string, data: DeviceRoleFormData): Promise<boolean> => {
     try {
       await dispatch(updateDeviceRoleThunk({ id, data })).unwrap();
       addNotification('success', 'Device role updated', navigateAction('View Roles', 'config', 'roles'));
@@ -58,7 +57,7 @@ export function useDeviceRoles(): UseDeviceRolesReturn {
     }
   }, [dispatch]);
 
-  const deleteDeviceRole = useCallback(async (id: string): Promise<boolean> => {
+  const deleteDeviceRole = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteDeviceRoleThunk(id)).unwrap();
       addNotification('success', 'Device role deleted', navigateAction('View Roles', 'config', 'roles'));

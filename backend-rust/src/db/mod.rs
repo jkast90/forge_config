@@ -110,6 +110,9 @@ impl Store {
         self.seed_default_output_parsers().await?;
         self.seed_default_device_models().await?;
         self.seed_default_ipam_supernets().await?;
+        self.seed_default_credential().await?;
+        self.seed_default_device_roles().await?;
+        self.seed_default_locations().await?;
 
         // Ensure "all" group invariants
         self.ensure_all_group().await?;
@@ -391,6 +394,100 @@ impl Store {
         Ok(())
     }
 
+    async fn seed_default_credential(&self) -> Result<()> {
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM credentials WHERE name = 'admin'")
+            .fetch_one(&self.pool)
+            .await?;
+        if count.0 == 0 {
+            sqlx::query(
+                r#"INSERT INTO credentials (name, description, cred_type, username, password, created_at, updated_at)
+                   VALUES ('admin', 'Default admin credential', 'ssh', 'admin', 'admin', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"#,
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    async fn seed_default_device_roles(&self) -> Result<()> {
+        // Device roles: spine and leaf, each linked to their vendor-specific templates
+        let roles: Vec<(&str, &str, Vec<&str>)> = vec![
+            // CLOS roles
+            ("spine", "Spine role for CLOS fabric", vec!["Arista EOS Spine", "FRR BGP Spine"]),
+            ("leaf", "Leaf role for CLOS fabric", vec!["Arista EOS Leaf", "FRR BGP Leaf"]),
+            // Hierarchical (3-tier) roles
+            ("core", "Core router role for hierarchical fabric", vec!["Arista EOS Core", "FRR BGP Core"]),
+            ("distribution", "Distribution switch role for hierarchical fabric", vec!["Arista EOS Distribution", "FRR BGP Distribution"]),
+            ("access", "Access switch role for hierarchical fabric", vec!["Arista EOS Access", "FRR BGP Access"]),
+        ];
+
+        for (name, description, template_names) in &roles {
+            let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM device_roles WHERE name = ?")
+                .bind(name)
+                .fetch_one(&self.pool)
+                .await?;
+            if count.0 > 0 {
+                continue;
+            }
+
+            let result = sqlx::query(
+                "INSERT INTO device_roles (name, description, group_names, created_at, updated_at) VALUES (?, ?, '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+            )
+            .bind(name)
+            .bind(description)
+            .execute(&self.pool)
+            .await?;
+
+            let role_id = result.last_insert_rowid();
+
+            // Link templates by name
+            for (i, tname) in template_names.iter().enumerate() {
+                let tid: Option<(i64,)> = sqlx::query_as("SELECT id FROM templates WHERE name = ?")
+                    .bind(tname)
+                    .fetch_optional(&self.pool)
+                    .await?;
+                if let Some((template_id,)) = tid {
+                    sqlx::query(
+                        "INSERT INTO device_role_templates (role_id, template_id, sort_order) VALUES (?, ?, ?)"
+                    )
+                    .bind(role_id)
+                    .bind(template_id)
+                    .bind(i as i32)
+                    .execute(&self.pool)
+                    .await?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn seed_default_locations(&self) -> Result<()> {
+        // Region: us-west
+        let region_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM ipam_regions WHERE name = 'us-west'")
+            .fetch_one(&self.pool).await?;
+        if region_count.0 > 0 {
+            return Ok(());
+        }
+
+        let region = sqlx::query(
+            "INSERT INTO ipam_regions (name, description, created_at, updated_at) VALUES ('us-west', 'US West region', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ).execute(&self.pool).await?;
+        let region_id = region.last_insert_rowid();
+
+        // Campus: camp1
+        let campus = sqlx::query(
+            "INSERT INTO ipam_locations (name, description, region_id, created_at, updated_at) VALUES ('camp1', 'Campus 1', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ).bind(region_id).execute(&self.pool).await?;
+        let campus_id = campus.last_insert_rowid();
+
+        // Datacenter: las (Las Vegas)
+        sqlx::query(
+            "INSERT INTO ipam_datacenters (name, description, location_id, created_at, updated_at) VALUES ('las', 'Las Vegas', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+        ).bind(campus_id).execute(&self.pool).await?;
+
+        Ok(())
+    }
+
     // ========== User Operations ==========
 
     pub async fn list_users(&self) -> Result<Vec<User>> {
@@ -461,7 +558,7 @@ impl Store {
         devices::DeviceRepo::delete(&self.pool, id).await
     }
 
-    pub async fn delete_devices_by_topology(&self, topology_id: &str) -> Result<u64> {
+    pub async fn delete_devices_by_topology(&self, topology_id: i64) -> Result<u64> {
         devices::DeviceRepo::delete_by_topology(&self.pool, topology_id).await
     }
 

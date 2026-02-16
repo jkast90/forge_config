@@ -28,6 +28,7 @@ import {
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Checkbox } from './Checkbox';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { InfoSection } from './InfoSection';
@@ -125,7 +126,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
 
   // Load template into form
   const handleLoadTemplate = (templateId: string) => {
-    const tmpl = templates.find((t) => t.id === templateId);
+    const tmpl = templates.find((t) => String(t.id) === templateId);
     if (!tmpl) return;
     setTargetMode(tmpl.target_mode);
     if (tmpl.target_mode === 'device') {
@@ -136,7 +137,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
       setSelectedDeviceIds([]);
     }
     if (tmpl.action_id) {
-      setSelectedActionId(tmpl.action_id);
+      setSelectedActionId(String(tmpl.action_id));
       setCustomCommand('');
     } else {
       setSelectedActionId('');
@@ -146,7 +147,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
 
   const templateOptions = useMemo(() => [
     { value: '', label: 'Load from template...' },
-    ...templates.map((t) => ({ value: t.id, label: t.name })),
+    ...templates.map((t) => ({ value: String(t.id), label: t.name })),
   ], [templates]);
 
   // Fetch group members when group selection changes
@@ -167,14 +168,14 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
   const targetDeviceIds = targetMode === 'device' ? selectedDeviceIds : groupMembers;
 
   // When launched with an initial action, filter devices to matching vendor
-  const initialAction = initialActionId ? vendorActions.find((a) => a.id === initialActionId) : undefined;
+  const initialAction = initialActionId ? vendorActions.find((a) => String(a.id) === initialActionId) : undefined;
   const filteredDevices = useMemo(() => {
     if (!initialAction) return devices;
-    return devices.filter((d) => d.vendor === initialAction.vendor_id);
+    return devices.filter((d) => d.vendor === String(initialAction.vendor_id));
   }, [devices, initialAction]);
 
   // Resolve command from action or custom
-  const selectedAction = vendorActions.find((a) => a.id === selectedActionId);
+  const selectedAction = vendorActions.find((a) => String(a.id) === selectedActionId);
   const isWebhookAction = selectedAction?.action_type === 'webhook';
   const command = selectedAction ? (isWebhookAction ? '' : selectedAction.command) : customCommand;
 
@@ -188,19 +189,19 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
     if (targetDeviceIds.length === 0) {
       // When no devices selected but we have an initial action, show it
       if (initialActionId) {
-        return vendorActions.filter((a) => a.id === initialActionId);
+        return vendorActions.filter((a) => String(a.id) === initialActionId);
       }
       return [];
     }
     const targetDevices = devices.filter((d) => targetDeviceIds.includes(d.id));
     const vendorIds = new Set(targetDevices.map((d) => d.vendor).filter(Boolean));
     if (vendorIds.size === 0) return vendorActions;
-    return vendorActions.filter((a) => vendorIds.has(a.vendor_id));
+    return vendorActions.filter((a) => vendorIds.has(String(a.vendor_id)));
   }, [vendorActions, targetDeviceIds, devices, initialActionId]);
 
   // Clear selected action if it's no longer in the filtered list
   useEffect(() => {
-    if (selectedActionId && !relevantActions.some((a) => a.id === selectedActionId)) {
+    if (selectedActionId && !relevantActions.some((a) => String(a.id) === selectedActionId)) {
       setSelectedActionId('');
     }
   }, [relevantActions, selectedActionId]);
@@ -208,7 +209,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
   const actionOptions = useMemo(() => [
     { value: '', label: 'Custom command...' },
     ...relevantActions.map((a) => ({
-      value: a.id,
+      value: String(a.id),
       label: a.action_type === 'webhook' ? `${a.label} (webhook)` : a.label,
     })),
   ], [relevantActions]);
@@ -263,7 +264,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
         for (const deviceId of targetDeviceIds) {
           try {
             if (isWebhookAction && selectedAction) {
-              await services.devices.exec(deviceId, '', selectedAction.id);
+              await services.devices.exec(deviceId, '', String(selectedAction.id));
             } else {
               await services.devices.exec(deviceId, cmd);
             }
@@ -376,8 +377,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
               ) : (
                 searchedDevices.map((device) => (
                   <label key={device.id} className="run-job-device-item">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={selectedDeviceIds.includes(device.id)}
                       onChange={() => handleToggleDevice(device.id)}
                     />
@@ -514,8 +514,7 @@ export function Jobs() {
   const actionForm = useModalForm<VendorAction, VendorActionFormData>({
     emptyFormData: EMPTY_VENDOR_ACTION_FORM,
     itemToFormData: (action) => ({
-      id: action.id,
-      vendor_id: action.vendor_id,
+      vendor_id: String(action.vendor_id),
       label: action.label,
       command: action.command,
       sort_order: action.sort_order,
@@ -527,21 +526,22 @@ export function Jobs() {
       output_parser_id: action.output_parser_id ? String(action.output_parser_id) : '',
     }),
     onCreate: (data) => {
-      const { output_parser_id, ...rest } = data;
+      const { output_parser_id, vendor_id, ...rest } = data;
       return createAction({
         ...rest,
-        id: data.id || generateId('action'),
+        vendor_id: Number(vendor_id),
         output_parser_id: output_parser_id ? Number(output_parser_id) : undefined,
       });
     },
     onUpdate: (id, data) => {
-      const { output_parser_id, ...rest } = data;
+      const { output_parser_id, vendor_id, ...rest } = data;
       return updateAction(id, {
         ...rest,
+        vendor_id: Number(vendor_id),
         output_parser_id: output_parser_id ? Number(output_parser_id) : undefined,
       });
     },
-    getItemId: (a) => a.id,
+    getItemId: (a) => String(a.id),
     modalName: 'action-form',
   });
 
@@ -564,11 +564,11 @@ export function Jobs() {
   }, [outputParsers]);
 
   const filteredActions = useMemo(
-    () => filterByVendor(vendorActions, filterVendor, (a) => a.vendor_id),
+    () => filterByVendor(vendorActions, filterVendor, (a) => String(a.vendor_id)),
     [vendorActions, filterVendor]
   );
 
-  const handleDeleteAction = async (id: string) => {
+  const handleDeleteAction = async (id: number) => {
     const action = vendorActions.find((a) => a.id === id);
     if (action && confirm(`Delete action "${action.label}"?`)) {
       await deleteAction(id);
@@ -619,7 +619,7 @@ export function Jobs() {
     {
       icon: <Icon name="play_arrow" size={14} />,
       label: 'Run',
-      onClick: (a) => setRunActionId(a.id),
+      onClick: (a) => setRunActionId(String(a.id)),
       variant: 'primary',
       tooltip: 'Run action',
     },
@@ -644,7 +644,7 @@ export function Jobs() {
   // Build action lookup for resolving webhook job commands
   const actionMap = useMemo(() => {
     const map = new Map<string, typeof vendorActions[number]>();
-    vendorActions.forEach((a) => map.set(a.id, a));
+    vendorActions.forEach((a) => map.set(String(a.id), a));
     return map;
   }, [vendorActions]);
 
@@ -689,7 +689,7 @@ export function Jobs() {
   // Credential options for template dialogs
   const credentialOptions = useMemo(() => [
     { value: '', label: 'Use device/vendor default' },
-    ...credentials.map((c) => ({ value: c.id, label: `${c.name} (${c.cred_type})` })),
+    ...credentials.map((c) => ({ value: String(c.id), label: `${c.name} (${c.cred_type})` })),
   ], [credentials]);
 
   // Compute job stats for header badges
@@ -783,8 +783,6 @@ export function Jobs() {
       const services = getServices();
       if (job.job_type === 'deploy' && job.device_id) {
         await services.devices.deployConfig(job.device_id);
-      } else if (job.job_type === 'diff' && job.device_id) {
-        await services.devices.diffConfig(job.device_id);
       } else if (job.job_type === 'webhook') {
         if (job.device_id) {
           await services.devices.exec(job.device_id, '', job.command);
@@ -974,7 +972,7 @@ export function Jobs() {
               onEdit={(t) => setEditTemplate(t)}
               onDelete={async (id) => { await removeTemplate(id); return true; }}
               onToggleEnabled={async (t) => {
-                await updateTemplate(t.id, {
+                await updateTemplate(String(t.id), {
                   name: t.name,
                   description: t.description,
                   job_type: t.job_type,
@@ -1154,6 +1152,8 @@ export function Jobs() {
         template={editTemplate}
         onUpdate={updateTemplate}
         credentialOptions={credentialOptions}
+        deviceMap={deviceMap}
+        actionMap={actionMap}
       />
 
       {/* Job Detail Modal */}
@@ -1243,7 +1243,7 @@ export function Jobs() {
               ) : selectedJob.command ? (
                 <div style={{ marginTop: '1rem' }}>
                   <span className="label" style={{ display: 'block', marginBottom: '4px' }}>
-                    {selectedJob.job_type === 'deploy' || selectedJob.job_type === 'diff' ? 'Template' : 'Command'}
+                    {selectedJob.job_type === 'deploy' ? 'Template' : 'Command'}
                   </span>
                   <pre className="command-entry-output">{selectedJob.command}</pre>
                 </div>

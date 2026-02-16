@@ -10,7 +10,7 @@ const SELECT_TEMPLATE: &str = r#"
     SELECT t.id, t.name, t.description, t.vendor_id, t.content, t.created_at, t.updated_at,
            COALESCE(COUNT(d.mac), 0) as device_count
     FROM templates t
-    LEFT JOIN devices d ON d.config_template = CAST(t.id AS TEXT)
+    LEFT JOIN devices d ON d.config_template = t.name
 "#;
 
 /// Template database operations

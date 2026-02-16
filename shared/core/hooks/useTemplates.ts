@@ -25,9 +25,9 @@ export interface UseTemplatesReturn {
   loading: boolean;
   error: string | null;
   createTemplate: (template: Partial<Template>) => Promise<boolean>;
-  updateTemplate: (id: string, template: Partial<Template>) => Promise<boolean>;
-  deleteTemplate: (id: string) => Promise<boolean>;
-  previewTemplate: (id: string, data: {
+  updateTemplate: (id: number | string, template: Partial<Template>) => Promise<boolean>;
+  deleteTemplate: (id: number | string) => Promise<boolean>;
+  previewTemplate: (id: number | string, data: {
     device: {
       mac: string;
       ip: string;
@@ -49,7 +49,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
   // Client-side vendor filtering
   const templates = useMemo(() => {
     if (!vendorFilter || vendorFilter === 'all') return items;
-    return items.filter(t => !t.vendor_id || t.vendor_id === vendorFilter);
+    return items.filter(t => !t.vendor_id || String(t.vendor_id) === vendorFilter);
   }, [items, vendorFilter]);
 
   const refresh = useCallback(async () => {
@@ -74,7 +74,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
     }
   }, [dispatch]);
 
-  const updateTemplate = useCallback(async (id: string, data: Partial<Template>): Promise<boolean> => {
+  const updateTemplate = useCallback(async (id: number | string, data: Partial<Template>): Promise<boolean> => {
     try {
       await dispatch(updateTemplateThunk({ id, data })).unwrap();
       addNotification('success', 'Template updated successfully', navigateAction('View Templates', 'config', 'templates'));
@@ -86,7 +86,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
     }
   }, [dispatch]);
 
-  const deleteTemplate = useCallback(async (id: string): Promise<boolean> => {
+  const deleteTemplate = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteTemplateThunk(id)).unwrap();
       addNotification('success', 'Template deleted successfully', navigateAction('View Templates', 'config', 'templates'));
@@ -98,7 +98,7 @@ export function useTemplates(options: UseTemplatesOptions = {}): UseTemplatesRet
     }
   }, [dispatch]);
 
-  const previewTemplate = useCallback(async (id: string, data: {
+  const previewTemplate = useCallback(async (id: number | string, data: {
     device: {
       mac: string;
       ip: string;

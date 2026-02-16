@@ -75,11 +75,11 @@ impl DeviceRepo {
         .bind(&req.config_template)
         .bind(&req.ssh_user.clone().unwrap_or_default())
         .bind(&req.ssh_pass.clone().unwrap_or_default())
-        .bind(&req.topology_id.clone().unwrap_or_default())
+        .bind(req.topology_id)
         .bind(&req.topology_role.clone().unwrap_or_default())
-        .bind(&req.hall_id.clone().unwrap_or_default())
-        .bind(&req.row_id.clone().unwrap_or_default())
-        .bind(&req.rack_id.clone().unwrap_or_default())
+        .bind(req.hall_id)
+        .bind(req.row_id)
+        .bind(req.rack_id)
         .bind(req.rack_position.unwrap_or(0))
         .bind(&req.device_type.clone().unwrap_or_else(|| "internal".to_string()))
         .bind(now)
@@ -114,11 +114,11 @@ impl DeviceRepo {
         .bind(&req.config_template)
         .bind(&req.ssh_user.clone().unwrap_or_default())
         .bind(&req.ssh_pass.clone().unwrap_or_default())
-        .bind(&req.topology_id.clone().unwrap_or_default())
+        .bind(req.topology_id)
         .bind(&req.topology_role.clone().unwrap_or_default())
-        .bind(&req.hall_id.clone().unwrap_or_default())
-        .bind(&req.row_id.clone().unwrap_or_default())
-        .bind(&req.rack_id.clone().unwrap_or_default())
+        .bind(req.hall_id)
+        .bind(req.row_id)
+        .bind(req.rack_id)
         .bind(req.rack_position.unwrap_or(0))
         .bind(&req.device_type.clone().unwrap_or_else(|| "internal".to_string()))
         .bind(now)
@@ -170,7 +170,7 @@ impl DeviceRepo {
         Ok(())
     }
 
-    pub async fn delete_by_topology(pool: &Pool<Sqlite>, topology_id: &str) -> Result<u64> {
+    pub async fn delete_by_topology(pool: &Pool<Sqlite>, topology_id: i64) -> Result<u64> {
         // Also clean up device variables for these devices
         let device_ids: Vec<i64> = sqlx::query_scalar(
             "SELECT id FROM devices WHERE topology_id = ?",

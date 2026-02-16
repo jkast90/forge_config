@@ -1286,6 +1286,919 @@ router bgp {{vars.ASN}}
  exit-address-family
 \!{% endif %}"#.to_string(),
         },
+        // ========== Hierarchical (3-tier) role templates ==========
+        DefaultTemplate {
+            id: "arista-eos-core".to_string(),
+            name: "Arista EOS Core".to_string(),
+            description: "Hierarchical core role config with BGP underlay using device variables".to_string(),
+            vendor_id: "arista".to_string(),
+            content: r#"{% if vars.ASN is defined %}! ---- Core Role Configuration ----
+!
+spanning-tree mode none
+!
+interface Loopback0
+   ip address {{vars.Loopback}}/32
+!
+{% if vars.Peer1 is defined %}interface Ethernet1
+   description to-{{vars.Peer1Name | default(value="dist-1")}}-link1
+   no switchport
+   ip address {{vars.Peer1Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer2 is defined %}interface Ethernet2
+   description to-{{vars.Peer2Name | default(value="dist-1")}}-link2
+   no switchport
+   ip address {{vars.Peer2Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer3 is defined %}interface Ethernet3
+   description to-{{vars.Peer3Name | default(value="dist-2")}}-link1
+   no switchport
+   ip address {{vars.Peer3Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer4 is defined %}interface Ethernet4
+   description to-{{vars.Peer4Name | default(value="dist-2")}}-link2
+   no switchport
+   ip address {{vars.Peer4Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer5 is defined %}interface Ethernet5
+   description to-{{vars.Peer5Name | default(value="dist-3")}}-link1
+   no switchport
+   ip address {{vars.Peer5Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer6 is defined %}interface Ethernet6
+   description to-{{vars.Peer6Name | default(value="dist-3")}}-link2
+   no switchport
+   ip address {{vars.Peer6Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer7 is defined %}interface Ethernet7
+   description to-{{vars.Peer7Name | default(value="dist-4")}}-link1
+   no switchport
+   ip address {{vars.Peer7Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer8 is defined %}interface Ethernet8
+   description to-{{vars.Peer8Name | default(value="dist-4")}}-link2
+   no switchport
+   ip address {{vars.Peer8Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer9 is defined %}interface Ethernet9
+   description to-{{vars.Peer9Name | default(value="dist-5")}}-link1
+   no switchport
+   ip address {{vars.Peer9Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer10 is defined %}interface Ethernet10
+   description to-{{vars.Peer10Name | default(value="dist-5")}}-link2
+   no switchport
+   ip address {{vars.Peer10Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer11 is defined %}interface Ethernet11
+   description to-{{vars.Peer11Name | default(value="dist-6")}}-link1
+   no switchport
+   ip address {{vars.Peer11Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer12 is defined %}interface Ethernet12
+   description to-{{vars.Peer12Name | default(value="dist-6")}}-link2
+   no switchport
+   ip address {{vars.Peer12Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer13 is defined %}interface Ethernet13
+   description to-{{vars.Peer13Name | default(value="dist-7")}}-link1
+   no switchport
+   ip address {{vars.Peer13Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer14 is defined %}interface Ethernet14
+   description to-{{vars.Peer14Name | default(value="dist-7")}}-link2
+   no switchport
+   ip address {{vars.Peer14Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer15 is defined %}interface Ethernet15
+   description to-{{vars.Peer15Name | default(value="dist-8")}}-link1
+   no switchport
+   ip address {{vars.Peer15Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer16 is defined %}interface Ethernet16
+   description to-{{vars.Peer16Name | default(value="dist-8")}}-link2
+   no switchport
+   ip address {{vars.Peer16Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}
+ip routing
+!
+router bgp {{vars.ASN}}
+   router-id {{vars.Loopback}}
+   no bgp default ipv4-unicast
+   maximum-paths 32 ecmp 32
+   neighbor DISTRIBUTION peer group
+   neighbor DISTRIBUTION send-community extended
+{% if vars.Peer1 is defined %}   neighbor {{vars.Peer1}} peer group DISTRIBUTION
+   neighbor {{vars.Peer1}} remote-as {{vars.Peer1ASN}}
+   neighbor {{vars.Peer1}} description {{vars.Peer1Name | default(value="dist-1")}}
+{% endif %}{% if vars.Peer2 is defined %}   neighbor {{vars.Peer2}} peer group DISTRIBUTION
+   neighbor {{vars.Peer2}} remote-as {{vars.Peer2ASN}}
+   neighbor {{vars.Peer2}} description {{vars.Peer2Name | default(value="dist-1")}}
+{% endif %}{% if vars.Peer3 is defined %}   neighbor {{vars.Peer3}} peer group DISTRIBUTION
+   neighbor {{vars.Peer3}} remote-as {{vars.Peer3ASN}}
+   neighbor {{vars.Peer3}} description {{vars.Peer3Name | default(value="dist-2")}}
+{% endif %}{% if vars.Peer4 is defined %}   neighbor {{vars.Peer4}} peer group DISTRIBUTION
+   neighbor {{vars.Peer4}} remote-as {{vars.Peer4ASN}}
+   neighbor {{vars.Peer4}} description {{vars.Peer4Name | default(value="dist-2")}}
+{% endif %}{% if vars.Peer5 is defined %}   neighbor {{vars.Peer5}} peer group DISTRIBUTION
+   neighbor {{vars.Peer5}} remote-as {{vars.Peer5ASN}}
+   neighbor {{vars.Peer5}} description {{vars.Peer5Name | default(value="dist-3")}}
+{% endif %}{% if vars.Peer6 is defined %}   neighbor {{vars.Peer6}} peer group DISTRIBUTION
+   neighbor {{vars.Peer6}} remote-as {{vars.Peer6ASN}}
+   neighbor {{vars.Peer6}} description {{vars.Peer6Name | default(value="dist-3")}}
+{% endif %}{% if vars.Peer7 is defined %}   neighbor {{vars.Peer7}} peer group DISTRIBUTION
+   neighbor {{vars.Peer7}} remote-as {{vars.Peer7ASN}}
+   neighbor {{vars.Peer7}} description {{vars.Peer7Name | default(value="dist-4")}}
+{% endif %}{% if vars.Peer8 is defined %}   neighbor {{vars.Peer8}} peer group DISTRIBUTION
+   neighbor {{vars.Peer8}} remote-as {{vars.Peer8ASN}}
+   neighbor {{vars.Peer8}} description {{vars.Peer8Name | default(value="dist-4")}}
+{% endif %}{% if vars.Peer9 is defined %}   neighbor {{vars.Peer9}} peer group DISTRIBUTION
+   neighbor {{vars.Peer9}} remote-as {{vars.Peer9ASN}}
+   neighbor {{vars.Peer9}} description {{vars.Peer9Name | default(value="dist-5")}}
+{% endif %}{% if vars.Peer10 is defined %}   neighbor {{vars.Peer10}} peer group DISTRIBUTION
+   neighbor {{vars.Peer10}} remote-as {{vars.Peer10ASN}}
+   neighbor {{vars.Peer10}} description {{vars.Peer10Name | default(value="dist-5")}}
+{% endif %}{% if vars.Peer11 is defined %}   neighbor {{vars.Peer11}} peer group DISTRIBUTION
+   neighbor {{vars.Peer11}} remote-as {{vars.Peer11ASN}}
+   neighbor {{vars.Peer11}} description {{vars.Peer11Name | default(value="dist-6")}}
+{% endif %}{% if vars.Peer12 is defined %}   neighbor {{vars.Peer12}} peer group DISTRIBUTION
+   neighbor {{vars.Peer12}} remote-as {{vars.Peer12ASN}}
+   neighbor {{vars.Peer12}} description {{vars.Peer12Name | default(value="dist-6")}}
+{% endif %}{% if vars.Peer13 is defined %}   neighbor {{vars.Peer13}} peer group DISTRIBUTION
+   neighbor {{vars.Peer13}} remote-as {{vars.Peer13ASN}}
+   neighbor {{vars.Peer13}} description {{vars.Peer13Name | default(value="dist-7")}}
+{% endif %}{% if vars.Peer14 is defined %}   neighbor {{vars.Peer14}} peer group DISTRIBUTION
+   neighbor {{vars.Peer14}} remote-as {{vars.Peer14ASN}}
+   neighbor {{vars.Peer14}} description {{vars.Peer14Name | default(value="dist-7")}}
+{% endif %}{% if vars.Peer15 is defined %}   neighbor {{vars.Peer15}} peer group DISTRIBUTION
+   neighbor {{vars.Peer15}} remote-as {{vars.Peer15ASN}}
+   neighbor {{vars.Peer15}} description {{vars.Peer15Name | default(value="dist-8")}}
+{% endif %}{% if vars.Peer16 is defined %}   neighbor {{vars.Peer16}} peer group DISTRIBUTION
+   neighbor {{vars.Peer16}} remote-as {{vars.Peer16ASN}}
+   neighbor {{vars.Peer16}} description {{vars.Peer16Name | default(value="dist-8")}}
+{% endif %}
+   !
+   address-family ipv4 unicast
+      neighbor DISTRIBUTION activate
+      redistribute connected
+!{% endif %}"#.to_string(),
+        },
+        DefaultTemplate {
+            id: "arista-eos-distribution".to_string(),
+            name: "Arista EOS Distribution".to_string(),
+            description: "Hierarchical distribution role config with BGP underlay — downlinks to access, uplinks to core".to_string(),
+            vendor_id: "arista".to_string(),
+            content: r#"{% if vars.ASN is defined %}! ---- Distribution Role Configuration ----
+!
+spanning-tree mode mstp
+!
+interface Loopback0
+   ip address {{vars.Loopback}}/32
+!
+{% if vars.Peer1 is defined %}interface Ethernet1
+   description to-{{vars.Peer1Name | default(value="access-1")}}-link1
+   no switchport
+   ip address {{vars.Peer1Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer2 is defined %}interface Ethernet2
+   description to-{{vars.Peer2Name | default(value="access-1")}}-link2
+   no switchport
+   ip address {{vars.Peer2Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer3 is defined %}interface Ethernet3
+   description to-{{vars.Peer3Name | default(value="access-2")}}-link1
+   no switchport
+   ip address {{vars.Peer3Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer4 is defined %}interface Ethernet4
+   description to-{{vars.Peer4Name | default(value="access-2")}}-link2
+   no switchport
+   ip address {{vars.Peer4Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer5 is defined %}interface Ethernet5
+   description to-{{vars.Peer5Name | default(value="access-3")}}-link1
+   no switchport
+   ip address {{vars.Peer5Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer6 is defined %}interface Ethernet6
+   description to-{{vars.Peer6Name | default(value="access-3")}}-link2
+   no switchport
+   ip address {{vars.Peer6Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer7 is defined %}interface Ethernet7
+   description to-{{vars.Peer7Name | default(value="access-4")}}-link1
+   no switchport
+   ip address {{vars.Peer7Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer8 is defined %}interface Ethernet8
+   description to-{{vars.Peer8Name | default(value="access-4")}}-link2
+   no switchport
+   ip address {{vars.Peer8Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer9 is defined %}interface Ethernet9
+   description to-{{vars.Peer9Name | default(value="access-5")}}-link1
+   no switchport
+   ip address {{vars.Peer9Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer10 is defined %}interface Ethernet10
+   description to-{{vars.Peer10Name | default(value="access-5")}}-link2
+   no switchport
+   ip address {{vars.Peer10Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer11 is defined %}interface Ethernet11
+   description to-{{vars.Peer11Name | default(value="access-6")}}-link1
+   no switchport
+   ip address {{vars.Peer11Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer12 is defined %}interface Ethernet12
+   description to-{{vars.Peer12Name | default(value="access-6")}}-link2
+   no switchport
+   ip address {{vars.Peer12Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer13 is defined %}interface Ethernet13
+   description to-{{vars.Peer13Name | default(value="access-7")}}-link1
+   no switchport
+   ip address {{vars.Peer13Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer14 is defined %}interface Ethernet14
+   description to-{{vars.Peer14Name | default(value="access-7")}}-link2
+   no switchport
+   ip address {{vars.Peer14Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer15 is defined %}interface Ethernet15
+   description to-{{vars.Peer15Name | default(value="access-8")}}-link1
+   no switchport
+   ip address {{vars.Peer15Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer16 is defined %}interface Ethernet16
+   description to-{{vars.Peer16Name | default(value="access-8")}}-link2
+   no switchport
+   ip address {{vars.Peer16Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer17 is defined %}interface Ethernet17
+   description to-{{vars.Peer17Name | default(value="access-9")}}-link1
+   no switchport
+   ip address {{vars.Peer17Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer18 is defined %}interface Ethernet18
+   description to-{{vars.Peer18Name | default(value="access-9")}}-link2
+   no switchport
+   ip address {{vars.Peer18Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer19 is defined %}interface Ethernet19
+   description to-{{vars.Peer19Name | default(value="access-10")}}-link1
+   no switchport
+   ip address {{vars.Peer19Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer20 is defined %}interface Ethernet20
+   description to-{{vars.Peer20Name | default(value="access-10")}}-link2
+   no switchport
+   ip address {{vars.Peer20Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer21 is defined %}interface Ethernet21
+   description to-{{vars.Peer21Name | default(value="access-11")}}-link1
+   no switchport
+   ip address {{vars.Peer21Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer22 is defined %}interface Ethernet22
+   description to-{{vars.Peer22Name | default(value="access-11")}}-link2
+   no switchport
+   ip address {{vars.Peer22Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer23 is defined %}interface Ethernet23
+   description uplink-to-{{vars.Peer23Name | default(value="core-1")}}-link1
+   no switchport
+   ip address {{vars.Peer23Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer24 is defined %}interface Ethernet24
+   description uplink-to-{{vars.Peer24Name | default(value="core-1")}}-link2
+   no switchport
+   ip address {{vars.Peer24Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer25 is defined %}interface Ethernet25
+   description uplink-to-{{vars.Peer25Name | default(value="core-2")}}-link1
+   no switchport
+   ip address {{vars.Peer25Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer26 is defined %}interface Ethernet26
+   description uplink-to-{{vars.Peer26Name | default(value="core-2")}}-link2
+   no switchport
+   ip address {{vars.Peer26Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer27 is defined %}interface Ethernet27
+   description uplink-to-{{vars.Peer27Name | default(value="core-3")}}-link1
+   no switchport
+   ip address {{vars.Peer27Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer28 is defined %}interface Ethernet28
+   description uplink-to-{{vars.Peer28Name | default(value="core-3")}}-link2
+   no switchport
+   ip address {{vars.Peer28Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer29 is defined %}interface Ethernet29
+   description uplink-to-{{vars.Peer29Name | default(value="core-4")}}-link1
+   no switchport
+   ip address {{vars.Peer29Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer30 is defined %}interface Ethernet30
+   description uplink-to-{{vars.Peer30Name | default(value="core-4")}}-link2
+   no switchport
+   ip address {{vars.Peer30Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer31 is defined %}interface Ethernet31
+   description uplink-to-{{vars.Peer31Name | default(value="core-5")}}-link1
+   no switchport
+   ip address {{vars.Peer31Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer32 is defined %}interface Ethernet32
+   description uplink-to-{{vars.Peer32Name | default(value="core-5")}}-link2
+   no switchport
+   ip address {{vars.Peer32Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}
+ip routing
+!
+router bgp {{vars.ASN}}
+   router-id {{vars.Loopback}}
+   no bgp default ipv4-unicast
+   maximum-paths 32 ecmp 32
+   neighbor ACCESS peer group
+   neighbor ACCESS send-community extended
+   neighbor CORE peer group
+   neighbor CORE send-community extended
+{% if vars.Peer1 is defined %}   neighbor {{vars.Peer1}} peer group ACCESS
+   neighbor {{vars.Peer1}} remote-as {{vars.Peer1ASN}}
+   neighbor {{vars.Peer1}} description {{vars.Peer1Name | default(value="access-1")}}
+{% endif %}{% if vars.Peer2 is defined %}   neighbor {{vars.Peer2}} peer group ACCESS
+   neighbor {{vars.Peer2}} remote-as {{vars.Peer2ASN}}
+   neighbor {{vars.Peer2}} description {{vars.Peer2Name | default(value="access-1")}}
+{% endif %}{% if vars.Peer3 is defined %}   neighbor {{vars.Peer3}} peer group ACCESS
+   neighbor {{vars.Peer3}} remote-as {{vars.Peer3ASN}}
+   neighbor {{vars.Peer3}} description {{vars.Peer3Name | default(value="access-2")}}
+{% endif %}{% if vars.Peer4 is defined %}   neighbor {{vars.Peer4}} peer group ACCESS
+   neighbor {{vars.Peer4}} remote-as {{vars.Peer4ASN}}
+   neighbor {{vars.Peer4}} description {{vars.Peer4Name | default(value="access-2")}}
+{% endif %}{% if vars.Peer5 is defined %}   neighbor {{vars.Peer5}} peer group ACCESS
+   neighbor {{vars.Peer5}} remote-as {{vars.Peer5ASN}}
+   neighbor {{vars.Peer5}} description {{vars.Peer5Name | default(value="access-3")}}
+{% endif %}{% if vars.Peer6 is defined %}   neighbor {{vars.Peer6}} peer group ACCESS
+   neighbor {{vars.Peer6}} remote-as {{vars.Peer6ASN}}
+   neighbor {{vars.Peer6}} description {{vars.Peer6Name | default(value="access-3")}}
+{% endif %}{% if vars.Peer7 is defined %}   neighbor {{vars.Peer7}} peer group ACCESS
+   neighbor {{vars.Peer7}} remote-as {{vars.Peer7ASN}}
+   neighbor {{vars.Peer7}} description {{vars.Peer7Name | default(value="access-4")}}
+{% endif %}{% if vars.Peer8 is defined %}   neighbor {{vars.Peer8}} peer group ACCESS
+   neighbor {{vars.Peer8}} remote-as {{vars.Peer8ASN}}
+   neighbor {{vars.Peer8}} description {{vars.Peer8Name | default(value="access-4")}}
+{% endif %}{% if vars.Peer9 is defined %}   neighbor {{vars.Peer9}} peer group ACCESS
+   neighbor {{vars.Peer9}} remote-as {{vars.Peer9ASN}}
+   neighbor {{vars.Peer9}} description {{vars.Peer9Name | default(value="access-5")}}
+{% endif %}{% if vars.Peer10 is defined %}   neighbor {{vars.Peer10}} peer group ACCESS
+   neighbor {{vars.Peer10}} remote-as {{vars.Peer10ASN}}
+   neighbor {{vars.Peer10}} description {{vars.Peer10Name | default(value="access-5")}}
+{% endif %}{% if vars.Peer11 is defined %}   neighbor {{vars.Peer11}} peer group ACCESS
+   neighbor {{vars.Peer11}} remote-as {{vars.Peer11ASN}}
+   neighbor {{vars.Peer11}} description {{vars.Peer11Name | default(value="access-6")}}
+{% endif %}{% if vars.Peer12 is defined %}   neighbor {{vars.Peer12}} peer group ACCESS
+   neighbor {{vars.Peer12}} remote-as {{vars.Peer12ASN}}
+   neighbor {{vars.Peer12}} description {{vars.Peer12Name | default(value="access-6")}}
+{% endif %}{% if vars.Peer13 is defined %}   neighbor {{vars.Peer13}} peer group ACCESS
+   neighbor {{vars.Peer13}} remote-as {{vars.Peer13ASN}}
+   neighbor {{vars.Peer13}} description {{vars.Peer13Name | default(value="access-7")}}
+{% endif %}{% if vars.Peer14 is defined %}   neighbor {{vars.Peer14}} peer group ACCESS
+   neighbor {{vars.Peer14}} remote-as {{vars.Peer14ASN}}
+   neighbor {{vars.Peer14}} description {{vars.Peer14Name | default(value="access-7")}}
+{% endif %}{% if vars.Peer15 is defined %}   neighbor {{vars.Peer15}} peer group ACCESS
+   neighbor {{vars.Peer15}} remote-as {{vars.Peer15ASN}}
+   neighbor {{vars.Peer15}} description {{vars.Peer15Name | default(value="access-8")}}
+{% endif %}{% if vars.Peer16 is defined %}   neighbor {{vars.Peer16}} peer group ACCESS
+   neighbor {{vars.Peer16}} remote-as {{vars.Peer16ASN}}
+   neighbor {{vars.Peer16}} description {{vars.Peer16Name | default(value="access-8")}}
+{% endif %}{% if vars.Peer17 is defined %}   neighbor {{vars.Peer17}} peer group ACCESS
+   neighbor {{vars.Peer17}} remote-as {{vars.Peer17ASN}}
+   neighbor {{vars.Peer17}} description {{vars.Peer17Name | default(value="access-9")}}
+{% endif %}{% if vars.Peer18 is defined %}   neighbor {{vars.Peer18}} peer group ACCESS
+   neighbor {{vars.Peer18}} remote-as {{vars.Peer18ASN}}
+   neighbor {{vars.Peer18}} description {{vars.Peer18Name | default(value="access-9")}}
+{% endif %}{% if vars.Peer19 is defined %}   neighbor {{vars.Peer19}} peer group ACCESS
+   neighbor {{vars.Peer19}} remote-as {{vars.Peer19ASN}}
+   neighbor {{vars.Peer19}} description {{vars.Peer19Name | default(value="access-10")}}
+{% endif %}{% if vars.Peer20 is defined %}   neighbor {{vars.Peer20}} peer group ACCESS
+   neighbor {{vars.Peer20}} remote-as {{vars.Peer20ASN}}
+   neighbor {{vars.Peer20}} description {{vars.Peer20Name | default(value="access-10")}}
+{% endif %}{% if vars.Peer21 is defined %}   neighbor {{vars.Peer21}} peer group ACCESS
+   neighbor {{vars.Peer21}} remote-as {{vars.Peer21ASN}}
+   neighbor {{vars.Peer21}} description {{vars.Peer21Name | default(value="access-11")}}
+{% endif %}{% if vars.Peer22 is defined %}   neighbor {{vars.Peer22}} peer group ACCESS
+   neighbor {{vars.Peer22}} remote-as {{vars.Peer22ASN}}
+   neighbor {{vars.Peer22}} description {{vars.Peer22Name | default(value="access-11")}}
+{% endif %}{% if vars.Peer23 is defined %}   neighbor {{vars.Peer23}} peer group CORE
+   neighbor {{vars.Peer23}} remote-as {{vars.Peer23ASN}}
+   neighbor {{vars.Peer23}} description {{vars.Peer23Name | default(value="core-1")}}
+{% endif %}{% if vars.Peer24 is defined %}   neighbor {{vars.Peer24}} peer group CORE
+   neighbor {{vars.Peer24}} remote-as {{vars.Peer24ASN}}
+   neighbor {{vars.Peer24}} description {{vars.Peer24Name | default(value="core-1")}}
+{% endif %}{% if vars.Peer25 is defined %}   neighbor {{vars.Peer25}} peer group CORE
+   neighbor {{vars.Peer25}} remote-as {{vars.Peer25ASN}}
+   neighbor {{vars.Peer25}} description {{vars.Peer25Name | default(value="core-2")}}
+{% endif %}{% if vars.Peer26 is defined %}   neighbor {{vars.Peer26}} peer group CORE
+   neighbor {{vars.Peer26}} remote-as {{vars.Peer26ASN}}
+   neighbor {{vars.Peer26}} description {{vars.Peer26Name | default(value="core-2")}}
+{% endif %}{% if vars.Peer27 is defined %}   neighbor {{vars.Peer27}} peer group CORE
+   neighbor {{vars.Peer27}} remote-as {{vars.Peer27ASN}}
+   neighbor {{vars.Peer27}} description {{vars.Peer27Name | default(value="core-3")}}
+{% endif %}{% if vars.Peer28 is defined %}   neighbor {{vars.Peer28}} peer group CORE
+   neighbor {{vars.Peer28}} remote-as {{vars.Peer28ASN}}
+   neighbor {{vars.Peer28}} description {{vars.Peer28Name | default(value="core-3")}}
+{% endif %}{% if vars.Peer29 is defined %}   neighbor {{vars.Peer29}} peer group CORE
+   neighbor {{vars.Peer29}} remote-as {{vars.Peer29ASN}}
+   neighbor {{vars.Peer29}} description {{vars.Peer29Name | default(value="core-4")}}
+{% endif %}{% if vars.Peer30 is defined %}   neighbor {{vars.Peer30}} peer group CORE
+   neighbor {{vars.Peer30}} remote-as {{vars.Peer30ASN}}
+   neighbor {{vars.Peer30}} description {{vars.Peer30Name | default(value="core-4")}}
+{% endif %}{% if vars.Peer31 is defined %}   neighbor {{vars.Peer31}} peer group CORE
+   neighbor {{vars.Peer31}} remote-as {{vars.Peer31ASN}}
+   neighbor {{vars.Peer31}} description {{vars.Peer31Name | default(value="core-5")}}
+{% endif %}{% if vars.Peer32 is defined %}   neighbor {{vars.Peer32}} peer group CORE
+   neighbor {{vars.Peer32}} remote-as {{vars.Peer32ASN}}
+   neighbor {{vars.Peer32}} description {{vars.Peer32Name | default(value="core-5")}}
+{% endif %}
+   !
+   address-family ipv4 unicast
+      neighbor ACCESS activate
+      neighbor CORE activate
+      redistribute connected
+!{% endif %}"#.to_string(),
+        },
+        DefaultTemplate {
+            id: "arista-eos-access".to_string(),
+            name: "Arista EOS Access".to_string(),
+            description: "Hierarchical access role config with BGP underlay using device variables".to_string(),
+            vendor_id: "arista".to_string(),
+            content: r#"{% if vars.ASN is defined %}! ---- Access Role Configuration ----
+!
+spanning-tree mode mstp
+!
+vlan 10
+   name Servers
+!
+vlan 20
+   name Storage
+!
+interface Loopback0
+   ip address {{vars.Loopback}}/32
+!
+{% if vars.Peer49 is defined %}interface Ethernet49
+   description uplink-to-{{vars.Peer49Name | default(value="dist-1")}}-link1
+   no switchport
+   ip address {{vars.Peer49Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer50 is defined %}interface Ethernet50
+   description uplink-to-{{vars.Peer50Name | default(value="dist-1")}}-link2
+   no switchport
+   ip address {{vars.Peer50Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer51 is defined %}interface Ethernet51
+   description uplink-to-{{vars.Peer51Name | default(value="dist-2")}}-link1
+   no switchport
+   ip address {{vars.Peer51Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer52 is defined %}interface Ethernet52
+   description uplink-to-{{vars.Peer52Name | default(value="dist-2")}}-link2
+   no switchport
+   ip address {{vars.Peer52Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer53 is defined %}interface Ethernet53
+   description uplink-to-{{vars.Peer53Name | default(value="dist-3")}}-link1
+   no switchport
+   ip address {{vars.Peer53Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer54 is defined %}interface Ethernet54
+   description uplink-to-{{vars.Peer54Name | default(value="dist-3")}}-link2
+   no switchport
+   ip address {{vars.Peer54Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer55 is defined %}interface Ethernet55
+   description uplink-to-{{vars.Peer55Name | default(value="dist-4")}}-link1
+   no switchport
+   ip address {{vars.Peer55Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}{% if vars.Peer56 is defined %}interface Ethernet56
+   description uplink-to-{{vars.Peer56Name | default(value="dist-4")}}-link2
+   no switchport
+   ip address {{vars.Peer56Addr}}/31
+   mtu 9214
+   no shutdown
+!
+{% endif %}
+ip routing
+!
+router bgp {{vars.ASN}}
+   router-id {{vars.Loopback}}
+   no bgp default ipv4-unicast
+   maximum-paths 8 ecmp 8
+   neighbor DISTRIBUTION peer group
+   neighbor DISTRIBUTION send-community extended
+{% if vars.Peer49 is defined %}   neighbor {{vars.Peer49}} peer group DISTRIBUTION
+   neighbor {{vars.Peer49}} remote-as {{vars.Peer49ASN}}
+   neighbor {{vars.Peer49}} description {{vars.Peer49Name | default(value="dist-1")}}
+{% endif %}{% if vars.Peer50 is defined %}   neighbor {{vars.Peer50}} peer group DISTRIBUTION
+   neighbor {{vars.Peer50}} remote-as {{vars.Peer50ASN}}
+   neighbor {{vars.Peer50}} description {{vars.Peer50Name | default(value="dist-1")}}
+{% endif %}{% if vars.Peer51 is defined %}   neighbor {{vars.Peer51}} peer group DISTRIBUTION
+   neighbor {{vars.Peer51}} remote-as {{vars.Peer51ASN}}
+   neighbor {{vars.Peer51}} description {{vars.Peer51Name | default(value="dist-2")}}
+{% endif %}{% if vars.Peer52 is defined %}   neighbor {{vars.Peer52}} peer group DISTRIBUTION
+   neighbor {{vars.Peer52}} remote-as {{vars.Peer52ASN}}
+   neighbor {{vars.Peer52}} description {{vars.Peer52Name | default(value="dist-2")}}
+{% endif %}{% if vars.Peer53 is defined %}   neighbor {{vars.Peer53}} peer group DISTRIBUTION
+   neighbor {{vars.Peer53}} remote-as {{vars.Peer53ASN}}
+   neighbor {{vars.Peer53}} description {{vars.Peer53Name | default(value="dist-3")}}
+{% endif %}{% if vars.Peer54 is defined %}   neighbor {{vars.Peer54}} peer group DISTRIBUTION
+   neighbor {{vars.Peer54}} remote-as {{vars.Peer54ASN}}
+   neighbor {{vars.Peer54}} description {{vars.Peer54Name | default(value="dist-3")}}
+{% endif %}{% if vars.Peer55 is defined %}   neighbor {{vars.Peer55}} peer group DISTRIBUTION
+   neighbor {{vars.Peer55}} remote-as {{vars.Peer55ASN}}
+   neighbor {{vars.Peer55}} description {{vars.Peer55Name | default(value="dist-4")}}
+{% endif %}{% if vars.Peer56 is defined %}   neighbor {{vars.Peer56}} peer group DISTRIBUTION
+   neighbor {{vars.Peer56}} remote-as {{vars.Peer56ASN}}
+   neighbor {{vars.Peer56}} description {{vars.Peer56Name | default(value="dist-4")}}
+{% endif %}
+   !
+   address-family ipv4 unicast
+      neighbor DISTRIBUTION activate
+      redistribute connected
+!{% endif %}"#.to_string(),
+        },
+        DefaultTemplate {
+            id: "frr-bgp-core".to_string(),
+            name: "FRR BGP Core".to_string(),
+            description: "FRR core role with BGP peering to distribution via /31 point-to-point links".to_string(),
+            vendor_id: "frr".to_string(),
+            content: r#"{% if vars.ASN is defined %}\! ---- Core Role Configuration ----
+\!
+interface lo
+ ip address {{vars.Loopback}}/32
+\!
+{% if vars.Peer1 is defined %}interface eth1
+ description to-{{vars.Peer1Name | default(value="dist-1")}}-link1
+ ip address {{vars.Peer1Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer2 is defined %}interface eth2
+ description to-{{vars.Peer2Name | default(value="dist-1")}}-link2
+ ip address {{vars.Peer2Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer3 is defined %}interface eth3
+ description to-{{vars.Peer3Name | default(value="dist-2")}}-link1
+ ip address {{vars.Peer3Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer4 is defined %}interface eth4
+ description to-{{vars.Peer4Name | default(value="dist-2")}}-link2
+ ip address {{vars.Peer4Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer5 is defined %}interface eth5
+ description to-{{vars.Peer5Name | default(value="dist-3")}}-link1
+ ip address {{vars.Peer5Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer6 is defined %}interface eth6
+ description to-{{vars.Peer6Name | default(value="dist-3")}}-link2
+ ip address {{vars.Peer6Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer7 is defined %}interface eth7
+ description to-{{vars.Peer7Name | default(value="dist-4")}}-link1
+ ip address {{vars.Peer7Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer8 is defined %}interface eth8
+ description to-{{vars.Peer8Name | default(value="dist-4")}}-link2
+ ip address {{vars.Peer8Addr}}/31
+ no shutdown
+\!
+{% endif %}
+router bgp {{vars.ASN}}
+ bgp router-id {{vars.Loopback}}
+ no bgp ebgp-requires-policy
+ no bgp network import-check
+{% if vars.Peer1 is defined %} neighbor {{vars.Peer1}} remote-as {{vars.Peer1ASN}}
+ neighbor {{vars.Peer1}} description {{vars.Peer1Name | default(value="dist-1")}}
+{% endif %}{% if vars.Peer2 is defined %} neighbor {{vars.Peer2}} remote-as {{vars.Peer2ASN}}
+ neighbor {{vars.Peer2}} description {{vars.Peer2Name | default(value="dist-1")}}
+{% endif %}{% if vars.Peer3 is defined %} neighbor {{vars.Peer3}} remote-as {{vars.Peer3ASN}}
+ neighbor {{vars.Peer3}} description {{vars.Peer3Name | default(value="dist-2")}}
+{% endif %}{% if vars.Peer4 is defined %} neighbor {{vars.Peer4}} remote-as {{vars.Peer4ASN}}
+ neighbor {{vars.Peer4}} description {{vars.Peer4Name | default(value="dist-2")}}
+{% endif %}{% if vars.Peer5 is defined %} neighbor {{vars.Peer5}} remote-as {{vars.Peer5ASN}}
+ neighbor {{vars.Peer5}} description {{vars.Peer5Name | default(value="dist-3")}}
+{% endif %}{% if vars.Peer6 is defined %} neighbor {{vars.Peer6}} remote-as {{vars.Peer6ASN}}
+ neighbor {{vars.Peer6}} description {{vars.Peer6Name | default(value="dist-3")}}
+{% endif %}{% if vars.Peer7 is defined %} neighbor {{vars.Peer7}} remote-as {{vars.Peer7ASN}}
+ neighbor {{vars.Peer7}} description {{vars.Peer7Name | default(value="dist-4")}}
+{% endif %}{% if vars.Peer8 is defined %} neighbor {{vars.Peer8}} remote-as {{vars.Peer8ASN}}
+ neighbor {{vars.Peer8}} description {{vars.Peer8Name | default(value="dist-4")}}
+{% endif %}
+ address-family ipv4 unicast
+  redistribute connected
+ exit-address-family
+\!{% endif %}"#.to_string(),
+        },
+        DefaultTemplate {
+            id: "frr-bgp-distribution".to_string(),
+            name: "FRR BGP Distribution".to_string(),
+            description: "FRR distribution role with BGP peering to access and core via /31 links".to_string(),
+            vendor_id: "frr".to_string(),
+            content: r#"{% if vars.ASN is defined %}\! ---- Distribution Role Configuration ----
+\!
+interface lo
+ ip address {{vars.Loopback}}/32
+\!
+{% if vars.Peer1 is defined %}interface eth1
+ description to-{{vars.Peer1Name | default(value="access-1")}}-link1
+ ip address {{vars.Peer1Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer2 is defined %}interface eth2
+ description to-{{vars.Peer2Name | default(value="access-1")}}-link2
+ ip address {{vars.Peer2Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer3 is defined %}interface eth3
+ description to-{{vars.Peer3Name | default(value="access-2")}}-link1
+ ip address {{vars.Peer3Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer4 is defined %}interface eth4
+ description to-{{vars.Peer4Name | default(value="access-2")}}-link2
+ ip address {{vars.Peer4Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer5 is defined %}interface eth5
+ description to-{{vars.Peer5Name | default(value="access-3")}}-link1
+ ip address {{vars.Peer5Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer6 is defined %}interface eth6
+ description to-{{vars.Peer6Name | default(value="access-3")}}-link2
+ ip address {{vars.Peer6Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer7 is defined %}interface eth7
+ description to-{{vars.Peer7Name | default(value="access-4")}}-link1
+ ip address {{vars.Peer7Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer8 is defined %}interface eth8
+ description to-{{vars.Peer8Name | default(value="access-4")}}-link2
+ ip address {{vars.Peer8Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer9 is defined %}interface eth9
+ description uplink-to-{{vars.Peer9Name | default(value="core-1")}}-link1
+ ip address {{vars.Peer9Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer10 is defined %}interface eth10
+ description uplink-to-{{vars.Peer10Name | default(value="core-1")}}-link2
+ ip address {{vars.Peer10Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer11 is defined %}interface eth11
+ description uplink-to-{{vars.Peer11Name | default(value="core-2")}}-link1
+ ip address {{vars.Peer11Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer12 is defined %}interface eth12
+ description uplink-to-{{vars.Peer12Name | default(value="core-2")}}-link2
+ ip address {{vars.Peer12Addr}}/31
+ no shutdown
+\!
+{% endif %}
+router bgp {{vars.ASN}}
+ bgp router-id {{vars.Loopback}}
+ no bgp ebgp-requires-policy
+ no bgp network import-check
+{% if vars.Peer1 is defined %} neighbor {{vars.Peer1}} remote-as {{vars.Peer1ASN}}
+ neighbor {{vars.Peer1}} description {{vars.Peer1Name | default(value="access-1")}}
+{% endif %}{% if vars.Peer2 is defined %} neighbor {{vars.Peer2}} remote-as {{vars.Peer2ASN}}
+ neighbor {{vars.Peer2}} description {{vars.Peer2Name | default(value="access-1")}}
+{% endif %}{% if vars.Peer3 is defined %} neighbor {{vars.Peer3}} remote-as {{vars.Peer3ASN}}
+ neighbor {{vars.Peer3}} description {{vars.Peer3Name | default(value="access-2")}}
+{% endif %}{% if vars.Peer4 is defined %} neighbor {{vars.Peer4}} remote-as {{vars.Peer4ASN}}
+ neighbor {{vars.Peer4}} description {{vars.Peer4Name | default(value="access-2")}}
+{% endif %}{% if vars.Peer5 is defined %} neighbor {{vars.Peer5}} remote-as {{vars.Peer5ASN}}
+ neighbor {{vars.Peer5}} description {{vars.Peer5Name | default(value="access-3")}}
+{% endif %}{% if vars.Peer6 is defined %} neighbor {{vars.Peer6}} remote-as {{vars.Peer6ASN}}
+ neighbor {{vars.Peer6}} description {{vars.Peer6Name | default(value="access-3")}}
+{% endif %}{% if vars.Peer7 is defined %} neighbor {{vars.Peer7}} remote-as {{vars.Peer7ASN}}
+ neighbor {{vars.Peer7}} description {{vars.Peer7Name | default(value="access-4")}}
+{% endif %}{% if vars.Peer8 is defined %} neighbor {{vars.Peer8}} remote-as {{vars.Peer8ASN}}
+ neighbor {{vars.Peer8}} description {{vars.Peer8Name | default(value="access-4")}}
+{% endif %}{% if vars.Peer9 is defined %} neighbor {{vars.Peer9}} remote-as {{vars.Peer9ASN}}
+ neighbor {{vars.Peer9}} description {{vars.Peer9Name | default(value="core-1")}}
+{% endif %}{% if vars.Peer10 is defined %} neighbor {{vars.Peer10}} remote-as {{vars.Peer10ASN}}
+ neighbor {{vars.Peer10}} description {{vars.Peer10Name | default(value="core-1")}}
+{% endif %}{% if vars.Peer11 is defined %} neighbor {{vars.Peer11}} remote-as {{vars.Peer11ASN}}
+ neighbor {{vars.Peer11}} description {{vars.Peer11Name | default(value="core-2")}}
+{% endif %}{% if vars.Peer12 is defined %} neighbor {{vars.Peer12}} remote-as {{vars.Peer12ASN}}
+ neighbor {{vars.Peer12}} description {{vars.Peer12Name | default(value="core-2")}}
+{% endif %}
+ address-family ipv4 unicast
+  redistribute connected
+ exit-address-family
+\!{% endif %}"#.to_string(),
+        },
+        DefaultTemplate {
+            id: "frr-bgp-access".to_string(),
+            name: "FRR BGP Access".to_string(),
+            description: "FRR access role with BGP peering to distribution via /31 links".to_string(),
+            vendor_id: "frr".to_string(),
+            content: r#"{% if vars.ASN is defined %}\! ---- Access Role Configuration ----
+\!
+interface lo
+ ip address {{vars.Loopback}}/32
+\!
+{% if vars.Peer1 is defined %}interface eth1
+ description uplink-to-{{vars.Peer1Name | default(value="dist-1")}}-link1
+ ip address {{vars.Peer1Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer2 is defined %}interface eth2
+ description uplink-to-{{vars.Peer2Name | default(value="dist-1")}}-link2
+ ip address {{vars.Peer2Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer3 is defined %}interface eth3
+ description uplink-to-{{vars.Peer3Name | default(value="dist-2")}}-link1
+ ip address {{vars.Peer3Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer4 is defined %}interface eth4
+ description uplink-to-{{vars.Peer4Name | default(value="dist-2")}}-link2
+ ip address {{vars.Peer4Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer5 is defined %}interface eth5
+ description uplink-to-{{vars.Peer5Name | default(value="dist-3")}}-link1
+ ip address {{vars.Peer5Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer6 is defined %}interface eth6
+ description uplink-to-{{vars.Peer6Name | default(value="dist-3")}}-link2
+ ip address {{vars.Peer6Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer7 is defined %}interface eth7
+ description uplink-to-{{vars.Peer7Name | default(value="dist-4")}}-link1
+ ip address {{vars.Peer7Addr}}/31
+ no shutdown
+\!
+{% endif %}{% if vars.Peer8 is defined %}interface eth8
+ description uplink-to-{{vars.Peer8Name | default(value="dist-4")}}-link2
+ ip address {{vars.Peer8Addr}}/31
+ no shutdown
+\!
+{% endif %}
+router bgp {{vars.ASN}}
+ bgp router-id {{vars.Loopback}}
+ no bgp ebgp-requires-policy
+ no bgp network import-check
+{% if vars.Peer1 is defined %} neighbor {{vars.Peer1}} remote-as {{vars.Peer1ASN}}
+ neighbor {{vars.Peer1}} description {{vars.Peer1Name | default(value="dist-1")}}
+{% endif %}{% if vars.Peer2 is defined %} neighbor {{vars.Peer2}} remote-as {{vars.Peer2ASN}}
+ neighbor {{vars.Peer2}} description {{vars.Peer2Name | default(value="dist-1")}}
+{% endif %}{% if vars.Peer3 is defined %} neighbor {{vars.Peer3}} remote-as {{vars.Peer3ASN}}
+ neighbor {{vars.Peer3}} description {{vars.Peer3Name | default(value="dist-2")}}
+{% endif %}{% if vars.Peer4 is defined %} neighbor {{vars.Peer4}} remote-as {{vars.Peer4ASN}}
+ neighbor {{vars.Peer4}} description {{vars.Peer4Name | default(value="dist-2")}}
+{% endif %}{% if vars.Peer5 is defined %} neighbor {{vars.Peer5}} remote-as {{vars.Peer5ASN}}
+ neighbor {{vars.Peer5}} description {{vars.Peer5Name | default(value="dist-3")}}
+{% endif %}{% if vars.Peer6 is defined %} neighbor {{vars.Peer6}} remote-as {{vars.Peer6ASN}}
+ neighbor {{vars.Peer6}} description {{vars.Peer6Name | default(value="dist-3")}}
+{% endif %}{% if vars.Peer7 is defined %} neighbor {{vars.Peer7}} remote-as {{vars.Peer7ASN}}
+ neighbor {{vars.Peer7}} description {{vars.Peer7Name | default(value="dist-4")}}
+{% endif %}{% if vars.Peer8 is defined %} neighbor {{vars.Peer8}} remote-as {{vars.Peer8ASN}}
+ neighbor {{vars.Peer8}} description {{vars.Peer8Name | default(value="dist-4")}}
+{% endif %}
+ address-family ipv4 unicast
+  redistribute connected
+ exit-address-family
+\!{% endif %}"#.to_string(),
+        },
         DefaultTemplate {
             id: "gobgp-bgp".to_string(),
             name: "GoBGP BGP Default".to_string(),
@@ -1453,9 +2366,15 @@ const ROLE_TEMPLATE_IDS: &[&str] = &[
     "arista-eos-spine",
     "arista-eos-leaf",
     "arista-eos-external",
+    "arista-eos-core",
+    "arista-eos-distribution",
+    "arista-eos-access",
     "frr-bgp-spine",
     "frr-bgp-leaf",
     "frr-bgp-external",
+    "frr-bgp-core",
+    "frr-bgp-distribution",
+    "frr-bgp-access",
 ];
 
 pub(super) fn seed_template_params() -> Vec<(String, String, String, String, String)> {

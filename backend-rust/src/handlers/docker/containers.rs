@@ -118,7 +118,7 @@ pub async fn spawn_container(
         client_id: String::new(),
         config_method: String::new(),
         image: String::new(),
-        topology_id: String::new(),
+        topology_id: 0,
         topology_role: String::new(),
     });
 
@@ -420,7 +420,7 @@ pub async fn spawn_container(
     }
 
     // If topology_id is specified, create a device record with the topology assignment
-    if !req.topology_id.is_empty() && !ip.is_empty() {
+    if req.topology_id > 0 && !ip.is_empty() {
         let dev_req = crate::models::CreateDeviceRequest {
             mac: mac.clone(),
             ip: ip.clone(),

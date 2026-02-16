@@ -57,7 +57,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
   const vendorOptions = useMemo(() => {
     const options = [{ value: '', label: 'Select Vendor...' }];
     vendors.forEach((v) => {
-      options.push({ value: v.id, label: v.name });
+      options.push({ value: String(v.id), label: v.name });
     });
     return options;
   }, [vendors]);
@@ -67,7 +67,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
     const options = [{ value: '', label: 'Select Template...' }];
     templates.forEach((t) => {
       const vendorSuffix = t.vendor_id ? ` (${t.vendor_id})` : ' (global)';
-      options.push({ value: t.id, label: `${t.name}${vendorSuffix}` });
+      options.push({ value: String(t.id), label: `${t.name}${vendorSuffix}` });
     });
     return options;
   }, [templates]);
@@ -76,7 +76,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
   const topologyOptions = useMemo(() => {
     const options = [{ value: '', label: 'No Topology' }];
     topologies.forEach((t) => {
-      options.push({ value: t.id, label: t.name });
+      options.push({ value: String(t.id), label: t.name });
     });
     return options;
   }, [topologies]);
@@ -91,7 +91,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
   } = useForm<DeviceFormData>({
     initialData: emptyFormData,
     onSubmit: async (data) => {
-      await onSubmit({ ...data, topology_role: data.topology_role || undefined } as Partial<Device>);
+      await onSubmit({ ...data, topology_id: data.topology_id ? Number(data.topology_id) : undefined, topology_role: data.topology_role || undefined } as Partial<Device>);
       onClose();
     },
     validate: validateDeviceForm,
@@ -111,7 +111,7 @@ export function DeviceForm({ isOpen, device, initialData, onSubmit, onClose }: P
           config_template: device.config_template || '',
           ssh_user: device.ssh_user || '',
           ssh_pass: device.ssh_pass || '',
-          topology_id: device.topology_id || '',
+          topology_id: String(device.topology_id || ''),
           topology_role: device.topology_role || '',
           device_type: device.device_type || 'internal',
         });

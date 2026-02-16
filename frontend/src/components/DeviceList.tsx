@@ -255,7 +255,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
     try {
       await getServices().devices.update(topoAssign.device.id, {
         ...topoAssign.device,
-        topology_id: topoAssign.topologyId,
+        topology_id: topoAssign.topologyId ? Number(topoAssign.topologyId) : undefined,
         topology_role: topoAssign.role,
       });
       addNotification('success', `Assigned ${topoAssign.device.hostname} as ${topoAssign.role} in topology`, navigateAction('View Topologies', 'topologies'));
@@ -361,7 +361,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
     {
       icon: <Icon name="account_tree" size={14} />,
       label: 'Add to topology',
-      onClick: (d) => setTopoAssign({ device: d, topologyId: d.topology_id || topologies[0]?.id || '', role: (d.topology_role as TopologyRole) || 'leaf' }),
+      onClick: (d) => setTopoAssign({ device: d, topologyId: String(d.topology_id || topologies[0]?.id || ''), role: (d.topology_role as TopologyRole) || 'leaf' }),
       variant: 'secondary',
       tooltip: (d) => d.topology_id ? `Topology: ${d.topology_id} (${d.topology_role})` : 'Assign to topology',
     },
@@ -376,7 +376,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
       variant: 'danger',
       tooltip: 'Delete device',
       bulk: true,
-      bulkOnClick: (d) => onDelete(d.id),
+      bulkOnClick: (d) => { onDelete(d.id); },
       bulkConfirm: (rows) => ({
         title: `Delete ${rows.length} Devices`,
         message: `This will delete the following devices:\n\n${rows.map(d => `  \u2022 ${d.hostname} (${d.ip})`).join('\n')}\n\nThis cannot be undone.`,
@@ -672,7 +672,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
               onChange={(e) => setTopoAssign({ ...topoAssign, topologyId: e.target.value })}
               options={[
                 { value: '', label: '— Select topology —' },
-                ...topologies.map((t) => ({ value: t.id, label: t.name })),
+                ...topologies.map((t) => ({ value: String(t.id), label: t.name })),
               ]}
             />
             <SelectField

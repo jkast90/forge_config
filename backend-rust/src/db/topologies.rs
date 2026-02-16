@@ -14,7 +14,7 @@ const SELECT_TOPOLOGY: &str = r#"
            COALESCE(SUM(CASE WHEN d.topology_role = 'spine' THEN 1 ELSE 0 END), 0) as spine_count,
            COALESCE(SUM(CASE WHEN d.topology_role = 'leaf' THEN 1 ELSE 0 END), 0) as leaf_count
     FROM topologies t
-    LEFT JOIN devices d ON d.topology_id = CAST(t.id AS TEXT)
+    LEFT JOIN devices d ON d.topology_id = t.id
 "#;
 
 /// Topology database operations
@@ -84,7 +84,7 @@ impl TopologyRepo {
 
     pub async fn delete(pool: &Pool<Sqlite>, id: i64) -> Result<()> {
         // Unassign devices first (set topology_id and topology_role to empty)
-        sqlx::query("UPDATE devices SET topology_id = '', topology_role = '' WHERE topology_id = CAST(? AS TEXT)")
+        sqlx::query("UPDATE devices SET topology_id = NULL, topology_role = '' WHERE topology_id = ?")
             .bind(id)
             .execute(pool)
             .await?;

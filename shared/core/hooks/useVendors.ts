@@ -25,8 +25,8 @@ export interface UseVendorsReturn {
   error: string | null;
   refresh: () => Promise<void>;
   createVendor: (vendor: Partial<Vendor>) => Promise<boolean>;
-  updateVendor: (id: string, vendor: Partial<Vendor>) => Promise<boolean>;
-  deleteVendor: (id: string) => Promise<boolean>;
+  updateVendor: (id: number | string, vendor: Partial<Vendor>) => Promise<boolean>;
+  deleteVendor: (id: number | string) => Promise<boolean>;
   resetToDefaults: () => Promise<boolean>;
 }
 
@@ -63,7 +63,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
     }
   }, [dispatch]);
 
-  const updateVendor = useCallback(async (id: string, data: Partial<Vendor>): Promise<boolean> => {
+  const updateVendor = useCallback(async (id: number | string, data: Partial<Vendor>): Promise<boolean> => {
     try {
       await dispatch(updateVendorThunk({ id, data })).unwrap();
       addNotification('success', 'Vendor updated successfully', navigateAction('View Vendors', 'vendors-models', 'vendors'));
@@ -75,7 +75,7 @@ export function useVendors(options: UseVendorsOptions = {}): UseVendorsReturn {
     }
   }, [dispatch]);
 
-  const deleteVendor = useCallback(async (id: string): Promise<boolean> => {
+  const deleteVendor = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteVendorThunk(id)).unwrap();
       addNotification('success', 'Vendor deleted successfully', navigateAction('View Vendors', 'vendors-models', 'vendors'));

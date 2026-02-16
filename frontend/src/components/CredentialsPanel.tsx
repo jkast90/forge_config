@@ -15,8 +15,8 @@ interface CredentialsPanelProps {
   credentials: Credential[];
   loading: boolean;
   onCreate: (data: CredentialFormData) => Promise<boolean>;
-  onUpdate: (id: string, data: CredentialFormData) => Promise<boolean>;
-  onDelete: (id: string) => Promise<boolean>;
+  onUpdate: (id: number | string, data: CredentialFormData) => Promise<boolean>;
+  onDelete: (id: number | string) => Promise<boolean>;
   onRefresh: () => void;
 }
 
@@ -36,7 +36,6 @@ export function CredentialsPanel({ credentials, loading, onCreate, onUpdate, onD
   const openEdit = (cred: Credential) => {
     setEditingCred(cred);
     setFormData({
-      id: cred.id,
       name: cred.name,
       description: cred.description || '',
       cred_type: cred.cred_type,
@@ -63,8 +62,8 @@ export function CredentialsPanel({ credentials, loading, onCreate, onUpdate, onD
   const columns: TableColumn<Credential>[] = useMemo(() => [
     {
       header: 'ID',
-      accessor: (c) => Cell.code(c.id),
-      searchValue: (c) => c.id,
+      accessor: (c) => Cell.code(String(c.id)),
+      searchValue: (c) => String(c.id),
       width: '150px',
     },
     {

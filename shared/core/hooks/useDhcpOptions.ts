@@ -27,8 +27,8 @@ export interface UseDhcpOptionsReturn {
   error: string | null;
   refresh: () => Promise<void>;
   createOption: (option: Partial<DhcpOption>) => Promise<boolean>;
-  updateOption: (id: string, option: Partial<DhcpOption>) => Promise<boolean>;
-  deleteOption: (id: string) => Promise<boolean>;
+  updateOption: (id: number | string, option: Partial<DhcpOption>) => Promise<boolean>;
+  deleteOption: (id: number | string) => Promise<boolean>;
   resetToDefaults: () => Promise<boolean>;
 }
 
@@ -41,7 +41,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
   const filteredOptions = useMemo(() => {
     if (!vendorFilter || vendorFilter === 'all') return dhcpOptions;
     if (vendorFilter === 'global') return dhcpOptions.filter(o => !o.vendor_id);
-    return dhcpOptions.filter(o => o.vendor_id === vendorFilter);
+    return dhcpOptions.filter(o => String(o.vendor_id) === vendorFilter);
   }, [dhcpOptions, vendorFilter]);
 
   const refresh = useCallback(async () => {
@@ -72,7 +72,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
     }
   }, [dispatch]);
 
-  const updateOption = useCallback(async (id: string, data: Partial<DhcpOption>): Promise<boolean> => {
+  const updateOption = useCallback(async (id: number | string, data: Partial<DhcpOption>): Promise<boolean> => {
     try {
       await dispatch(updateDhcpOptionThunk({ id, data })).unwrap();
       addNotification('success', 'DHCP option updated successfully', navigateAction('View DHCP', 'vendors-models', 'dhcp'));
@@ -84,7 +84,7 @@ export function useDhcpOptions(options: UseDhcpOptionsOptions = {}): UseDhcpOpti
     }
   }, [dispatch]);
 
-  const deleteOption = useCallback(async (id: string): Promise<boolean> => {
+  const deleteOption = useCallback(async (id: number | string): Promise<boolean> => {
     try {
       await dispatch(deleteDhcpOptionThunk(id)).unwrap();
       addNotification('success', 'DHCP option deleted successfully', navigateAction('View DHCP', 'vendors-models', 'dhcp'));

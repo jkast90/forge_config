@@ -24,12 +24,12 @@ export const createVendor = createAsyncThunk('vendors/create', async (data: Part
 
 export const updateVendor = createAsyncThunk(
   'vendors/update',
-  async ({ id, data }: { id: string; data: Partial<Vendor> }) => {
+  async ({ id, data }: { id: number | string; data: Partial<Vendor> }) => {
     return getServices().vendors.update(id, data);
   }
 );
 
-export const deleteVendor = createAsyncThunk('vendors/delete', async (id: string) => {
+export const deleteVendor = createAsyncThunk('vendors/delete', async (id: number | string) => {
   await getServices().vendors.remove(id);
   return id;
 });

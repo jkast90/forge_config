@@ -23,12 +23,459 @@ struct VNode {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Unified topology builder — routes to CLOS or hierarchical based on architecture
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Unified entry point that routes to the appropriate builder based on architecture
+pub async fn build_topology(
+    auth: crate::auth::AuthUser,
+    state: State<Arc<AppState>>,
+    Json(req): Json<TopologyBuildWithOverrides>,
+) -> Result<Json<TopologyBuildResponse>, ApiError> {
+    let overrides = req.overrides;
+    let config = req.config;
+    match config.architecture.as_str() {
+        "hierarchical" => super::three_tier::build_three_tier(auth, state, config, overrides).await,
+        _ => build_virtual_clos(auth, state, config, overrides).await,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Topology Preview — read-only computation of what a CLOS build will produce
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Compute a preview of a CLOS topology without writing to the database or Docker.
+/// Returns device list, rack layout, and fabric links with deterministic IPAM.
+pub(super) async fn compute_clos_preview(
+    state: &Arc<AppState>,
+    req: &UnifiedTopologyRequest,
+) -> Result<TopologyPreviewResponse, ApiError> {
+    // ── 1. Read hostname_pattern from settings (read-only) ──────────────
+    let settings = state.store.get_settings().await.unwrap_or_default();
+    let hostname_pattern = &settings.hostname_pattern;
+
+    // ── 2. Load device models for port name resolution (read-only) ──────
+    let all_models = state.store.list_device_models().await
+        .map_err(|e| ApiError::internal(format!("Failed to load device models: {}", e)))?;
+    let model_100g_ports: HashMap<String, Vec<String>> = all_models.iter()
+        .map(|m| (m.model.clone(), get_ports_by_min_speed(&m.layout, 100_000)))
+        .collect();
+
+    // ── 3. Map request fields to CLOS names ─────────────────────────────
+    let spines_per_pod = req.tier1_count;
+    let leaves_per_pod = req.tier2_count;
+    let hall_count = req.halls;
+    let rows_per_hall = req.rows_per_hall;
+    let racks_per_row = req.racks_per_row;
+    let leaves_per_rack = req.devices_per_rack;
+    let external_count = req.external_count;
+    let uplinks_per_spine = req.external_to_tier1_ratio;
+    let links_per_leaf = req.tier1_to_tier2_ratio;
+    let spine_model = if req.tier1_model.is_empty() { "7050CX3-32S".to_string() } else { req.tier1_model.clone() };
+    let leaf_model = if req.tier2_model.is_empty() { "7050SX3-48YC8".to_string() } else { req.tier2_model.clone() };
+    let dc = req.datacenter_id.map(|id| id.to_string()).unwrap_or_default();
+    let dc = dc.as_str();
+    let region = req.region_id.map(|id| id.to_string()).unwrap_or_default();
+    let region = region.as_str();
+    let placement = if req.tier3_placement.is_empty() { "bottom" } else { req.tier3_placement.as_str() };
+
+    // Super-spine fields
+    let ss_enabled = req.super_spine_enabled;
+    let pod_count = if ss_enabled { req.pods.max(2) } else { 1 };
+    let total_spines = spines_per_pod * pod_count;
+    let total_leaves = leaves_per_pod * pod_count;
+    let ss_count = if ss_enabled { req.super_spine_count.max(1) } else { 0 };
+    let ss_model = if req.super_spine_model.is_empty() { "7050CX3-32S".to_string() } else { req.super_spine_model.clone() };
+    let spine_to_ss_ratio = req.spine_to_super_spine_ratio;
+
+    // ── 4. Compute rack layout as named racks ───────────────────────────
+    let mut racks: Vec<TopologyPreviewRack> = Vec::new();
+    let mut leaf_rack_names: Vec<String> = Vec::new();
+    let mut spine_rack_names: Vec<String> = Vec::new();
+    let mut rack_index: usize = 0;
+
+    for h in 1..=hall_count {
+        let hall_name = format!("Hall {}", h);
+        for r in 1..=rows_per_hall {
+            let row_name = format!("Hall {} Row {}", h, r);
+            let mid = racks_per_row / 2;
+            for k in 1..=racks_per_row {
+                if k == mid + 1 {
+                    let spine_rack_name = format!("Hall {} Row {} Spine Rack", h, r);
+                    racks.push(TopologyPreviewRack {
+                        index: rack_index,
+                        name: spine_rack_name.clone(),
+                        hall_name: hall_name.clone(),
+                        row_name: row_name.clone(),
+                        rack_type: "spine".to_string(),
+                    });
+                    spine_rack_names.push(spine_rack_name);
+                    rack_index += 1;
+                }
+
+                let leaf_rack_name = format!("Hall {} Row {} Rack {}", h, r, k);
+                racks.push(TopologyPreviewRack {
+                    index: rack_index,
+                    name: leaf_rack_name.clone(),
+                    hall_name: hall_name.clone(),
+                    row_name: row_name.clone(),
+                    rack_type: "leaf".to_string(),
+                });
+                leaf_rack_names.push(leaf_rack_name);
+                rack_index += 1;
+            }
+        }
+    }
+
+    // ── 5. Compute all devices ──────────────────────────────────────────
+    let mut devices: Vec<TopologyPreviewDevice> = Vec::new();
+    let mut dev_index: usize = 0;
+
+    // Spines: round-robin across spine racks
+    for i in 1..=total_spines {
+        let (rack_name, rack_idx, pos) = if !spine_rack_names.is_empty() {
+            let ridx = (i - 1) % spine_rack_names.len();
+            let pos_in_rack = ((i - 1) / spine_rack_names.len()) as i32 + 1;
+            (Some(spine_rack_names[ridx].clone()), Some(ridx), Some(pos_in_rack))
+        } else {
+            (None, None, None)
+        };
+        let hall_name = rack_name.as_ref()
+            .and_then(|_| if hall_count > 0 {
+                let h_idx = if !spine_rack_names.is_empty() {
+                    ((i - 1) % spine_rack_names.len()) / rows_per_hall + 1
+                } else { 1 };
+                Some(h_idx.to_string())
+            } else { None })
+            .unwrap_or_default();
+        devices.push(TopologyPreviewDevice {
+            index: dev_index,
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "spine", i),
+            role: "spine".to_string(),
+            loopback: format!("10.255.0.{}", i),
+            asn: 65000,
+            model: spine_model.clone(),
+            mgmt_ip: format!("172.20.0.{}", 10 + i),
+            rack_name,
+            rack_index: rack_idx,
+            rack_position: pos,
+        });
+        dev_index += 1;
+    }
+
+    // Leaves: distributed by leaves_per_rack, with rack position from placement strategy
+    for i in 1..=total_leaves {
+        let (rack_name, rack_idx, pos) = if !leaf_rack_names.is_empty() {
+            let ridx = (i - 1) / leaves_per_rack;
+            let device_in_rack = (i - 1) % leaves_per_rack;
+            if ridx < leaf_rack_names.len() {
+                let pos = compute_rack_position(device_in_rack, placement, 42);
+                (Some(leaf_rack_names[ridx].clone()), Some(ridx), Some(pos))
+            } else {
+                (None, None, None)
+            }
+        } else {
+            (None, None, None)
+        };
+        let hall_name = rack_name.as_ref()
+            .and_then(|_| if hall_count > 0 { Some("1".to_string()) } else { None })
+            .unwrap_or_default();
+        devices.push(TopologyPreviewDevice {
+            index: dev_index,
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "leaf", i),
+            role: "leaf".to_string(),
+            loopback: format!("10.255.1.{}", i),
+            asn: 65000 + i as u32,
+            model: leaf_model.clone(),
+            mgmt_ip: format!("172.20.1.{}", 10 + i),
+            rack_name,
+            rack_index: rack_idx,
+            rack_position: pos,
+        });
+        dev_index += 1;
+    }
+
+    // Super-spines: placed in spine racks, positioned after spines
+    for i in 1..=ss_count {
+        let (rack_name, rack_idx, pos) = if !spine_rack_names.is_empty() {
+            let ridx = (i - 1) % spine_rack_names.len();
+            let spines_in_this_rack = (total_spines + spine_rack_names.len() - 1) / spine_rack_names.len().max(1);
+            let pos_in_rack = spines_in_this_rack as i32 + ((i - 1) / spine_rack_names.len()) as i32 + 1;
+            (Some(spine_rack_names[ridx].clone()), Some(ridx), Some(pos_in_rack))
+        } else {
+            (None, None, None)
+        };
+        devices.push(TopologyPreviewDevice {
+            index: dev_index,
+            hostname: resolve_hostname(hostname_pattern, dc, region, "", "super-spine", i),
+            role: "super-spine".to_string(),
+            loopback: format!("10.255.3.{}", i),
+            asn: 65500,
+            model: ss_model.clone(),
+            mgmt_ip: format!("172.20.4.{}", 10 + i),
+            rack_name,
+            rack_index: rack_idx,
+            rack_position: pos,
+        });
+        dev_index += 1;
+    }
+
+    // External devices (not assigned to racks)
+    let external_names = &req.tier1_names;
+    for i in 1..=external_count {
+        let hostname = external_names.get(i - 1)
+            .filter(|n| !n.is_empty())
+            .cloned()
+            .unwrap_or_else(|| resolve_hostname(hostname_pattern, dc, region, "", "external", i));
+        devices.push(TopologyPreviewDevice {
+            index: dev_index,
+            hostname,
+            role: "external".to_string(),
+            loopback: format!("10.255.2.{}", i),
+            asn: 64999_u32.saturating_sub(i as u32 - 1),
+            model: "7280R3".to_string(),
+            mgmt_ip: format!("172.20.2.{}", 10 + i),
+            rack_name: None,
+            rack_index: None,
+            rack_position: None,
+        });
+        dev_index += 1;
+    }
+
+    // ── 6-7. Compute fabric links with deterministic P2P /31 allocation ─
+    let p2p_base: u32 = 0x0A_01_00_00; // 10.1.0.0
+    let mut link_counter: u32 = 0;
+    let mut fabric_links: Vec<TopologyPreviewLink> = Vec::new();
+
+    // Collect device views by role for link computation
+    let spine_devices: Vec<&TopologyPreviewDevice> = devices.iter().filter(|d| d.role == "spine").collect();
+    let leaf_devices: Vec<&TopologyPreviewDevice> = devices.iter().filter(|d| d.role == "leaf").collect();
+    let ss_devices: Vec<&TopologyPreviewDevice> = devices.iter().filter(|d| d.role == "super-spine").collect();
+    let external_devices: Vec<&TopologyPreviewDevice> = devices.iter().filter(|d| d.role == "external").collect();
+
+    // Spine 100G port split
+    let spine_all_ports = model_100g_ports.get(&spine_model).cloned().unwrap_or_default();
+    let (spine_leaf_port_count, spine_uplink_ports) = if ss_enabled {
+        // With super-spine: exact count for leaf-facing, remainder for SS uplinks
+        let needed_leaf = leaves_per_pod * links_per_leaf;
+        let spine_uplinks: Vec<String> = spine_all_ports.iter().skip(needed_leaf).cloned().collect();
+        (needed_leaf, spine_uplinks)
+    } else {
+        // Without super-spine: 2/3 leaf-facing, 1/3 external uplinks
+        let lpc = (spine_all_ports.len() * 2 + 2) / 3;
+        let uplinks: Vec<String> = spine_all_ports.iter().skip(lpc).cloned().collect();
+        (lpc, uplinks)
+    };
+    let spine_leaf_ports: Vec<String> = spine_all_ports.iter().take(spine_leaf_port_count).cloned().collect();
+
+    // Pod-scoped spine-leaf links
+    for pod in 0..pod_count {
+        let pod_spine_start = pod * spines_per_pod;
+        let pod_leaf_start = pod * leaves_per_pod;
+        for si_local in 0..spines_per_pod {
+            let si = pod_spine_start + si_local;
+            let spine = &spine_devices[si];
+            for li_local in 0..leaves_per_pod {
+                let li = pod_leaf_start + li_local;
+                let leaf = &leaf_devices[li];
+                for link in 0..links_per_leaf as u32 {
+                    let net = p2p_base + link_counter * 2;
+                    let spine_ip = crate::utils::u32_to_ipv4(net);
+                    let leaf_ip = crate::utils::u32_to_ipv4(net + 1);
+                    let subnet = format!("{}/31", spine_ip);
+
+                    // Spine port: within-pod indexing
+                    let spine_port_idx = li_local * links_per_leaf + link as usize;
+                    let spine_if_name = spine_leaf_ports.get(spine_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", spine_port_idx + 1));
+
+                    // Leaf port: within-pod indexing
+                    let leaf_port_idx = si_local * links_per_leaf + link as usize;
+                    let leaf_100g = model_100g_ports.get(&leaf.model).map(|p| p.as_slice()).unwrap_or(&[]);
+                    let leaf_if_name = leaf_100g.get(leaf_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", leaf_port_idx + 1));
+
+                    let cable_length_meters = estimate_cable_length(
+                        spine.rack_index, spine.rack_position,
+                        leaf.rack_index, leaf.rack_position,
+                        racks_per_row, req.row_spacing_cm, settings.cable_slack_percent,
+                    );
+
+                    fabric_links.push(TopologyPreviewLink {
+                        side_a_hostname: spine.hostname.clone(),
+                        side_a_interface: spine_if_name,
+                        side_a_ip: spine_ip,
+                        side_b_hostname: leaf.hostname.clone(),
+                        side_b_interface: leaf_if_name,
+                        side_b_ip: leaf_ip,
+                        subnet,
+                        cable_length_meters,
+                    });
+
+                    link_counter += 1;
+                }
+            }
+        }
+    }
+
+    // Spine-to-super-spine links (when SS enabled)
+    if ss_enabled {
+        let ss_all_ports = model_100g_ports.get(&ss_model).cloned().unwrap_or_default();
+        // SS ports: first N for spine downlinks, rest for external uplinks
+        let ss_downlink_count = total_spines * spine_to_ss_ratio;
+
+        for (si, spine) in spine_devices.iter().enumerate() {
+            for (ssi, ss) in ss_devices.iter().enumerate() {
+                for link in 0..spine_to_ss_ratio {
+                    let net = p2p_base + link_counter * 2;
+                    let spine_ip = crate::utils::u32_to_ipv4(net);
+                    let ss_ip = crate::utils::u32_to_ipv4(net + 1);
+                    let subnet = format!("{}/31", spine_ip);
+
+                    // Spine uplink port (from uplink portion)
+                    let spine_uplink_idx = ssi * spine_to_ss_ratio + link;
+                    let spine_if_name = spine_uplink_ports.get(spine_uplink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", spine_leaf_port_count + spine_uplink_idx + 1));
+
+                    // Super-spine downlink port
+                    let ss_downlink_idx = si * spine_to_ss_ratio + link;
+                    let ss_if_name = ss_all_ports.get(ss_downlink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ss_downlink_idx + 1));
+
+                    let cable_length_meters = estimate_cable_length(
+                        spine.rack_index, spine.rack_position,
+                        ss.rack_index, ss.rack_position,
+                        racks_per_row, req.row_spacing_cm, settings.cable_slack_percent,
+                    );
+
+                    fabric_links.push(TopologyPreviewLink {
+                        side_a_hostname: spine.hostname.clone(),
+                        side_a_interface: spine_if_name,
+                        side_a_ip: spine_ip,
+                        side_b_hostname: ss.hostname.clone(),
+                        side_b_interface: ss_if_name,
+                        side_b_ip: ss_ip,
+                        subnet,
+                        cable_length_meters,
+                    });
+
+                    link_counter += 1;
+                }
+            }
+        }
+
+        // External-to-super-spine links (externals connect to SS when enabled)
+        let ss_uplink_ports: Vec<String> = ss_all_ports.iter().skip(ss_downlink_count).cloned().collect();
+        for (ei, ext) in external_devices.iter().enumerate() {
+            for (ssi, ss) in ss_devices.iter().enumerate() {
+                for link in 0..uplinks_per_spine {
+                    let net = p2p_base + link_counter * 2;
+                    let ext_ip = crate::utils::u32_to_ipv4(net);
+                    let ss_ip = crate::utils::u32_to_ipv4(net + 1);
+                    let subnet = format!("{}/31", ext_ip);
+
+                    let ext_port_idx = ssi * uplinks_per_spine + link;
+                    let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
+                    let ext_if_name = ext_100g.get(ext_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ext_port_idx + 1));
+
+                    let ss_uplink_idx = ei * uplinks_per_spine + link;
+                    let ss_if_name = ss_uplink_ports.get(ss_uplink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ss_downlink_count + ss_uplink_idx + 1));
+
+                    let cable_length_meters = estimate_cable_length(
+                        ext.rack_index, ext.rack_position,
+                        ss.rack_index, ss.rack_position,
+                        racks_per_row, req.row_spacing_cm, settings.cable_slack_percent,
+                    );
+
+                    fabric_links.push(TopologyPreviewLink {
+                        side_a_hostname: ext.hostname.clone(),
+                        side_a_interface: ext_if_name,
+                        side_a_ip: ext_ip,
+                        side_b_hostname: ss.hostname.clone(),
+                        side_b_interface: ss_if_name,
+                        side_b_ip: ss_ip,
+                        subnet,
+                        cable_length_meters,
+                    });
+
+                    link_counter += 1;
+                }
+            }
+        }
+    } else {
+        // External-spine links (original — no super-spine)
+        for (ei, ext) in external_devices.iter().enumerate() {
+            for (si, spine) in spine_devices.iter().enumerate() {
+                for link in 0..uplinks_per_spine {
+                    let net = p2p_base + link_counter * 2;
+                    let ext_ip = crate::utils::u32_to_ipv4(net);
+                    let spine_ip = crate::utils::u32_to_ipv4(net + 1);
+                    let subnet = format!("{}/31", ext_ip);
+
+                    let ext_port_idx = si * uplinks_per_spine + link;
+                    let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
+                    let ext_if_name = ext_100g.get(ext_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ext_port_idx + 1));
+
+                    let spine_uplink_idx = ei * uplinks_per_spine + link;
+                    let spine_if_name = spine_uplink_ports.get(spine_uplink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", spine_leaf_port_count + spine_uplink_idx + 1));
+
+                    let cable_length_meters = estimate_cable_length(
+                        ext.rack_index, ext.rack_position,
+                        spine.rack_index, spine.rack_position,
+                        racks_per_row, req.row_spacing_cm, settings.cable_slack_percent,
+                    );
+
+                    fabric_links.push(TopologyPreviewLink {
+                        side_a_hostname: ext.hostname.clone(),
+                        side_a_interface: ext_if_name,
+                        side_a_ip: ext_ip,
+                        side_b_hostname: spine.hostname.clone(),
+                        side_b_interface: spine_if_name,
+                        side_b_ip: spine_ip,
+                        subnet,
+                        cable_length_meters,
+                    });
+
+                    link_counter += 1;
+                }
+            }
+        }
+    }
+
+    // ── 8. Return response ──────────────────────────────────────────────
+    Ok(TopologyPreviewResponse {
+        architecture: "clos".to_string(),
+        topology_name: "DC1 CLOS Fabric".to_string(),
+        devices,
+        fabric_links,
+        racks,
+        tier3_placement: placement.to_string(),
+    })
+}
+
+/// Unified preview entry point — routes to CLOS or hierarchical preview based on architecture
+pub async fn preview_topology(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<UnifiedTopologyRequest>,
+) -> Result<Json<TopologyPreviewResponse>, ApiError> {
+    match req.architecture.as_str() {
+        "hierarchical" => Ok(Json(super::three_tier::compute_three_tier_preview(&state, &req).await?)),
+        _ => Ok(Json(compute_clos_preview(&state, &req).await?)),
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CLOS topology builder — spines, leaves, externals with racks/IPAM/patch panels
 // Optionally spawns cEOS or FRR containers when spawn_containers is set
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VIRTUAL_CLOS_TOPOLOGY_ID: &str = "dc1-virtual";
-const VIRTUAL_CLOS_TOPOLOGY_NAME: &str = "DC1 Virtual Fabric";
+const VIRTUAL_CLOS_TOPOLOGY_NAME: &str = "DC1 CLOS Fabric";
 const VIRTUAL_CLOS_P2P_CIDR: &str = "10.1.0.0/16";
 const VIRTUAL_CLOS_LOOPBACK_CIDR: &str = "10.255.0.0/16";
 const VIRTUAL_CLOS_P2P_PARENT_CIDR: &str = "10.0.0.0/8";
@@ -49,35 +496,48 @@ fn resolve_hostname(pattern: &str, datacenter: &str, region: &str, hall: &str, r
     cleaned
 }
 
-/// Build a 4-spine / 16-leaf virtual CLOS topology (device records only)
+/// Build a CLOS topology from a UnifiedTopologyRequest
 pub async fn build_virtual_clos(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
-    Json(req): Json<VirtualClosRequest>,
-) -> Result<Json<ClosLabResponse>, ApiError> {
+    req: UnifiedTopologyRequest,
+    overrides: Option<TopologyOverrides>,
+) -> Result<Json<TopologyBuildResponse>, ApiError> {
     // Teardown any existing virtual CLOS first
     teardown_virtual_clos_inner(&state).await;
 
-    let spine_count = req.spines;
-    let leaf_count = req.leaves;
+    // Map unified tier fields to CLOS-specific names
+    let spine_count = req.tier1_count;
+    let leaf_count = req.tier2_count;
     let hall_count = req.halls;
     let rows_per_hall = req.rows_per_hall;
     let racks_per_row = req.racks_per_row;
-    let leaves_per_rack = req.leaves_per_rack;
-    let external_count = req.external_devices;
-    let uplinks_per_spine = req.uplinks_per_spine;
-    let links_per_leaf = req.links_per_leaf;
-    let spine_model = if req.spine_model.is_empty() { "7050CX3-32S".to_string() } else { req.spine_model.clone() };
-    let leaf_model = if req.leaf_model.is_empty() { "7050SX3-48YC8".to_string() } else { req.leaf_model.clone() };
+    let leaves_per_rack = req.devices_per_rack;
+    let external_count = req.external_count;
+    let uplinks_per_spine = req.external_to_tier1_ratio;
+    let links_per_leaf = req.tier1_to_tier2_ratio;
+    let spine_model = if req.tier1_model.is_empty() { "7050CX3-32S".to_string() } else { req.tier1_model.clone() };
+    let leaf_model = if req.tier2_model.is_empty() { "7050SX3-48YC8".to_string() } else { req.tier2_model.clone() };
     let datacenter_id = req.datacenter_id;
     let dc = datacenter_id.map(|id| id.to_string()).unwrap_or_default();
     let dc = dc.as_str();
     let region = req.region_id.map(|id| id.to_string()).unwrap_or_default();
     let region = region.as_str();
+    let row_spacing_cm = req.row_spacing_cm;
 
-    // Load hostname pattern from settings
+    // Super-spine fields
+    let ss_enabled = req.super_spine_enabled;
+    let pod_count = if ss_enabled { req.pods.max(2) } else { 1 };
+    let total_spines = spine_count * pod_count;
+    let total_leaves = leaf_count * pod_count;
+    let ss_count = if ss_enabled { req.super_spine_count.max(1) } else { 0 };
+    let ss_model_name = if req.super_spine_model.is_empty() { "7050CX3-32S".to_string() } else { req.super_spine_model.clone() };
+    let spine_to_ss_ratio = req.spine_to_super_spine_ratio;
+
+    // Load hostname pattern + cable slack from settings
     let settings = state.store.get_settings().await.unwrap_or_default();
     let hostname_pattern = &settings.hostname_pattern;
+    let cable_slack_percent = settings.cable_slack_percent;
 
     let spawn_containers = req.spawn_containers;
     let ceos_image = if req.ceos_image.is_empty() {
@@ -93,9 +553,14 @@ pub async fn build_virtual_clos(
     // Look up device roles to resolve config_template + group_names per topology role
     let mut role_templates: HashMap<String, String> = HashMap::new();
     let mut role_group_names: HashMap<String, Vec<String>> = HashMap::new();
-    for role_name in ["spine", "leaf", "external"] {
+    for role_name in ["spine", "leaf", "external", "super-spine"] {
+        // Try vendor-prefixed name first (e.g. "arista-spine"), then plain role name
         let device_role_name = format!("{}-{}", vendor_id, role_name);
-        if let Ok(Some(role)) = state.store.find_device_role_by_name(&device_role_name).await {
+        let found_role = match state.store.find_device_role_by_name(&device_role_name).await {
+            Ok(Some(r)) => Some(r),
+            _ => state.store.find_device_role_by_name(role_name).await.ok().flatten(),
+        };
+        if let Some(role) = found_role {
             if let Some(tnames) = &role.template_names {
                 if let Some(first) = tnames.first() {
                     // Derive base template: "arista-eos-leaf" → "arista-eos"
@@ -113,20 +578,23 @@ pub async fn build_virtual_clos(
     // Create topology
     let topo_req = crate::models::CreateTopologyRequest {
         name: VIRTUAL_CLOS_TOPOLOGY_NAME.to_string(),
-        description: Some(if external_count > 0 {
-            format!("{}-spine / {}-leaf / {}-external Arista virtual fabric", spine_count, leaf_count, external_count)
+        description: Some(if ss_enabled {
+            format!("{}-spine / {}-leaf / {}-super-spine / {}-external ({}-pod) Arista virtual fabric",
+                spine_count, leaf_count, ss_count, external_count, pod_count)
+        } else if external_count > 0 {
+            format!("{}-spine / {}-leaf / {}-external Arista virtual fabric", total_spines, total_leaves, external_count)
         } else {
-            format!("{}-spine / {}-leaf Arista virtual fabric", spine_count, leaf_count)
+            format!("{}-spine / {}-leaf Arista virtual fabric", total_spines, total_leaves)
         }),
         region_id: req.region_id,
         campus_id: req.campus_id,
         datacenter_id: req.datacenter_id,
     };
-    let topo_id_str = match state.store.create_topology(&topo_req).await {
-        Ok(t) => t.id.to_string(),
+    let topo_id = match state.store.create_topology(&topo_req).await {
+        Ok(t) => t.id,
         Err(e) => {
             tracing::warn!("Failed to create virtual topology: {}", e);
-            String::new()
+            0
         }
     };
 
@@ -135,6 +603,9 @@ pub async fn build_virtual_clos(
     let mut rack_placements: Vec<(i64, i64, i64)> = Vec::new();
     // Spine racks: one per row, spines distributed round-robin across rows
     let mut spine_racks: Vec<(i64, i64, i64)> = Vec::new();
+    // All racks in preview-order (spine at midpoint interspersed with leaf racks)
+    // Used to resolve preview rack_index -> DB rack IDs for overrides
+    let mut all_racks: Vec<(i64, i64, i64)> = Vec::new();
     // Map row_id -> patch panel device ID for port assignment wiring
     let mut patch_panels: HashMap<i64, i64> = HashMap::new();
 
@@ -180,6 +651,7 @@ pub async fn build_virtual_clos(
                         match state.store.create_ipam_rack(&spine_rack_req).await {
                             Ok(rack) => {
                                 spine_racks.push((hall_id, row_id, rack.id));
+                                all_racks.push((hall_id, row_id, rack.id));
                             }
                             Err(e) => {
                                 tracing::warn!("Failed to create spine rack: {}", e);
@@ -195,6 +667,7 @@ pub async fn build_virtual_clos(
                     match state.store.create_ipam_rack(&rack_req).await {
                         Ok(rack) => {
                             rack_placements.push((hall_id, row_id, rack.id));
+                            all_racks.push((hall_id, row_id, rack.id));
                         }
                         Err(e) => {
                             tracing::warn!("Failed to create rack hall-{}-row-{}-rack-{}: {}", h, r, k, e);
@@ -214,7 +687,7 @@ pub async fn build_virtual_clos(
                     config_template: String::new(),
                     ssh_user: None,
                     ssh_pass: None,
-                    topology_id: Some(topo_id_str.clone()),
+                    topology_id: Some(topo_id),
                     topology_role: None,
                     device_type: Some("external".to_string()),
                     hall_id: Some(hall_id),
@@ -240,7 +713,7 @@ pub async fn build_virtual_clos(
 
     // Spines: use spine_model from request (default: 7050CX3-32S)
     // Distribute spines round-robin across rows (one spine rack per row)
-    for i in 1..=spine_count {
+    for i in 1..=total_spines {
         let (h, r, rk, pos) = if !spine_racks.is_empty() {
             let rack_idx = (i - 1) % spine_racks.len();
             let pos_in_rack = ((i - 1) / spine_racks.len()) as i32 + 1;
@@ -267,10 +740,12 @@ pub async fn build_virtual_clos(
 
     // Leaves: use leaf_model from request (default: 7050SX3-48YC8)
     // Distribute across racks: leaves_per_rack per rack
-    for i in 1..=leaf_count {
+    let placement = &req.tier3_placement;
+    for i in 1..=total_leaves {
         let (h, r, rk, pos) = if !rack_placements.is_empty() {
             let rack_idx = (i - 1) / leaves_per_rack;
-            let pos_in_rack = ((i - 1) % leaves_per_rack) as i32 + 1;
+            let device_in_rack = (i - 1) % leaves_per_rack;
+            let pos_in_rack = compute_rack_position(device_in_rack, placement, 42);
             if rack_idx < rack_placements.len() {
                 let p = &rack_placements[rack_idx];
                 (Some(p.0), Some(p.1), Some(p.2), Some(pos_in_rack))
@@ -297,7 +772,7 @@ pub async fn build_virtual_clos(
     }
 
     // External devices (uplink routers) — not assigned to any rack
-    let external_names = req.external_names;
+    let external_names = req.tier1_names;
     for i in 1..=external_count {
         let hostname = external_names.get(i - 1)
             .filter(|n| !n.is_empty())
@@ -318,6 +793,61 @@ pub async fn build_virtual_clos(
         });
     }
 
+    // Super-spine devices (placed in spine racks, after spines)
+    for i in 1..=ss_count {
+        let (h, r, rk, pos) = if !spine_racks.is_empty() {
+            let rack_idx = (i - 1) % spine_racks.len();
+            let spines_in_rack = (total_spines + spine_racks.len() - 1) / spine_racks.len().max(1);
+            let pos_in_rack = spines_in_rack as i32 + ((i - 1) / spine_racks.len()) as i32 + 1;
+            let p = &spine_racks[rack_idx];
+            (Some(p.0), Some(p.1), Some(p.2), Some(pos_in_rack))
+        } else {
+            (None, None, None, None)
+        };
+        nodes.push(VNode {
+            hostname: resolve_hostname(hostname_pattern, dc, region, "", "super-spine", i),
+            role: "super-spine".to_string(),
+            loopback: format!("10.255.3.{}", i),
+            asn: 65500,
+            model: ss_model_name.clone(),
+            mgmt_ip: format!("172.20.4.{}", 10 + i),
+            hall_id: h,
+            row_id: r,
+            rack_id: rk,
+            rack_position: pos,
+            device_type: None,
+        });
+    }
+
+    // Apply overrides: if the user edited the preview, replace node fields
+    if let Some(ref ov) = overrides {
+        for (idx, node) in nodes.iter_mut().enumerate() {
+            if let Some(ov_dev) = ov.devices.iter().find(|d| d.index == idx) {
+                node.hostname = ov_dev.hostname.clone();
+                node.loopback = ov_dev.loopback.clone();
+                node.asn = ov_dev.asn;
+                node.mgmt_ip = ov_dev.mgmt_ip.clone();
+                if let Some(rp) = ov_dev.rack_position {
+                    node.rack_position = Some(rp);
+                }
+                // Resolve rack reassignment: map preview rack_index to actual DB rack IDs
+                if let Some(ri) = ov_dev.rack_index {
+                    if let Some(&(h, r, rk)) = all_racks.get(ri) {
+                        node.hall_id = Some(h);
+                        node.row_id = Some(r);
+                        node.rack_id = Some(rk);
+                    }
+                } else {
+                    // User unassigned from rack
+                    node.hall_id = None;
+                    node.row_id = None;
+                    node.rack_id = None;
+                    node.rack_position = None;
+                }
+            }
+        }
+    }
+
     // Create device records + collect results
     let mut result_devices = Vec::new();
     let mut created_ids: Vec<(i64, VNode)> = Vec::new();
@@ -336,7 +866,7 @@ pub async fn build_virtual_clos(
             config_template: role_templates.get(&node.role).cloned().unwrap_or_default(),
             ssh_user: Some("admin".to_string()),
             ssh_pass: Some("admin".to_string()),
-            topology_id: Some(topo_id_str.clone()),
+            topology_id: Some(topo_id),
             topology_role: Some(node.role.clone()),
             device_type: node.device_type.clone(),
             hall_id: node.hall_id.clone(),
@@ -374,7 +904,7 @@ pub async fn build_virtual_clos(
                         }
                     }
                 }
-                result_devices.push(ClosLabDevice {
+                result_devices.push(TopologyBuildDevice {
                     hostname: node.hostname.clone(),
                     role: node.role.to_string(),
                     mac: mac.clone(),
@@ -488,156 +1018,329 @@ pub async fn build_virtual_clos(
         .map(|m| (m.model.clone(), get_ports_by_min_speed(&m.layout, 100_000)))
         .collect();
 
-    // Split spine 100G ports: first 2/3 for leaf-facing, last 1/3 for uplinks
+    // Split spine 100G ports: SS-aware split matching preview
     let spine_all_ports = model_100g_ports.get(&spine_model).cloned().unwrap_or_default();
-    let spine_leaf_port_count = (spine_all_ports.len() * 2 + 2) / 3; // ceil(2/3)
+    let spines_per_pod = spine_count; // original spine_count = spines per pod
+    let leaves_per_pod = leaf_count;  // original leaf_count = leaves per pod
+    let (spine_leaf_port_count, spine_uplink_ports) = if ss_enabled {
+        let needed_leaf = leaves_per_pod * links_per_leaf;
+        let uplinks: Vec<String> = spine_all_ports.iter().skip(needed_leaf).cloned().collect();
+        (needed_leaf, uplinks)
+    } else {
+        let lpc = (spine_all_ports.len() * 2 + 2) / 3;
+        let uplinks: Vec<String> = spine_all_ports.iter().skip(lpc).cloned().collect();
+        (lpc, uplinks)
+    };
     let spine_leaf_ports: Vec<String> = spine_all_ports.iter().take(spine_leaf_port_count).cloned().collect();
-    let spine_uplink_ports: Vec<String> = spine_all_ports.iter().skip(spine_leaf_port_count).cloned().collect();
 
-    for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
-        for (li, (leaf_device_id, leaf)) in leaves.iter().enumerate() {
-            for link in 0..links_per_leaf as u32 {
-                // Allocate a /31 from IPAM
-                let alloc_req = crate::models::NextAvailablePrefixRequest {
-                    prefix_length: 31,
-                    description: Some(format!("{} <-> {} link {}", spine.hostname, leaf.hostname, link + 1)),
-                    status: "active".to_string(),
-                    datacenter_id: None,
-                };
-                let subnet = state.store.next_available_ipam_prefix(p2p_pool.id, &alloc_req).await
-                    .map_err(|e| ApiError::internal(format!("Failed to allocate /31: {}", e)))?;
+    for pod in 0..pod_count {
+        let pod_spine_start = pod * spines_per_pod;
+        let pod_leaf_start = pod * leaves_per_pod;
+        for si_local in 0..spines_per_pod {
+            let si = pod_spine_start + si_local;
+            let (spine_device_id, spine) = &spines[si];
+            for li_local in 0..leaves_per_pod {
+                let li = pod_leaf_start + li_local;
+                let (leaf_device_id, leaf) = &leaves[li];
+                for link in 0..links_per_leaf as u32 {
+                    // Allocate a /31 from IPAM
+                    let alloc_req = crate::models::NextAvailablePrefixRequest {
+                        prefix_length: 31,
+                        description: Some(format!("{} <-> {} link {}", spine.hostname, leaf.hostname, link + 1)),
+                        status: "active".to_string(),
+                        datacenter_id: None,
+                    };
+                    let subnet = state.store.next_available_ipam_prefix(p2p_pool.id, &alloc_req).await
+                        .map_err(|e| ApiError::internal(format!("Failed to allocate /31: {}", e)))?;
 
-                let net = subnet.network_int as u32;
-                let spine_ip = crate::utils::u32_to_ipv4(net);       // even (network)
-                let leaf_ip = crate::utils::u32_to_ipv4(net + 1);    // odd (broadcast)
+                    let net = subnet.network_int as u32;
+                    let spine_ip = crate::utils::u32_to_ipv4(net);       // even (network)
+                    let leaf_ip = crate::utils::u32_to_ipv4(net + 1);    // odd (broadcast)
 
-                // Reserve spine-side IP address in IPAM (spine uses first 2/3 of 100G ports for leaves)
-                let spine_port_idx = li * links_per_leaf + link as usize;
-                let spine_if_name = spine_leaf_ports.get(spine_port_idx).cloned()
-                    .unwrap_or_else(|| format!("Ethernet{}", spine_port_idx + 1));
-                let spine_ip_req = crate::models::CreateIpamIpAddressRequest {
-                    address: spine_ip.clone(),
-                    prefix_id: subnet.id,
-                    description: Some(format!("{} {} -> {}", spine.hostname, spine_if_name, leaf.hostname)),
-                    status: "active".to_string(),
-                    role_ids: vec![],
-                    dns_name: None,
-                    device_id: Some(*spine_device_id),
-                    interface_name: Some(spine_if_name.clone()),
-                    vrf_id: None,
-                };
-                if let Err(e) = state.store.create_ipam_ip_address(&spine_ip_req).await {
-                    tracing::warn!("Failed to reserve P2P IP {} for {}: {}", spine_ip, spine.hostname, e);
+                    // Reserve spine-side IP address in IPAM (within-pod indexing for port names)
+                    let spine_port_idx = li_local * links_per_leaf + link as usize;
+                    let spine_if_name = spine_leaf_ports.get(spine_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", spine_port_idx + 1));
+                    let spine_ip_req = crate::models::CreateIpamIpAddressRequest {
+                        address: spine_ip.clone(),
+                        prefix_id: subnet.id,
+                        description: Some(format!("{} {} -> {}", spine.hostname, spine_if_name, leaf.hostname)),
+                        status: "active".to_string(),
+                        role_ids: vec![],
+                        dns_name: None,
+                        device_id: Some(*spine_device_id),
+                        interface_name: Some(spine_if_name.clone()),
+                        vrf_id: None,
+                    };
+                    if let Err(e) = state.store.create_ipam_ip_address(&spine_ip_req).await {
+                        tracing::warn!("Failed to reserve P2P IP {} for {}: {}", spine_ip, spine.hostname, e);
+                    }
+
+                    // Reserve leaf-side IP address in IPAM (within-pod indexing for port names)
+                    let leaf_port_idx = si_local * links_per_leaf + link as usize;
+                    let leaf_100g = model_100g_ports.get(&leaf.model).map(|p| p.as_slice()).unwrap_or(&[]);
+                    let leaf_if_name = leaf_100g.get(leaf_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", leaf_port_idx + 1));
+                    // Extract port number from the resolved port name for peer variable keys
+                    let leaf_peer_idx: usize = leaf_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
+                        .parse().unwrap_or(leaf_port_idx + 1);
+                    let leaf_ip_req = crate::models::CreateIpamIpAddressRequest {
+                        address: leaf_ip.clone(),
+                        prefix_id: subnet.id,
+                        description: Some(format!("{} {} -> {}", leaf.hostname, leaf_if_name, spine.hostname)),
+                        status: "active".to_string(),
+                        role_ids: vec![],
+                        dns_name: None,
+                        device_id: Some(*leaf_device_id),
+                        interface_name: Some(leaf_if_name),
+                        vrf_id: None,
+                    };
+                    if let Err(e) = state.store.create_ipam_ip_address(&leaf_ip_req).await {
+                        tracing::warn!("Failed to reserve P2P IP {} for {}: {}", leaf_ip, leaf.hostname, e);
+                    }
+
+                    // Spine peer index: extract port number from resolved port name
+                    let spine_peer_idx: usize = spine_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
+                        .parse().unwrap_or(spine_port_idx + 1);
+                    spine_vars[si].push((spine_peer_idx, leaf_ip.clone(), leaf.asn.to_string(), leaf.hostname.clone(), spine_ip.clone()));
+                    leaf_vars[li].push((leaf_peer_idx, spine_ip.clone(), spine.asn.to_string(), spine.hostname.clone(), leaf_ip.clone()));
+
+                    fabric_links.push(format!(
+                        "{} ({}) <-> {} ({}) [{}]",
+                        spine.hostname, spine_ip, leaf.hostname, leaf_ip, subnet.prefix
+                    ));
                 }
-
-                // Reserve leaf-side IP address in IPAM (leaf uses 100G ports for spine uplinks)
-                let leaf_port_idx = si * links_per_leaf + link as usize;
-                let leaf_100g = model_100g_ports.get(&leaf.model).map(|p| p.as_slice()).unwrap_or(&[]);
-                let leaf_if_name = leaf_100g.get(leaf_port_idx).cloned()
-                    .unwrap_or_else(|| format!("Ethernet{}", leaf_port_idx + 1));
-                // Extract port number from the resolved port name for peer variable keys
-                let leaf_peer_idx: usize = leaf_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
-                    .parse().unwrap_or(leaf_port_idx + 1);
-                let leaf_ip_req = crate::models::CreateIpamIpAddressRequest {
-                    address: leaf_ip.clone(),
-                    prefix_id: subnet.id,
-                    description: Some(format!("{} {} -> {}", leaf.hostname, leaf_if_name, spine.hostname)),
-                    status: "active".to_string(),
-                    role_ids: vec![],
-                    dns_name: None,
-                    device_id: Some(*leaf_device_id),
-                    interface_name: Some(leaf_if_name),
-                    vrf_id: None,
-                };
-                if let Err(e) = state.store.create_ipam_ip_address(&leaf_ip_req).await {
-                    tracing::warn!("Failed to reserve P2P IP {} for {}: {}", leaf_ip, leaf.hostname, e);
-                }
-
-                // Spine peer index: extract port number from resolved port name
-                let spine_peer_idx: usize = spine_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
-                    .parse().unwrap_or(spine_port_idx + 1);
-                spine_vars[si].push((spine_peer_idx, leaf_ip.clone(), leaf.asn.to_string(), leaf.hostname.clone(), spine_ip.clone()));
-                leaf_vars[li].push((leaf_peer_idx, spine_ip.clone(), spine.asn.to_string(), spine.hostname.clone(), leaf_ip.clone()));
-
-                fabric_links.push(format!(
-                    "{} ({}) <-> {} ({}) [{}]",
-                    spine.hostname, spine_ip, leaf.hostname, leaf_ip, subnet.prefix
-                ));
             }
         }
     }
 
-    // Build uplink fabric links: each external device connects to every spine
-    // with uplinks_per_spine links per spine
-    for (ei, (ext_device_id, ext)) in externals.iter().enumerate() {
+    // Super-spine vars for BGP
+    let super_spines: Vec<_> = created_ids.iter().filter(|(_, n)| n.role == "super-spine").collect();
+    let mut ss_vars: Vec<Vec<(usize, String, String, String, String)>> = vec![Vec::new(); super_spines.len()];
+
+    if ss_enabled {
+        // Spine-to-super-spine links
+        let ss_all_ports = model_100g_ports.get(&ss_model_name).cloned().unwrap_or_default();
+        let ss_downlink_count = total_spines * spine_to_ss_ratio;
+
         for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
-            for link in 0..uplinks_per_spine {
-                let alloc_req = crate::models::NextAvailablePrefixRequest {
-                    prefix_length: 31,
-                    description: Some(format!("{} <-> {} uplink {}", ext.hostname, spine.hostname, link + 1)),
-                    status: "active".to_string(),
-                    datacenter_id: None,
-                };
-                let subnet = state.store.next_available_ipam_prefix(p2p_pool.id, &alloc_req).await
-                    .map_err(|e| ApiError::internal(format!("Failed to allocate uplink /31: {}", e)))?;
+            for (ssi, (ss_device_id, ss)) in super_spines.iter().enumerate() {
+                for link in 0..spine_to_ss_ratio {
+                    // Allocate /31 from IPAM
+                    let alloc_req = crate::models::NextAvailablePrefixRequest {
+                        prefix_length: 31,
+                        description: Some(format!("{} <-> {} ss-link {}", spine.hostname, ss.hostname, link + 1)),
+                        status: "active".to_string(),
+                        datacenter_id: None,
+                    };
+                    let subnet = state.store.next_available_ipam_prefix(p2p_pool.id, &alloc_req).await
+                        .map_err(|e| ApiError::internal(format!("Failed to allocate SS /31: {}", e)))?;
 
-                let net = subnet.network_int as u32;
-                let ext_ip = crate::utils::u32_to_ipv4(net);
-                let spine_ip = crate::utils::u32_to_ipv4(net + 1);
+                    let net = subnet.network_int as u32;
+                    let spine_ip = crate::utils::u32_to_ipv4(net);
+                    let ss_ip = crate::utils::u32_to_ipv4(net + 1);
 
-                // External device interface (100G ports from model layout)
-                let ext_port_idx = si * uplinks_per_spine + link;
-                let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
-                let ext_if_name = ext_100g.get(ext_port_idx).cloned()
-                    .unwrap_or_else(|| format!("Ethernet{}", ext_port_idx + 1));
-                let ext_ip_req = crate::models::CreateIpamIpAddressRequest {
-                    address: ext_ip.clone(),
-                    prefix_id: subnet.id,
-                    description: Some(format!("{} {} -> {}", ext.hostname, ext_if_name, spine.hostname)),
-                    status: "active".to_string(),
-                    role_ids: vec![],
-                    dns_name: None,
-                    device_id: Some(*ext_device_id),
-                    interface_name: Some(ext_if_name.clone()),
-                    vrf_id: None,
-                };
-                if let Err(e) = state.store.create_ipam_ip_address(&ext_ip_req).await {
-                    tracing::warn!("Failed to reserve uplink IP {} for {}: {}", ext_ip, ext.hostname, e);
+                    // Spine uplink port
+                    let spine_uplink_idx = ssi * spine_to_ss_ratio + link;
+                    let spine_if_name = spine_uplink_ports.get(spine_uplink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", spine_leaf_port_count + spine_uplink_idx + 1));
+
+                    // Reserve spine IP
+                    let spine_ip_req = crate::models::CreateIpamIpAddressRequest {
+                        address: spine_ip.clone(),
+                        prefix_id: subnet.id,
+                        description: Some(format!("{} {} -> {}", spine.hostname, spine_if_name, ss.hostname)),
+                        status: "active".to_string(),
+                        role_ids: vec![],
+                        dns_name: None,
+                        device_id: Some(*spine_device_id),
+                        interface_name: Some(spine_if_name.clone()),
+                        vrf_id: None,
+                    };
+                    if let Err(e) = state.store.create_ipam_ip_address(&spine_ip_req).await {
+                        tracing::warn!("Failed to reserve SS IP {} for {}: {}", spine_ip, spine.hostname, e);
+                    }
+
+                    // SS downlink port
+                    let ss_downlink_idx = si * spine_to_ss_ratio + link;
+                    let ss_if_name = ss_all_ports.get(ss_downlink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ss_downlink_idx + 1));
+
+                    // Reserve SS IP
+                    let ss_ip_req = crate::models::CreateIpamIpAddressRequest {
+                        address: ss_ip.clone(),
+                        prefix_id: subnet.id,
+                        description: Some(format!("{} {} -> {}", ss.hostname, ss_if_name, spine.hostname)),
+                        status: "active".to_string(),
+                        role_ids: vec![],
+                        dns_name: None,
+                        device_id: Some(*ss_device_id),
+                        interface_name: Some(ss_if_name.clone()),
+                        vrf_id: None,
+                    };
+                    if let Err(e) = state.store.create_ipam_ip_address(&ss_ip_req).await {
+                        tracing::warn!("Failed to reserve SS IP {} for {}: {}", ss_ip, ss.hostname, e);
+                    }
+
+                    // Peer vars
+                    let spine_peer_idx: usize = spine_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
+                        .parse().unwrap_or(spine_leaf_port_count + spine_uplink_idx + 1);
+                    spine_vars[si].push((spine_peer_idx, ss_ip.clone(), ss.asn.to_string(), ss.hostname.clone(), spine_ip.clone()));
+
+                    let ss_peer_idx: usize = ss_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
+                        .parse().unwrap_or(ss_downlink_idx + 1);
+                    ss_vars[ssi].push((ss_peer_idx, spine_ip.clone(), spine.asn.to_string(), spine.hostname.clone(), ss_ip.clone()));
+
+                    fabric_links.push(format!(
+                        "{} ({}) <-> {} ({}) [{}]",
+                        spine.hostname, spine_ip, ss.hostname, ss_ip, subnet.prefix
+                    ));
                 }
+            }
+        }
 
-                // Spine uplink interface (last 1/3 of 100G ports)
-                let spine_uplink_idx = ei * uplinks_per_spine + link;
-                let spine_if_name = spine_uplink_ports.get(spine_uplink_idx).cloned()
-                    .unwrap_or_else(|| format!("Ethernet{}", spine_leaf_port_count + spine_uplink_idx + 1));
-                let spine_ip_req = crate::models::CreateIpamIpAddressRequest {
-                    address: spine_ip.clone(),
-                    prefix_id: subnet.id,
-                    description: Some(format!("{} {} -> {}", spine.hostname, spine_if_name, ext.hostname)),
-                    status: "active".to_string(),
-                    role_ids: vec![],
-                    dns_name: None,
-                    device_id: Some(*spine_device_id),
-                    interface_name: Some(spine_if_name.clone()),
-                    vrf_id: None,
-                };
-                if let Err(e) = state.store.create_ipam_ip_address(&spine_ip_req).await {
-                    tracing::warn!("Failed to reserve uplink IP {} for {}: {}", spine_ip, spine.hostname, e);
+        // External-to-super-spine links
+        let ss_uplink_ports_vec: Vec<String> = ss_all_ports.iter().skip(ss_downlink_count).cloned().collect();
+        for (ei, (ext_device_id, ext)) in externals.iter().enumerate() {
+            for (ssi, (ss_device_id, ss)) in super_spines.iter().enumerate() {
+                for link in 0..uplinks_per_spine {
+                    let alloc_req = crate::models::NextAvailablePrefixRequest {
+                        prefix_length: 31,
+                        description: Some(format!("{} <-> {} uplink {}", ext.hostname, ss.hostname, link + 1)),
+                        status: "active".to_string(),
+                        datacenter_id: None,
+                    };
+                    let subnet = state.store.next_available_ipam_prefix(p2p_pool.id, &alloc_req).await
+                        .map_err(|e| ApiError::internal(format!("Failed to allocate ext-SS /31: {}", e)))?;
+
+                    let net = subnet.network_int as u32;
+                    let ext_ip = crate::utils::u32_to_ipv4(net);
+                    let ss_ip = crate::utils::u32_to_ipv4(net + 1);
+
+                    let ext_port_idx = ssi * uplinks_per_spine + link;
+                    let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
+                    let ext_if_name = ext_100g.get(ext_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ext_port_idx + 1));
+                    let ext_ip_req = crate::models::CreateIpamIpAddressRequest {
+                        address: ext_ip.clone(),
+                        prefix_id: subnet.id,
+                        description: Some(format!("{} {} -> {}", ext.hostname, ext_if_name, ss.hostname)),
+                        status: "active".to_string(),
+                        role_ids: vec![],
+                        dns_name: None,
+                        device_id: Some(*ext_device_id),
+                        interface_name: Some(ext_if_name.clone()),
+                        vrf_id: None,
+                    };
+                    if let Err(e) = state.store.create_ipam_ip_address(&ext_ip_req).await {
+                        tracing::warn!("Failed to reserve ext-SS IP {} for {}: {}", ext_ip, ext.hostname, e);
+                    }
+
+                    let ss_uplink_idx = ei * uplinks_per_spine + link;
+                    let ss_if_name = ss_uplink_ports_vec.get(ss_uplink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ss_downlink_count + ss_uplink_idx + 1));
+                    let ss_ip_req = crate::models::CreateIpamIpAddressRequest {
+                        address: ss_ip.clone(),
+                        prefix_id: subnet.id,
+                        description: Some(format!("{} {} -> {}", ss.hostname, ss_if_name, ext.hostname)),
+                        status: "active".to_string(),
+                        role_ids: vec![],
+                        dns_name: None,
+                        device_id: Some(*ss_device_id),
+                        interface_name: Some(ss_if_name.clone()),
+                        vrf_id: None,
+                    };
+                    if let Err(e) = state.store.create_ipam_ip_address(&ss_ip_req).await {
+                        tracing::warn!("Failed to reserve ext-SS IP {} for {}: {}", ss_ip, ss.hostname, e);
+                    }
+
+                    let ext_peer_idx: usize = ext_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
+                        .parse().unwrap_or(ext_port_idx + 1);
+                    external_vars[ei].push((ext_peer_idx, ss_ip.clone(), ss.asn.to_string(), ss.hostname.clone(), ext_ip.clone()));
+
+                    let ss_peer_idx: usize = ss_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
+                        .parse().unwrap_or(ss_downlink_count + ss_uplink_idx + 1);
+                    ss_vars[ssi].push((ss_peer_idx, ext_ip.clone(), ext.asn.to_string(), ext.hostname.clone(), ss_ip.clone()));
+
+                    fabric_links.push(format!(
+                        "{} ({}) <-> {} ({}) [{}]",
+                        ext.hostname, ext_ip, ss.hostname, ss_ip, subnet.prefix
+                    ));
                 }
+            }
+        }
+    } else {
+        // Original external-spine links (no super-spine)
+        for (ei, (ext_device_id, ext)) in externals.iter().enumerate() {
+            for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
+                for link in 0..uplinks_per_spine {
+                    let alloc_req = crate::models::NextAvailablePrefixRequest {
+                        prefix_length: 31,
+                        description: Some(format!("{} <-> {} uplink {}", ext.hostname, spine.hostname, link + 1)),
+                        status: "active".to_string(),
+                        datacenter_id: None,
+                    };
+                    let subnet = state.store.next_available_ipam_prefix(p2p_pool.id, &alloc_req).await
+                        .map_err(|e| ApiError::internal(format!("Failed to allocate uplink /31: {}", e)))?;
 
-                // Spine uplink peer vars (from resolved uplink port name)
-                let spine_uplink_peer_idx: usize = spine_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
-                    .parse().unwrap_or(spine_leaf_port_count + spine_uplink_idx + 1);
-                spine_vars[si].push((spine_uplink_peer_idx, ext_ip.clone(), ext.asn.to_string(), ext.hostname.clone(), spine_ip.clone()));
+                    let net = subnet.network_int as u32;
+                    let ext_ip = crate::utils::u32_to_ipv4(net);
+                    let spine_ip = crate::utils::u32_to_ipv4(net + 1);
 
-                // External peer vars: extract port number from resolved port name
-                let ext_peer_idx: usize = ext_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
-                    .parse().unwrap_or(ext_port_idx + 1);
-                external_vars[ei].push((ext_peer_idx, spine_ip.clone(), spine.asn.to_string(), spine.hostname.clone(), ext_ip.clone()));
+                    // External device interface (100G ports from model layout)
+                    let ext_port_idx = si * uplinks_per_spine + link;
+                    let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
+                    let ext_if_name = ext_100g.get(ext_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ext_port_idx + 1));
+                    let ext_ip_req = crate::models::CreateIpamIpAddressRequest {
+                        address: ext_ip.clone(),
+                        prefix_id: subnet.id,
+                        description: Some(format!("{} {} -> {}", ext.hostname, ext_if_name, spine.hostname)),
+                        status: "active".to_string(),
+                        role_ids: vec![],
+                        dns_name: None,
+                        device_id: Some(*ext_device_id),
+                        interface_name: Some(ext_if_name.clone()),
+                        vrf_id: None,
+                    };
+                    if let Err(e) = state.store.create_ipam_ip_address(&ext_ip_req).await {
+                        tracing::warn!("Failed to reserve uplink IP {} for {}: {}", ext_ip, ext.hostname, e);
+                    }
 
-                fabric_links.push(format!(
-                    "{} ({}) <-> {} ({}) [{}]",
-                    ext.hostname, ext_ip, spine.hostname, spine_ip, subnet.prefix
-                ));
+                    // Spine uplink interface (last 1/3 of 100G ports)
+                    let spine_uplink_idx = ei * uplinks_per_spine + link;
+                    let spine_if_name = spine_uplink_ports.get(spine_uplink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", spine_leaf_port_count + spine_uplink_idx + 1));
+                    let spine_ip_req = crate::models::CreateIpamIpAddressRequest {
+                        address: spine_ip.clone(),
+                        prefix_id: subnet.id,
+                        description: Some(format!("{} {} -> {}", spine.hostname, spine_if_name, ext.hostname)),
+                        status: "active".to_string(),
+                        role_ids: vec![],
+                        dns_name: None,
+                        device_id: Some(*spine_device_id),
+                        interface_name: Some(spine_if_name.clone()),
+                        vrf_id: None,
+                    };
+                    if let Err(e) = state.store.create_ipam_ip_address(&spine_ip_req).await {
+                        tracing::warn!("Failed to reserve uplink IP {} for {}: {}", spine_ip, spine.hostname, e);
+                    }
+
+                    // Spine uplink peer vars (from resolved uplink port name)
+                    let spine_uplink_peer_idx: usize = spine_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
+                        .parse().unwrap_or(spine_leaf_port_count + spine_uplink_idx + 1);
+                    spine_vars[si].push((spine_uplink_peer_idx, ext_ip.clone(), ext.asn.to_string(), ext.hostname.clone(), spine_ip.clone()));
+
+                    // External peer vars: extract port number from resolved port name
+                    let ext_peer_idx: usize = ext_if_name.trim_start_matches(|c: char| !c.is_ascii_digit())
+                        .parse().unwrap_or(ext_port_idx + 1);
+                    external_vars[ei].push((ext_peer_idx, spine_ip.clone(), spine.asn.to_string(), spine.hostname.clone(), ext_ip.clone()));
+
+                    fabric_links.push(format!(
+                        "{} ({}) <-> {} ({}) [{}]",
+                        ext.hostname, ext_ip, spine.hostname, spine_ip, subnet.prefix
+                    ));
+                }
             }
         }
     }
@@ -693,103 +1396,265 @@ pub async fn build_virtual_clos(
         }
     }
 
+    // Set variables for super-spines
+    for (ssi, (device_id, node)) in super_spines.iter().enumerate() {
+        let mut entries = vec![
+            (*device_id, "Loopback".to_string(), node.loopback.clone()),
+            (*device_id, "ASN".to_string(), node.asn.to_string()),
+        ];
+        for (idx, peer_ip, peer_asn, peer_name, local_addr) in &ss_vars[ssi] {
+            entries.push((*device_id, format!("Peer{}", idx), peer_ip.clone()));
+            entries.push((*device_id, format!("Peer{}ASN", idx), peer_asn.clone()));
+            entries.push((*device_id, format!("Peer{}Name", idx), peer_name.clone()));
+            entries.push((*device_id, format!("Peer{}Addr", idx), local_addr.clone()));
+        }
+        if let Err(e) = state.store.bulk_set_device_variables(&entries).await {
+            tracing::warn!("Failed to set variables for {}: {}", node.hostname, e);
+        }
+    }
+
+    // Helper: find rack_index from all_racks by rack_id
+    let find_rack_index = |rack_id: Option<i64>| -> Option<usize> {
+        rack_id.and_then(|rid| all_racks.iter().position(|&(_, _, rk)| rk == rid))
+    };
+
     // Create port assignments for all fabric links
     // Each spine↔leaf link creates a port assignment on both sides, routed through the leaf row's patch panel
     let mut pp_port_counters: HashMap<i64, usize> = HashMap::new();
-    for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
-        for (li, (leaf_device_id, leaf)) in leaves.iter().enumerate() {
-            // Find the patch panel for the leaf's row
-            let leaf_pp_id = leaf.row_id.and_then(|rid| patch_panels.get(&rid)).copied();
-            for link in 0..links_per_leaf as u32 {
-                let spine_if = format!("Ethernet{}", li * links_per_leaf + link as usize + 1);
-                let leaf_port_idx = si * links_per_leaf + link as usize;
-                let leaf_100g = model_100g_ports.get(&leaf.model).map(|p| p.as_slice()).unwrap_or(&[]);
-                let leaf_if = leaf_100g.get(leaf_port_idx).cloned()
-                    .unwrap_or_else(|| format!("Ethernet{}", leaf_port_idx + 1));
-                // Allocate patch panel ports in pairs: Port N (spine side), Port N+1 (leaf side)
-                let (pp_a_id, pp_a_port, pp_b_id, pp_b_port) = if let Some(pp_id) = leaf_pp_id {
-                    let port_num = pp_port_counters.entry(pp_id).or_insert(0);
-                    let a_port_num = *port_num + 1;
-                    let b_port_num = *port_num + 2;
-                    *port_num += 2;
-                    (Some(pp_id), Some(format!("Port {}", a_port_num)), Some(pp_id), Some(format!("Port {}", b_port_num)))
-                } else {
-                    (None, None, None, None)
-                };
-                // Spine-side port assignment
-                let spine_pa = crate::models::SetPortAssignmentRequest {
-                    port_name: spine_if.clone(),
-                    remote_device_id: Some(*leaf_device_id),
-                    remote_port_name: leaf_if.clone(),
-                    description: Some(format!("{} <-> {} link {}", spine.hostname, leaf.hostname, link + 1)),
-                    patch_panel_a_id: pp_a_id,
-                    patch_panel_a_port: pp_a_port.clone(),
-                    patch_panel_b_id: pp_b_id,
-                    patch_panel_b_port: pp_b_port.clone(),
-                    vrf_id: None,
-                };
-                if let Err(e) = state.store.set_port_assignment(*spine_device_id, &spine_pa).await {
-                    tracing::warn!("Failed to create port assignment {} on {}: {}", spine_if, spine.hostname, e);
-                }
-                // Leaf-side port assignment (reverse direction, swap A/B patch panel ports)
-                let leaf_pa = crate::models::SetPortAssignmentRequest {
-                    port_name: leaf_if,
-                    remote_device_id: Some(*spine_device_id),
-                    remote_port_name: spine_if,
-                    description: Some(format!("{} <-> {} link {}", leaf.hostname, spine.hostname, link + 1)),
-                    patch_panel_a_id: pp_b_id,
-                    patch_panel_a_port: pp_b_port,
-                    patch_panel_b_id: pp_a_id,
-                    patch_panel_b_port: pp_a_port,
-                    vrf_id: None,
-                };
-                if let Err(e) = state.store.set_port_assignment(*leaf_device_id, &leaf_pa).await {
-                    tracing::warn!("Failed to create port assignment {} on {}: {}", leaf_pa.port_name, leaf.hostname, e);
+    for pod in 0..pod_count {
+        let pod_spine_start = pod * spines_per_pod;
+        let pod_leaf_start = pod * leaves_per_pod;
+        for si_local in 0..spines_per_pod {
+            let si = pod_spine_start + si_local;
+            let (spine_device_id, spine) = &spines[si];
+            for li_local in 0..leaves_per_pod {
+                let li = pod_leaf_start + li_local;
+                let (leaf_device_id, leaf) = &leaves[li];
+                // Find the patch panel for the leaf's row
+                let leaf_pp_id = leaf.row_id.and_then(|rid| patch_panels.get(&rid)).copied();
+                for link in 0..links_per_leaf as u32 {
+                    let spine_port_idx = li_local * links_per_leaf + link as usize;
+                    let spine_if = spine_leaf_ports.get(spine_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", spine_port_idx + 1));
+                    let leaf_port_idx = si_local * links_per_leaf + link as usize;
+                    let leaf_100g = model_100g_ports.get(&leaf.model).map(|p| p.as_slice()).unwrap_or(&[]);
+                    let leaf_if = leaf_100g.get(leaf_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", leaf_port_idx + 1));
+                    // Allocate patch panel ports in pairs: Port N (spine side), Port N+1 (leaf side)
+                    let (pp_a_id, pp_a_port, pp_b_id, pp_b_port) = if let Some(pp_id) = leaf_pp_id {
+                        let port_num = pp_port_counters.entry(pp_id).or_insert(0);
+                        let a_port_num = *port_num + 1;
+                        let b_port_num = *port_num + 2;
+                        *port_num += 2;
+                        (Some(pp_id), Some(format!("Port {}", a_port_num)), Some(pp_id), Some(format!("Port {}", b_port_num)))
+                    } else {
+                        (None, None, None, None)
+                    };
+                    let cable_len = estimate_cable_length(
+                        find_rack_index(spine.rack_id),
+                        spine.rack_position,
+                        find_rack_index(leaf.rack_id),
+                        leaf.rack_position,
+                        racks_per_row,
+                        row_spacing_cm,
+                        cable_slack_percent,
+                    );
+                    // Spine-side port assignment
+                    let spine_pa = crate::models::SetPortAssignmentRequest {
+                        port_name: spine_if.clone(),
+                        remote_device_id: Some(*leaf_device_id),
+                        remote_port_name: leaf_if.clone(),
+                        description: Some(format!("{} <-> {} link {}", spine.hostname, leaf.hostname, link + 1)),
+                        patch_panel_a_id: pp_a_id,
+                        patch_panel_a_port: pp_a_port.clone(),
+                        patch_panel_b_id: pp_b_id,
+                        patch_panel_b_port: pp_b_port.clone(),
+                        vrf_id: None,
+                        cable_length_meters: cable_len,
+                    };
+                    if let Err(e) = state.store.set_port_assignment(*spine_device_id, &spine_pa).await {
+                        tracing::warn!("Failed to create port assignment {} on {}: {}", spine_if, spine.hostname, e);
+                    }
+                    // Leaf-side port assignment (reverse direction, swap A/B patch panel ports)
+                    let leaf_pa = crate::models::SetPortAssignmentRequest {
+                        port_name: leaf_if,
+                        remote_device_id: Some(*spine_device_id),
+                        remote_port_name: spine_if,
+                        description: Some(format!("{} <-> {} link {}", leaf.hostname, spine.hostname, link + 1)),
+                        patch_panel_a_id: pp_b_id,
+                        patch_panel_a_port: pp_b_port,
+                        patch_panel_b_id: pp_a_id,
+                        patch_panel_b_port: pp_a_port,
+                        vrf_id: None,
+                        cable_length_meters: cable_len,
+                    };
+                    if let Err(e) = state.store.set_port_assignment(*leaf_device_id, &leaf_pa).await {
+                        tracing::warn!("Failed to create port assignment {} on {}: {}", leaf_pa.port_name, leaf.hostname, e);
+                    }
                 }
             }
         }
     }
 
-    // External↔spine port assignments (no patch panel — externals are in spine rack)
-    for (ei, (ext_device_id, ext)) in externals.iter().enumerate() {
+    // External↔spine or External↔SS port assignments (no patch panel — externals are in spine rack)
+    if ss_enabled {
+        // Spine↔SS port assignments
         for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
-            for link in 0..uplinks_per_spine {
-                let ext_port_idx = si * uplinks_per_spine + link;
-                let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
-                let ext_if = ext_100g.get(ext_port_idx).cloned()
-                    .unwrap_or_else(|| format!("Ethernet{}", ext_port_idx + 1));
-                let spine_uplink_idx = ei * uplinks_per_spine + link;
-                let spine_if = spine_uplink_ports.get(spine_uplink_idx).cloned()
-                    .unwrap_or_else(|| format!("Ethernet{}", spine_leaf_port_count + spine_uplink_idx + 1));
-                // External-side
-                let ext_pa = crate::models::SetPortAssignmentRequest {
-                    port_name: ext_if.clone(),
-                    remote_device_id: Some(*spine_device_id),
-                    remote_port_name: spine_if.clone(),
-                    description: Some(format!("{} <-> {} uplink {}", ext.hostname, spine.hostname, link + 1)),
-                    patch_panel_a_id: None,
-                    patch_panel_a_port: None,
-                    patch_panel_b_id: None,
-                    patch_panel_b_port: None,
-                    vrf_id: None,
-                };
-                if let Err(e) = state.store.set_port_assignment(*ext_device_id, &ext_pa).await {
-                    tracing::warn!("Failed to create port assignment {} on {}: {}", ext_if, ext.hostname, e);
+            for (ssi, (ss_device_id, ss)) in super_spines.iter().enumerate() {
+                for link in 0..spine_to_ss_ratio {
+                    let spine_uplink_idx = ssi * spine_to_ss_ratio + link;
+                    let spine_if = spine_uplink_ports.get(spine_uplink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", spine_leaf_port_count + spine_uplink_idx + 1));
+                    let ss_all_ports = model_100g_ports.get(&ss_model_name).cloned().unwrap_or_default();
+                    let ss_downlink_idx = si * spine_to_ss_ratio + link;
+                    let ss_if = ss_all_ports.get(ss_downlink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ss_downlink_idx + 1));
+
+                    let cable_len = estimate_cable_length(
+                        find_rack_index(spine.rack_id), spine.rack_position,
+                        find_rack_index(ss.rack_id), ss.rack_position,
+                        racks_per_row, row_spacing_cm, cable_slack_percent,
+                    );
+
+                    let spine_pa = crate::models::SetPortAssignmentRequest {
+                        port_name: spine_if.clone(),
+                        remote_device_id: Some(*ss_device_id),
+                        remote_port_name: ss_if.clone(),
+                        description: Some(format!("{} <-> {} ss-link {}", spine.hostname, ss.hostname, link + 1)),
+                        patch_panel_a_id: None,
+                        patch_panel_a_port: None,
+                        patch_panel_b_id: None,
+                        patch_panel_b_port: None,
+                        vrf_id: None,
+                        cable_length_meters: cable_len,
+                    };
+                    if let Err(e) = state.store.set_port_assignment(*spine_device_id, &spine_pa).await {
+                        tracing::warn!("Failed to create SS port assignment on {}: {}", spine.hostname, e);
+                    }
+                    let ss_pa = crate::models::SetPortAssignmentRequest {
+                        port_name: ss_if,
+                        remote_device_id: Some(*spine_device_id),
+                        remote_port_name: spine_if,
+                        description: Some(format!("{} <-> {} ss-link {}", ss.hostname, spine.hostname, link + 1)),
+                        patch_panel_a_id: None,
+                        patch_panel_a_port: None,
+                        patch_panel_b_id: None,
+                        patch_panel_b_port: None,
+                        vrf_id: None,
+                        cable_length_meters: cable_len,
+                    };
+                    if let Err(e) = state.store.set_port_assignment(*ss_device_id, &ss_pa).await {
+                        tracing::warn!("Failed to create SS port assignment on {}: {}", ss.hostname, e);
+                    }
                 }
-                // Spine-side (uplink)
-                let spine_pa = crate::models::SetPortAssignmentRequest {
-                    port_name: spine_if.clone(),
-                    remote_device_id: Some(*ext_device_id),
-                    remote_port_name: ext_if,
-                    description: Some(format!("{} <-> {} uplink {}", spine.hostname, ext.hostname, link + 1)),
-                    patch_panel_a_id: None,
-                    patch_panel_a_port: None,
-                    patch_panel_b_id: None,
-                    patch_panel_b_port: None,
-                    vrf_id: None,
-                };
-                if let Err(e) = state.store.set_port_assignment(*spine_device_id, &spine_pa).await {
-                    tracing::warn!("Failed to create port assignment {} on {}: {}", spine_if, spine.hostname, e);
+            }
+        }
+
+        // External↔SS port assignments
+        let ss_all_ports = model_100g_ports.get(&ss_model_name).cloned().unwrap_or_default();
+        let ss_downlink_count = total_spines * spine_to_ss_ratio;
+        let ss_uplink_ports_vec: Vec<String> = ss_all_ports.iter().skip(ss_downlink_count).cloned().collect();
+        for (ei, (ext_device_id, ext)) in externals.iter().enumerate() {
+            for (ssi, (ss_device_id, ss)) in super_spines.iter().enumerate() {
+                for link in 0..uplinks_per_spine {
+                    let ext_port_idx = ssi * uplinks_per_spine + link;
+                    let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
+                    let ext_if = ext_100g.get(ext_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ext_port_idx + 1));
+                    let ss_uplink_idx = ei * uplinks_per_spine + link;
+                    let ss_if = ss_uplink_ports_vec.get(ss_uplink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ss_downlink_count + ss_uplink_idx + 1));
+
+                    let cable_len = estimate_cable_length(
+                        find_rack_index(ext.rack_id), ext.rack_position,
+                        find_rack_index(ss.rack_id), ss.rack_position,
+                        racks_per_row, row_spacing_cm, cable_slack_percent,
+                    );
+
+                    let ext_pa = crate::models::SetPortAssignmentRequest {
+                        port_name: ext_if.clone(),
+                        remote_device_id: Some(*ss_device_id),
+                        remote_port_name: ss_if.clone(),
+                        description: Some(format!("{} <-> {} uplink {}", ext.hostname, ss.hostname, link + 1)),
+                        patch_panel_a_id: None,
+                        patch_panel_a_port: None,
+                        patch_panel_b_id: None,
+                        patch_panel_b_port: None,
+                        vrf_id: None,
+                        cable_length_meters: cable_len,
+                    };
+                    if let Err(e) = state.store.set_port_assignment(*ext_device_id, &ext_pa).await {
+                        tracing::warn!("Failed to create ext-SS port assignment on {}: {}", ext.hostname, e);
+                    }
+                    let ss_pa = crate::models::SetPortAssignmentRequest {
+                        port_name: ss_if,
+                        remote_device_id: Some(*ext_device_id),
+                        remote_port_name: ext_if,
+                        description: Some(format!("{} <-> {} uplink {}", ss.hostname, ext.hostname, link + 1)),
+                        patch_panel_a_id: None,
+                        patch_panel_a_port: None,
+                        patch_panel_b_id: None,
+                        patch_panel_b_port: None,
+                        vrf_id: None,
+                        cable_length_meters: cable_len,
+                    };
+                    if let Err(e) = state.store.set_port_assignment(*ss_device_id, &ss_pa).await {
+                        tracing::warn!("Failed to create ext-SS port assignment on {}: {}", ss.hostname, e);
+                    }
+                }
+            }
+        }
+    } else {
+        // Original external↔spine port assignments (no super-spine)
+        for (ei, (ext_device_id, ext)) in externals.iter().enumerate() {
+            for (si, (spine_device_id, spine)) in spines.iter().enumerate() {
+                for link in 0..uplinks_per_spine {
+                    let ext_port_idx = si * uplinks_per_spine + link;
+                    let ext_100g = model_100g_ports.get(&ext.model).map(|p| p.as_slice()).unwrap_or(&[]);
+                    let ext_if = ext_100g.get(ext_port_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", ext_port_idx + 1));
+                    let spine_uplink_idx = ei * uplinks_per_spine + link;
+                    let spine_if = spine_uplink_ports.get(spine_uplink_idx).cloned()
+                        .unwrap_or_else(|| format!("Ethernet{}", spine_leaf_port_count + spine_uplink_idx + 1));
+
+                    let cable_len = estimate_cable_length(
+                        find_rack_index(ext.rack_id), ext.rack_position,
+                        find_rack_index(spine.rack_id), spine.rack_position,
+                        racks_per_row, row_spacing_cm, cable_slack_percent,
+                    );
+
+                    // External-side
+                    let ext_pa = crate::models::SetPortAssignmentRequest {
+                        port_name: ext_if.clone(),
+                        remote_device_id: Some(*spine_device_id),
+                        remote_port_name: spine_if.clone(),
+                        description: Some(format!("{} <-> {} uplink {}", ext.hostname, spine.hostname, link + 1)),
+                        patch_panel_a_id: None,
+                        patch_panel_a_port: None,
+                        patch_panel_b_id: None,
+                        patch_panel_b_port: None,
+                        vrf_id: None,
+                        cable_length_meters: cable_len,
+                    };
+                    if let Err(e) = state.store.set_port_assignment(*ext_device_id, &ext_pa).await {
+                        tracing::warn!("Failed to create port assignment {} on {}: {}", ext_if, ext.hostname, e);
+                    }
+                    // Spine-side (uplink)
+                    let spine_pa = crate::models::SetPortAssignmentRequest {
+                        port_name: spine_if.clone(),
+                        remote_device_id: Some(*ext_device_id),
+                        remote_port_name: ext_if,
+                        description: Some(format!("{} <-> {} uplink {}", spine.hostname, ext.hostname, link + 1)),
+                        patch_panel_a_id: None,
+                        patch_panel_a_port: None,
+                        patch_panel_b_id: None,
+                        patch_panel_b_port: None,
+                        vrf_id: None,
+                        cable_length_meters: cable_len,
+                    };
+                    if let Err(e) = state.store.set_port_assignment(*spine_device_id, &spine_pa).await {
+                        tracing::warn!("Failed to create port assignment {} on {}: {}", spine_if, spine.hostname, e);
+                    }
                 }
             }
         }
@@ -956,7 +1821,7 @@ pub async fn build_virtual_clos(
                                             config_template: role_templates.get(&node.role).cloned().unwrap_or_default(),
                                             ssh_user: Some("admin".to_string()),
                                             ssh_pass: Some("admin".to_string()),
-                                            topology_id: Some(topo_id_str.clone()),
+                                            topology_id: Some(topo_id),
                                             topology_role: Some(node.role.clone()),
                                             device_type: node.device_type.clone(),
                                             hall_id: node.hall_id.clone(),
@@ -1062,8 +1927,8 @@ pub async fn build_virtual_clos(
         }
     }
 
-    Ok(Json(ClosLabResponse {
-        topology_id: topo_id_str,
+    Ok(Json(TopologyBuildResponse {
+        topology_id: topo_id,
         topology_name: VIRTUAL_CLOS_TOPOLOGY_NAME.to_string(),
         devices: result_devices,
         fabric_links,
@@ -1192,8 +2057,7 @@ pub(super) async fn teardown_virtual_clos_inner(state: &Arc<AppState>) {
     let topos = state.store.list_topologies().await.unwrap_or_default();
     let vclos_topo = topos.iter().find(|t| t.name == VIRTUAL_CLOS_TOPOLOGY_NAME);
     if let Some(topo) = vclos_topo {
-        let topo_id_str = topo.id.to_string();
-        let deleted = state.store.delete_devices_by_topology(&topo_id_str).await.unwrap_or(0);
+        let deleted = state.store.delete_devices_by_topology(topo.id).await.unwrap_or(0);
         if deleted > 0 {
             tracing::info!("Deleted {} virtual CLOS devices", deleted);
         }

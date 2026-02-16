@@ -5,9 +5,8 @@ import type { DhcpOption } from '../types';
 /**
  * Default DHCP options for common ZTP scenarios
  */
-export const DEFAULT_DHCP_OPTIONS: Omit<DhcpOption, 'created_at' | 'updated_at'>[] = [
+export const DEFAULT_DHCP_OPTIONS: Omit<DhcpOption, 'id' | 'created_at' | 'updated_at'>[] = [
   {
-    id: 'tftp-server',
     option_number: 66,
     name: 'TFTP Server',
     value: '${tftp_server_ip}',
@@ -16,72 +15,58 @@ export const DEFAULT_DHCP_OPTIONS: Omit<DhcpOption, 'created_at' | 'updated_at'>
     enabled: true,
   },
   {
-    id: 'bootfile-cisco',
     option_number: 67,
     name: 'Cisco Bootfile',
     value: 'network-confg',
     type: 'string',
-    vendor_id: 'cisco',
     description: 'Cisco IOS config filename',
     enabled: true,
   },
   {
-    id: 'bootfile-arista',
     option_number: 67,
     name: 'Arista Bootfile',
     value: 'startup-config',
     type: 'string',
-    vendor_id: 'arista',
     description: 'Arista EOS config filename',
     enabled: true,
   },
   {
-    id: 'bootfile-juniper',
     option_number: 67,
     name: 'Juniper Bootfile',
     value: 'juniper.conf',
     type: 'string',
-    vendor_id: 'juniper',
     description: 'Juniper config filename',
     enabled: true,
   },
   {
-    id: 'tftp-cisco-150',
     option_number: 150,
     name: 'Cisco TFTP (Option 150)',
     value: '${tftp_server_ip}',
     type: 'ip',
-    vendor_id: 'cisco',
     description: 'Cisco-specific TFTP server option',
     enabled: true,
   },
   {
-    id: 'bootfile-frr',
     option_number: 67,
     name: 'FRR Bootfile',
     value: 'frr.conf',
     type: 'string',
-    vendor_id: 'frr',
     description: 'FRRouting config filename',
     enabled: true,
   },
   {
-    id: 'bootfile-gobgp',
     option_number: 67,
     name: 'GoBGP Bootfile',
     value: 'gobgpd.conf',
     type: 'string',
-    vendor_id: 'gobgp',
     description: 'GoBGP YAML config filename',
     enabled: true,
   },
   {
-    id: 'opengear-ztp',
     option_number: 43,
     name: 'OpenGear ZTP',
     value: '',
     type: 'hex',
-    vendor_id: 'opengear',
     description: 'OpenGear vendor-specific enrollment options',
     enabled: false,
   },
@@ -100,8 +85,7 @@ export const DHCP_OPTION_TYPES = [
 /**
  * Empty form data objects for various entity types
  */
-export const EMPTY_VENDOR_FORM = {
-  id: '',
+export const EMPTY_VENDOR_FORM: import('../types').VendorFormData = {
   name: '',
   backup_command: 'show running-config',
   deploy_command: '',
@@ -109,46 +93,42 @@ export const EMPTY_VENDOR_FORM = {
   ssh_port: 22,
   ssh_user: '',
   ssh_pass: '',
-  mac_prefixes: [] as string[],
+  mac_prefixes: [],
   vendor_class: '',
   default_template: '',
 };
 
-export const EMPTY_VENDOR_ACTION_FORM = {
-  id: '',
+export const EMPTY_VENDOR_ACTION_FORM: import('../types').VendorActionFormData = {
   vendor_id: '',
   label: '',
   command: '',
   sort_order: 0,
-  action_type: 'ssh' as const,
+  action_type: 'ssh',
   webhook_url: '',
-  webhook_method: 'POST' as const,
+  webhook_method: 'POST',
   webhook_headers: '{}',
   webhook_body: '',
   output_parser_id: '',
 };
 
-export const EMPTY_DHCP_OPTION_FORM = {
-  id: '',
+export const EMPTY_DHCP_OPTION_FORM: import('../types').DhcpOptionFormData = {
   option_number: 0,
   name: '',
   value: '',
-  type: 'string' as const,
+  type: 'string',
   vendor_id: '',
   description: '',
   enabled: true,
 };
 
-export const EMPTY_TEMPLATE_FORM = {
-  id: '',
+export const EMPTY_TEMPLATE_FORM: import('../types').TemplateFormData = {
   name: '',
   description: '',
   vendor_id: '',
   content: '',
 };
 
-export const EMPTY_TOPOLOGY_FORM = {
-  id: '',
+export const EMPTY_TOPOLOGY_FORM: import('../types').TopologyFormData = {
   name: '',
   description: '',
   region_id: '',

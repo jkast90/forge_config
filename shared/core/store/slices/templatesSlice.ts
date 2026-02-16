@@ -30,12 +30,12 @@ export const createTemplate = createAsyncThunk('templates/create', async (data: 
 
 export const updateTemplate = createAsyncThunk(
   'templates/update',
-  async ({ id, data }: { id: string; data: Partial<Template> }) => {
+  async ({ id, data }: { id: number | string; data: Partial<Template> }) => {
     return getServices().templates.update(id, data);
   }
 );
 
-export const deleteTemplate = createAsyncThunk('templates/delete', async (id: string) => {
+export const deleteTemplate = createAsyncThunk('templates/delete', async (id: number | string) => {
   await getServices().templates.remove(id);
   return id;
 });

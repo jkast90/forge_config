@@ -20,7 +20,7 @@ pub fn map_device_row(row: &SqliteRow) -> Device {
         config_template: row.get("config_template"),
         ssh_user: none_if_empty(row.get("ssh_user")),
         ssh_pass: none_if_empty(row.get("ssh_pass")),
-        topology_id: none_if_empty(row.get("topology_id")),
+        topology_id: row.try_get::<Option<i64>, _>("topology_id").ok().flatten(),
         topology_role: none_if_empty(row.get("topology_role")),
         hall_id: row.try_get::<Option<i64>, _>("hall_id").ok().flatten(),
         row_id: row.try_get::<Option<i64>, _>("row_id").ok().flatten(),

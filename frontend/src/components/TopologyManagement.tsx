@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import type { Topology, TopologyFormData, Device, ConfigPreviewResult, Job, TopologyRole, PortAssignment } from '@core';
+import type { Topology, TopologyFormData, Device, ConfigPreviewResult, Job, TopologyRole, PortAssignment, TopologyPreviewDevice, TopologyPreviewResponse } from '@core';
 import {
   useTopologies,
   useDevices,
@@ -20,6 +20,7 @@ import {
 import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
+import { Checkbox } from './Checkbox';
 import { CommandDrawer } from './CommandDrawer';
 import { DevicePortAssignments } from './DevicePortAssignments';
 import { IconButton } from './IconButton';
@@ -59,20 +60,43 @@ export function TopologyManagement() {
   const [addingNode, setAddingNode] = useState<string | null>(null); // "topologyId:role" while spawning
   const [addMenuOpen, setAddMenuOpen] = useState<string | null>(null); // "topologyId:role" for popover
   const [commandDevice, setCommandDevice] = useState<Device | null>(null);
-  const [expandedDiagram, setExpandedDiagram] = useState<string | null>(null);
-  const [assignTarget, setAssignTarget] = useState<{ topologyId: string; role: TopologyRole } | null>(null);
+  const [expandedDiagram, setExpandedDiagram] = useState<number | null>(null);
+  const [assignTarget, setAssignTarget] = useState<{ topologyId: number; role: TopologyRole } | null>(null);
   const [swapDevice, setSwapDevice] = useState<Device | null>(null); // device being replaced
   const [portsDevice, setPortsDevice] = useState<Device | null>(null);
   const addMenuRef = useRef<HTMLDivElement>(null);
   const { confirm, ConfirmDialogRenderer } = useConfirm();
   const diagramRef = useRef<TopologyDiagramViewerHandle>(null);
-  const [buildingVirtualClos, setBuildingVirtualClos] = useState(false);
-  const [showVirtualClosDialog, setShowVirtualClosDialog] = useState(false);
-  const [virtualClosConfig, setVirtualClosConfig] = useState({ spines: 2, leaves: 16, region_id: '', campus_id: '', datacenter_id: '', halls: 1, rows_per_hall: 4, racks_per_row: 8, leaves_per_rack: 1, external_devices: 2, uplinks_per_spine: 2, links_per_leaf: 2, external_names: [] as string[], spine_model: '', leaf_model: '' });
+  const [buildingTopology, setBuildingTopology] = useState(false);
+  const [showTopologyDialog, setShowTopologyDialog] = useState(false);
+  const [topologyConfig, setTopologyConfig] = useState({
+    architecture: 'clos' as 'clos' | 'hierarchical',
+    external_count: 2, external_to_tier1_ratio: 2,
+    tier1_count: 2, tier1_to_tier2_ratio: 2, tier1_model: '', tier1_names: [] as string[],
+    tier2_count: 16, tier2_to_tier3_ratio: 2, tier2_model: '',
+    tier3_count: 0, tier3_model: '',
+    spawn_containers: false, ceos_image: '',
+    tier3_placement: 'bottom' as 'top' | 'middle' | 'bottom',
+    region_id: '', campus_id: '', datacenter_id: '',
+    halls: 1, rows_per_hall: 4, racks_per_row: 8, devices_per_rack: 1,
+    // Super-spine (5-stage CLOS)
+    super_spine_enabled: false, super_spine_count: 4, super_spine_model: '', spine_to_super_spine_ratio: 2, pods: 2,
+    // Physical spacing
+    row_spacing_cm: 120,
+  });
 
-  const hasVirtualClos = useMemo(
-    () => devices.some(d => d.topology_id === 'dc1-virtual'),
-    [devices],
+  const [previewData, setPreviewData] = useState<TopologyPreviewResponse | null>(null);
+  const [previewEdits, setPreviewEdits] = useState<TopologyPreviewDevice[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [showLinks, setShowLinks] = useState(false);
+
+  const hasBuiltTopology = useMemo(
+    () => devices.some(d => {
+      const name = topologies.find(t => t.id === d.topology_id)?.name;
+      return name === 'DC1 CLOS Fabric' || name === 'DC1 Hierarchical Fabric';
+    }),
+    [devices, topologies],
   );
 
   // Close add-menu popover on outside click
@@ -92,14 +116,14 @@ export function TopologyManagement() {
 
   // Build template lookup for display
   const templateMap = useMemo(() => {
-    const map: Record<string, string> = {};
+    const map: Record<number, string> = {};
     for (const t of templates) map[t.id] = t.name;
     return map;
   }, [templates]);
 
   // Group devices by topology_id for expanded rows
   const devicesByTopology = useMemo(() => {
-    const map: Record<string, Device[]> = {};
+    const map: Record<number, Device[]> = {};
     for (const d of devices) {
       if (d.topology_id) {
         (map[d.topology_id] ??= []).push(d);
@@ -207,7 +231,7 @@ export function TopologyManagement() {
       const csvEscape = (v: string) => v.includes(',') ? `"${v}"` : v;
 
       const rows: string[] = [
-        'Side A Hostname,Side A Interface,Side A Role,Side A Patch Panel,Side A PP Port,Side B Hostname,Side B Interface,Side B Role,Side B Patch Panel,Side B PP Port',
+        'Side A Hostname,Side A Interface,Side A Role,Side A Patch Panel,Side A PP Port,Side B Hostname,Side B Interface,Side B Role,Side B Patch Panel,Side B PP Port,Cable Length (m)',
       ];
 
       // Check if any device has port assignments
@@ -239,6 +263,7 @@ export function TopologyManagement() {
               remoteDevice?.topology_role || '',
               pa.patch_panel_b_hostname ? csvEscape(`${pa.patch_panel_b_hostname}`) : '',
               pa.patch_panel_b_port || '',
+              pa.cable_length_meters != null ? String(pa.cable_length_meters) : '',
             ].join(','));
           }
         }
@@ -266,6 +291,7 @@ export function TopologyManagement() {
                 leaf.topology_role || 'leaf',
                 '', // Side B Patch Panel
                 '', // Side B PP Port
+                '', // Cable Length
               ].join(','));
             }
           }
@@ -325,7 +351,7 @@ export function TopologyManagement() {
       const locationBreadcrumb = [region?.name, campus?.name, dc?.name].filter(Boolean).join(' > ') || '—';
 
       // Group devices by rack_id
-      const devicesByRack: Record<string, Device[]> = {};
+      const devicesByRack: Record<number, Device[]> = {};
       const unrackedDevices: Device[] = [];
       for (const d of topoDevices) {
         if (d.rack_id) {
@@ -336,7 +362,7 @@ export function TopologyManagement() {
       }
 
       // Sort rack IDs for consistent tab ordering
-      const rackIds = Object.keys(devicesByRack).sort();
+      const rackIds = Object.keys(devicesByRack).map(Number).sort((a, b) => a - b);
 
       const wb = XLSX.utils.book_new();
 
@@ -355,7 +381,7 @@ export function TopologyManagement() {
         const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
         const rDevices = devicesByRack[rackId];
         summaryData.push([
-          rack?.name || rackId,
+          rack?.name || String(rackId),
           hall?.name || '—',
           row?.name || '—',
           rDevices.length,
@@ -404,7 +430,7 @@ export function TopologyManagement() {
         data.push([]); // separator
 
         // Connection table
-        data.push(['Device', 'Port', 'PP-A', 'PP-A Port', 'Remote Device', 'Remote Port', 'PP-B', 'PP-B Port']);
+        data.push(['Device', 'Port', 'PP-A', 'PP-A Port', 'Remote Device', 'Remote Port', 'PP-B', 'PP-B Port', 'Cable (m)']);
         const seen = new Set<string>();
         for (const device of sheetDevices) {
           const assignments = assignmentsByDevice[device.id] || [];
@@ -424,6 +450,7 @@ export function TopologyManagement() {
               pa.remote_port_name || '',
               pa.patch_panel_b_hostname || '',
               pa.patch_panel_b_port || '',
+              pa.cable_length_meters != null ? pa.cable_length_meters : '',
             ]);
           }
         }
@@ -448,7 +475,7 @@ export function TopologyManagement() {
         const row = rack?.row_id ? rowMap.get(rack.row_id) : undefined;
         const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
 
-        const rackName = rack?.name || rackId;
+        const rackName = rack?.name || String(rackId);
         const hallName = hall?.name || '—';
         const rowName = row?.name || '—';
 
@@ -467,7 +494,7 @@ export function TopologyManagement() {
       // --- Unracked sheet ---
       if (unrackedDevices.length > 0) {
         // Group by row for organization
-        const byRow: Record<string, Device[]> = {};
+        const byRow: Record<number, Device[]> = {};
         const noRow: Device[] = [];
         for (const d of unrackedDevices) {
           if (d.row_id) {
@@ -496,7 +523,7 @@ export function TopologyManagement() {
           data.push([]);
         };
 
-        for (const rowId of Object.keys(byRow).sort()) {
+        for (const rowId of Object.keys(byRow).map(Number).sort((a, b) => a - b)) {
           const row = rowMap.get(rowId);
           const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
           addDeviceRows(byRow[rowId], `${hall?.name || '—'} / ${row?.name || rowId}`);
@@ -552,7 +579,7 @@ export function TopologyManagement() {
     }
   };
 
-  const handleSpawnNode = async (topologyId: string, role: string) => {
+  const handleSpawnNode = async (topologyId: number, role: string) => {
     const key = `${topologyId}:${role}`;
     setAddingNode(key);
     setAddMenuOpen(null);
@@ -599,7 +626,7 @@ export function TopologyManagement() {
       // Unassign old device
       await getServices().devices.update(swapDevice.id, {
         ...swapDevice,
-        topology_id: '',
+        topology_id: undefined,
         topology_role: undefined,
       });
       // Assign replacement into same slot
@@ -617,75 +644,169 @@ export function TopologyManagement() {
     }
   };
 
-  const handleBuildVirtualClos = async (e: React.FormEvent) => {
+  const buildConfigPayload = () => {
+    const cfg = topologyConfig;
+    return {
+      architecture: cfg.architecture,
+      external_count: cfg.architecture === 'clos' ? cfg.external_count : 0,
+      external_to_tier1_ratio: cfg.architecture === 'clos' ? cfg.external_to_tier1_ratio : undefined,
+      tier1_count: cfg.tier1_count,
+      tier1_to_tier2_ratio: cfg.tier1_to_tier2_ratio,
+      tier1_model: cfg.tier1_model || undefined,
+      tier1_names: cfg.tier1_names.filter(n => n).length > 0 ? cfg.tier1_names.filter(n => n) : undefined,
+      tier2_count: cfg.tier2_count,
+      tier2_to_tier3_ratio: cfg.architecture === 'hierarchical' ? cfg.tier2_to_tier3_ratio : undefined,
+      tier2_model: cfg.tier2_model || undefined,
+      tier3_count: cfg.architecture === 'hierarchical' ? cfg.tier3_count : 0,
+      tier3_model: cfg.architecture === 'hierarchical' && cfg.tier3_model ? cfg.tier3_model : undefined,
+      spawn_containers: cfg.spawn_containers,
+      ceos_image: cfg.ceos_image || undefined,
+      tier3_placement: cfg.tier3_placement,
+      region_id: cfg.region_id ? Number(cfg.region_id) : undefined,
+      campus_id: cfg.campus_id ? Number(cfg.campus_id) : undefined,
+      datacenter_id: cfg.datacenter_id ? Number(cfg.datacenter_id) : undefined,
+      halls: cfg.datacenter_id ? cfg.halls : undefined,
+      rows_per_hall: cfg.datacenter_id ? cfg.rows_per_hall : undefined,
+      racks_per_row: cfg.datacenter_id ? cfg.racks_per_row : undefined,
+      devices_per_rack: cfg.datacenter_id ? cfg.devices_per_rack : undefined,
+      // Super-spine (CLOS only)
+      super_spine_enabled: cfg.architecture === 'clos' ? cfg.super_spine_enabled : undefined,
+      super_spine_count: cfg.architecture === 'clos' && cfg.super_spine_enabled ? cfg.super_spine_count : undefined,
+      super_spine_model: cfg.architecture === 'clos' && cfg.super_spine_enabled && cfg.super_spine_model ? cfg.super_spine_model : undefined,
+      spine_to_super_spine_ratio: cfg.architecture === 'clos' && cfg.super_spine_enabled ? cfg.spine_to_super_spine_ratio : undefined,
+      pods: cfg.architecture === 'clos' && cfg.super_spine_enabled ? cfg.pods : undefined,
+      // Physical spacing
+      row_spacing_cm: cfg.datacenter_id ? cfg.row_spacing_cm : undefined,
+    };
+  };
+
+  const handlePreviewTopology = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBuildingVirtualClos(true);
-    setShowVirtualClosDialog(false);
+    setPreviewLoading(true);
+    setShowTopologyDialog(false);
     try {
-      const result = await getServices().testContainers.buildVirtualClos({
-        spines: virtualClosConfig.spines,
-        leaves: virtualClosConfig.leaves,
-        region_id: virtualClosConfig.region_id || undefined,
-        campus_id: virtualClosConfig.campus_id || undefined,
-        datacenter_id: virtualClosConfig.datacenter_id || undefined,
-        halls: virtualClosConfig.datacenter_id ? virtualClosConfig.halls : undefined,
-        rows_per_hall: virtualClosConfig.datacenter_id ? virtualClosConfig.rows_per_hall : undefined,
-        racks_per_row: virtualClosConfig.datacenter_id ? virtualClosConfig.racks_per_row : undefined,
-        leaves_per_rack: virtualClosConfig.datacenter_id ? virtualClosConfig.leaves_per_rack : undefined,
-        links_per_leaf: virtualClosConfig.links_per_leaf,
-        external_devices: virtualClosConfig.external_devices || undefined,
-        uplinks_per_spine: virtualClosConfig.external_devices ? virtualClosConfig.uplinks_per_spine : undefined,
-        external_names: virtualClosConfig.external_devices ? virtualClosConfig.external_names.filter(n => n) : undefined,
-        spine_model: virtualClosConfig.spine_model || undefined,
-        leaf_model: virtualClosConfig.leaf_model || undefined,
-      });
-      addNotification('success', `Virtual CLOS ready: ${result.devices.length} switches in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
-      refreshDevices();
+      const preview = await getServices().testContainers.previewTopology(buildConfigPayload());
+      setPreviewData(preview);
+      setPreviewEdits([...preview.devices]);
+      setShowPreview(true);
+      setShowLinks(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      addNotification('error', `Failed to build virtual CLOS: ${msg}`);
+      addNotification('error', `Preview failed: ${msg}`);
+      setShowTopologyDialog(true);
     } finally {
-      setBuildingVirtualClos(false);
+      setPreviewLoading(false);
     }
   };
 
-  const handleTeardownVirtualClos = async () => {
+  const handleConfirmBuild = async () => {
+    setBuildingTopology(true);
+    setShowPreview(false);
     try {
-      await getServices().testContainers.teardownVirtualClos();
-      addNotification('success', 'Virtual CLOS topology torn down', navigateAction('View Topologies', 'topologies'));
+      const payload = buildConfigPayload();
+      const hasEdits = JSON.stringify(previewEdits) !== JSON.stringify(previewData?.devices);
+      const result = await getServices().testContainers.buildTopology({
+        ...payload,
+        overrides: hasEdits ? { devices: previewEdits } : undefined,
+      });
+      const mode = topologyConfig.spawn_containers ? 'Container' : 'Template';
+      addNotification('success', `${mode} Build complete: ${result.devices.length} devices in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      addNotification('error', `Failed to teardown virtual CLOS: ${msg}`);
+      addNotification('error', `Failed to build topology: ${msg}`);
+    } finally {
+      setBuildingTopology(false);
+    }
+  };
+
+  const handlePreviewDeviceEdit = (index: number, field: keyof TopologyPreviewDevice, value: string | number | null) => {
+    setPreviewEdits(prev => prev.map(d =>
+      d.index === index ? { ...d, [field]: value } : d
+    ));
+  };
+
+  const handleDownloadBOM = () => {
+    if (!previewData) return;
+    const csvRows: string[] = ['Category,Item,Specification,Quantity,Unit Length,Notes'];
+
+    // Device BOM: group by model + role
+    const deviceGroups = new Map<string, { model: string; role: string; count: number }>();
+    for (const dev of previewData.devices) {
+      const key = `${dev.model}|${dev.role}`;
+      const existing = deviceGroups.get(key);
+      if (existing) existing.count++;
+      else deviceGroups.set(key, { model: dev.model, role: dev.role, count: 1 });
+    }
+    for (const { model, role, count } of deviceGroups.values()) {
+      csvRows.push(`Device,${model},${role},${count},,`);
+    }
+
+    // Fiber BOM: group by rounded cable length
+    const standardLengths = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50];
+    const roundToStandard = (m: number) => standardLengths.find(l => l >= m) ?? Math.ceil(m);
+    const fiberGroups = new Map<number, number>();
+    let totalLinks = 0;
+    for (const link of previewData.fabric_links) {
+      totalLinks++;
+      if (link.cable_length_meters != null) {
+        const rounded = roundToStandard(link.cable_length_meters);
+        fiberGroups.set(rounded, (fiberGroups.get(rounded) || 0) + 1);
+      }
+    }
+    const sortedLengths = [...fiberGroups.entries()].sort((a, b) => a[0] - b[0]);
+    for (const [length, qty] of sortedLengths) {
+      csvRows.push(`Fiber,DAC/AOC Cable,100G,${qty},${length}m,`);
+    }
+
+    // Optic BOM: 2 optics per link
+    if (totalLinks > 0) {
+      csvRows.push(`Optic,QSFP28,100G,${totalLinks * 2},,2 per fabric link`);
+    }
+
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${previewData.topology_name.replace(/\s+/g, '-')}-BOM.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleTeardownTopology = async (architecture: 'clos' | 'hierarchical') => {
+    try {
+      await getServices().testContainers.teardownTopology(architecture);
+      addNotification('success', `${architecture === 'clos' ? 'CLOS' : 'Hierarchical'} topology torn down`, navigateAction('View Topologies', 'topologies'));
+      refreshDevices();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to teardown topology: ${msg}`);
     }
   };
 
   // Auto-select region/campus/dc when only one option exists
   useEffect(() => {
-    if (!showVirtualClosDialog) return;
-    setVirtualClosConfig(c => {
+    if (!showTopologyDialog) return;
+    setTopologyConfig(c => {
       const updates: Partial<typeof c> = {};
-      // Auto-select region if exactly 1
       if (!c.region_id && regions.length === 1) {
-        updates.region_id = regions[0].id;
+        updates.region_id = String(regions[0].id);
       }
       const effectiveRegion = updates.region_id || c.region_id;
-      // Auto-select campus if exactly 1 for selected region
       if (effectiveRegion && !c.campus_id) {
-        const filtered = campuses.filter(cp => cp.region_id === effectiveRegion);
-        if (filtered.length === 1) updates.campus_id = filtered[0].id;
+        const filtered = campuses.filter(cp => String(cp.region_id) === effectiveRegion);
+        if (filtered.length === 1) updates.campus_id = String(filtered[0].id);
       }
       const effectiveCampus = updates.campus_id || c.campus_id;
-      // Auto-select datacenter if exactly 1 for selected campus
       if (effectiveCampus && !c.datacenter_id) {
-        const filtered = datacenters.filter(d => d.campus_id === effectiveCampus);
-        if (filtered.length === 1) updates.datacenter_id = filtered[0].id;
+        const filtered = datacenters.filter(d => String(d.campus_id) === effectiveCampus);
+        if (filtered.length === 1) updates.datacenter_id = String(filtered[0].id);
       }
       return Object.keys(updates).length > 0 ? { ...c, ...updates } : c;
     });
-  }, [showVirtualClosDialog, regions, campuses, datacenters]);
+  }, [showTopologyDialog, regions, campuses, datacenters]);
 
-  const [deployingTopology, setDeployingTopology] = useState<string | null>(null);
+  const [deployingTopology, setDeployingTopology] = useState<number | null>(null);
 
   const handleDeployTopology = async (topology: Topology) => {
     const topoDevices = devicesByTopology[topology.id] || [];
@@ -739,50 +860,39 @@ export function TopologyManagement() {
     }
   };
 
-  const [buildingLabClos, setBuildingLabClos] = useState(false);
 
-  const handleBuildLabClos = async () => {
-    if (!(await confirm({ title: 'Build Lab CLOS', message: 'Build a lab CLOS with cEOS containers? (2 spines, 2 leaves). This will spawn Docker containers for each device.', confirmText: 'Build', destructive: false }))) return;
-    setBuildingLabClos(true);
-    try {
-      const result = await getServices().testContainers.buildVirtualClos({
-        spines: 2,
-        leaves: 2,
-        external_devices: 0,
-        spawn_containers: true,
-      });
-      addNotification('success', `Lab CLOS ready: ${result.devices.length} devices with cEOS containers`, navigateAction('View Topology', 'topologies'));
-      refreshDevices();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      addNotification('error', `Failed to build lab CLOS: ${msg}`);
-    } finally {
-      setBuildingLabClos(false);
-    }
-  };
-
-  const [rebuildingTopology, setRebuildingTopology] = useState<string | null>(null);
+  const [rebuildingTopology, setRebuildingTopology] = useState<number | null>(null);
 
   const handleRebuildTopology = async (topology: Topology) => {
-    if (topology.id !== 'dc1-virtual') return;
+    const isClos = topology.name === 'DC1 CLOS Fabric';
+    const isHier = topology.name === 'DC1 Hierarchical Fabric';
+    if (!isClos && !isHier) return;
     if (!(await confirm({ title: 'Rebuild Topology', message: `Rebuild "${topology.name}"? This will teardown and recreate all devices, port assignments, and IPAM allocations.`, confirmText: 'Rebuild', destructive: true }))) return;
     setRebuildingTopology(topology.id);
     try {
-      const result = await getServices().testContainers.buildVirtualClos({
-        spines: virtualClosConfig.spines,
-        leaves: virtualClosConfig.leaves,
-        region_id: virtualClosConfig.region_id || undefined,
-        campus_id: virtualClosConfig.campus_id || undefined,
-        datacenter_id: virtualClosConfig.datacenter_id || undefined,
-        halls: virtualClosConfig.datacenter_id ? virtualClosConfig.halls : undefined,
-        rows_per_hall: virtualClosConfig.datacenter_id ? virtualClosConfig.rows_per_hall : undefined,
-        racks_per_row: virtualClosConfig.datacenter_id ? virtualClosConfig.racks_per_row : undefined,
-        leaves_per_rack: virtualClosConfig.datacenter_id ? virtualClosConfig.leaves_per_rack : undefined,
-        external_devices: virtualClosConfig.external_devices || undefined,
-        uplinks_per_spine: virtualClosConfig.external_devices ? virtualClosConfig.uplinks_per_spine : undefined,
-        external_names: virtualClosConfig.external_devices ? virtualClosConfig.external_names.filter(n => n) : undefined,
-        spine_model: virtualClosConfig.spine_model || undefined,
-        leaf_model: virtualClosConfig.leaf_model || undefined,
+      const cfg = topologyConfig;
+      const result = await getServices().testContainers.buildTopology({
+        architecture: isClos ? 'clos' : 'hierarchical',
+        external_count: isClos ? cfg.external_count : 0,
+        external_to_tier1_ratio: isClos ? cfg.external_to_tier1_ratio : undefined,
+        tier1_count: cfg.tier1_count,
+        tier1_to_tier2_ratio: cfg.tier1_to_tier2_ratio,
+        tier1_model: cfg.tier1_model || undefined,
+        tier2_count: cfg.tier2_count,
+        tier2_to_tier3_ratio: isHier ? cfg.tier2_to_tier3_ratio : undefined,
+        tier2_model: cfg.tier2_model || undefined,
+        tier3_count: isHier ? cfg.tier3_count : 0,
+        tier3_model: isHier && cfg.tier3_model ? cfg.tier3_model : undefined,
+        spawn_containers: cfg.spawn_containers,
+        ceos_image: cfg.ceos_image || undefined,
+        tier3_placement: cfg.tier3_placement,
+        region_id: cfg.region_id ? Number(cfg.region_id) : undefined,
+        campus_id: cfg.campus_id ? Number(cfg.campus_id) : undefined,
+        datacenter_id: cfg.datacenter_id ? Number(cfg.datacenter_id) : undefined,
+        halls: cfg.datacenter_id ? cfg.halls : undefined,
+        rows_per_hall: cfg.datacenter_id ? cfg.rows_per_hall : undefined,
+        racks_per_row: cfg.datacenter_id ? cfg.racks_per_row : undefined,
+        devices_per_rack: cfg.datacenter_id ? cfg.devices_per_rack : undefined,
       });
       addNotification('success', `Rebuilt: ${result.devices.length} devices in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
       refreshDevices();
@@ -797,16 +907,27 @@ export function TopologyManagement() {
   const form = useModalForm<Topology, TopologyFormData>({
     emptyFormData: { ...EMPTY_TOPOLOGY_FORM },
     itemToFormData: (topology) => ({
-      id: topology.id,
       name: topology.name,
       description: topology.description || '',
-      region_id: topology.region_id || '',
-      campus_id: topology.campus_id || '',
-      datacenter_id: topology.datacenter_id || '',
+      region_id: String(topology.region_id || ''),
+      campus_id: String(topology.campus_id || ''),
+      datacenter_id: String(topology.datacenter_id || ''),
     }),
-    onCreate: (data) => createTopology({ ...data, id: data.id || slugify(data.name) }),
-    onUpdate: (id, data) => updateTopology(id, data),
-    getItemId: (t) => t.id,
+    onCreate: (data) => createTopology({
+      name: data.name,
+      description: data.description,
+      region_id: data.region_id ? Number(data.region_id) : undefined,
+      campus_id: data.campus_id ? Number(data.campus_id) : undefined,
+      datacenter_id: data.datacenter_id ? Number(data.datacenter_id) : undefined,
+    }),
+    onUpdate: (id, data) => updateTopology(id, {
+      name: data.name,
+      description: data.description,
+      region_id: data.region_id ? Number(data.region_id) : undefined,
+      campus_id: data.campus_id ? Number(data.campus_id) : undefined,
+      datacenter_id: data.datacenter_id ? Number(data.datacenter_id) : undefined,
+    }),
+    getItemId: (t) => String(t.id),
     modalName: 'topology-form',
   });
 
@@ -831,53 +952,53 @@ export function TopologyManagement() {
 
   // Filtered campuses/datacenters based on selection
   const filteredCampuses = useMemo(() =>
-    campuses.filter(c => !form.formData.region_id || c.region_id === form.formData.region_id),
+    campuses.filter(c => !form.formData.region_id || String(c.region_id) === form.formData.region_id),
     [campuses, form.formData.region_id]
   );
   const filteredDatacenters = useMemo(() =>
-    datacenters.filter(d => !form.formData.campus_id || d.campus_id === form.formData.campus_id),
+    datacenters.filter(d => !form.formData.campus_id || String(d.campus_id) === form.formData.campus_id),
     [datacenters, form.formData.campus_id]
   );
 
   // Select options for location dropdowns
   const regionOptions = useMemo(() => [
     { value: '', label: 'Select region...' },
-    ...regions.map(r => ({ value: r.id, label: r.name })),
+    ...regions.map(r => ({ value: String(r.id), label: r.name })),
     { value: '__new__', label: '+ Create New...' },
   ], [regions]);
 
   const campusOptions = useMemo(() => [
     { value: '', label: 'Select campus...' },
-    ...filteredCampuses.map(c => ({ value: c.id, label: c.name })),
+    ...filteredCampuses.map(c => ({ value: String(c.id), label: c.name })),
     { value: '__new__', label: '+ Create New...' },
   ], [filteredCampuses]);
 
   const datacenterOptions = useMemo(() => [
     { value: '', label: 'Select datacenter...' },
-    ...filteredDatacenters.map(d => ({ value: d.id, label: d.name })),
+    ...filteredDatacenters.map(d => ({ value: String(d.id), label: d.name })),
     { value: '__new__', label: '+ Create New...' },
   ], [filteredDatacenters]);
 
-  // Virtual CLOS location select options
+  // Topology builder location select options
   const vclosFilteredCampuses = useMemo(() =>
-    campuses.filter(c => !virtualClosConfig.region_id || c.region_id === virtualClosConfig.region_id),
-    [campuses, virtualClosConfig.region_id]
+    campuses.filter(c => !topologyConfig.region_id || String(c.region_id) === topologyConfig.region_id),
+    [campuses, topologyConfig.region_id]
   );
   const vclosFilteredDatacenters = useMemo(() =>
-    datacenters.filter(d => !virtualClosConfig.campus_id || d.campus_id === virtualClosConfig.campus_id),
-    [datacenters, virtualClosConfig.campus_id]
+    datacenters.filter(d => !topologyConfig.campus_id || String(d.campus_id) === topologyConfig.campus_id),
+    [datacenters, topologyConfig.campus_id]
   );
   const vclosRegionOptions = useMemo(() => [
     { value: '', label: 'Select region...' },
-    ...regions.map(r => ({ value: r.id, label: r.name })),
+    ...regions.map(r => ({ value: String(r.id), label: r.name })),
   ], [regions]);
   const vclosCampusOptions = useMemo(() => [
     { value: '', label: 'Select campus...' },
-    ...vclosFilteredCampuses.map(c => ({ value: c.id, label: c.name })),
+    ...vclosFilteredCampuses.map(c => ({ value: String(c.id), label: c.name })),
   ], [vclosFilteredCampuses]);
   const vclosDatacenterOptions = useMemo(() => [
     { value: '', label: 'Select datacenter...' },
-    ...vclosFilteredDatacenters.map(d => ({ value: d.id, label: d.name })),
+    ...vclosFilteredDatacenters.map(d => ({ value: String(d.id), label: d.name })),
   ], [vclosFilteredDatacenters]);
   const vclosModelOptions = useMemo(() => [
     { value: '', label: 'Default' },
@@ -887,36 +1008,37 @@ export function TopologyManagement() {
   // Handle "Create New..." inline creation
   const handleCreateNewRegion = useCallback(async () => {
     if (!newRegionName.trim()) return;
-    const id = slugify(newRegionName);
-    const success = await ipam.createRegion({ id, name: newRegionName.trim(), description: '' });
+    const success = await ipam.createRegion({ name: newRegionName.trim(), description: '' });
     if (success) {
-      form.setFields({ region_id: id });
+      // Find the newly created region by name after refresh
+      const created = regions.find(r => r.name === newRegionName.trim());
+      if (created) form.setFields({ region_id: String(created.id) });
       setNewRegionName('');
       setCreatingRegion(false);
     }
-  }, [newRegionName, ipam, form]);
+  }, [newRegionName, ipam, form, regions]);
 
   const handleCreateNewCampus = useCallback(async () => {
     if (!newCampusName.trim() || !form.formData.region_id) return;
-    const id = slugify(newCampusName);
-    const success = await ipam.createCampus({ id, name: newCampusName.trim(), description: '', region_id: form.formData.region_id });
+    const success = await ipam.createCampus({ name: newCampusName.trim(), description: '', region_id: form.formData.region_id });
     if (success) {
-      form.setFields({ campus_id: id });
+      const created = campuses.find(c => c.name === newCampusName.trim());
+      if (created) form.setFields({ campus_id: String(created.id) });
       setNewCampusName('');
       setCreatingCampus(false);
     }
-  }, [newCampusName, form.formData.region_id, ipam, form]);
+  }, [newCampusName, form.formData.region_id, ipam, form, campuses]);
 
   const handleCreateNewDc = useCallback(async () => {
     if (!newDcName.trim() || !form.formData.campus_id) return;
-    const id = slugify(newDcName);
-    const success = await ipam.createDatacenter({ id, name: newDcName.trim(), description: '', campus_id: form.formData.campus_id });
+    const success = await ipam.createDatacenter({ name: newDcName.trim(), description: '', campus_id: form.formData.campus_id });
     if (success) {
-      form.setFields({ datacenter_id: id });
+      const created = datacenters.find(d => d.name === newDcName.trim());
+      if (created) form.setFields({ datacenter_id: String(created.id) });
       setNewDcName('');
       setCreatingDc(false);
     }
-  }, [newDcName, form.formData.campus_id, ipam, form]);
+  }, [newDcName, form.formData.campus_id, ipam, form, datacenters]);
 
   const modalRoute = useModalRoute();
 
@@ -925,7 +1047,7 @@ export function TopologyManagement() {
     if (modalRoute.isModal('topology-form') && !form.isOpen) {
       const id = modalRoute.getParam('id');
       if (id) {
-        const topology = topologies.find(t => t.id === id);
+        const topology = topologies.find(t => String(t.id) === id);
         if (topology) {
           form.openEdit(topology);
         } else if (topologies.length > 0) {
@@ -938,7 +1060,7 @@ export function TopologyManagement() {
   }, [modalRoute.modal, topologies]);
 
   const handleDelete = async (topology: Topology) => {
-    await deleteTopology(topology.id);
+    await deleteTopology(String(topology.id));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -950,7 +1072,7 @@ export function TopologyManagement() {
 
     // New topology with wizard auto-generation
     const data = form.formData;
-    const topoId = data.id || slugify(data.name);
+    const topoId = slugify(data.name);
     if (!data.name.trim()) {
       addNotification('error', 'Topology name is required');
       return;
@@ -960,12 +1082,11 @@ export function TopologyManagement() {
     try {
       // 1. Create topology
       await createTopology({
-        id: topoId,
         name: data.name,
         description: data.description,
-        region_id: data.region_id,
-        campus_id: data.campus_id,
-        datacenter_id: data.datacenter_id,
+        region_id: data.region_id ? Number(data.region_id) : undefined,
+        campus_id: data.campus_id ? Number(data.campus_id) : undefined,
+        datacenter_id: data.datacenter_id ? Number(data.datacenter_id) : undefined,
       });
 
       const { spines, leaves, externals, firstHallLeaves, additionalHallLeaves, racksPerRow } = fabricConfig;
@@ -1010,11 +1131,17 @@ export function TopologyManagement() {
       const svc = getServices();
 
       // 3. For each hall, create hall/rows/racks/devices
+      // Find the newly created topology to get its numeric ID
+      const createdTopos = await svc.topologies.list();
+      const createdTopo = createdTopos.find(t => t.name === data.name);
+      const numericTopoId = createdTopo?.id;
+
       for (const hall of hallAssignments) {
-        const hallId = `${dcId || topoId}-hall-${hall.hallNum}`;
+        let hallNumericId: number | undefined;
         if (dcId) {
           try {
-            await svc.ipam.createHall({ id: hallId, name: `Hall ${hall.hallNum}`, description: '', datacenter_id: dcId });
+            const createdHall = await svc.ipam.createHall({ name: `Hall ${hall.hallNum}`, description: '', datacenter_id: dcId });
+            hallNumericId = createdHall.id;
           } catch { /* hall may already exist */ }
         }
 
@@ -1059,10 +1186,11 @@ export function TopologyManagement() {
         let rowNum = 1;
 
         while (deviceIdx < hallDevices.length) {
-          const rowId = `${hallId}-row-${rowNum}`;
-          if (dcId) {
+          let rowNumericId: number | undefined;
+          if (dcId && hallNumericId) {
             try {
-              await svc.ipam.createRow({ id: rowId, name: `Row ${rowNum}`, description: '', hall_id: hallId });
+              const createdRow = await svc.ipam.createRow({ name: `Row ${rowNum}`, description: '', hall_id: String(hallNumericId) });
+              rowNumericId = createdRow.id;
             } catch { /* row may already exist */ }
           }
 
@@ -1077,10 +1205,10 @@ export function TopologyManagement() {
               vendor: 'patch-panel',
               model: 'PP-192-RJ45',
               device_type: 'external',
-              topology_id: topoId,
-              hall_id: hallId,
-              row_id: rowId,
-              rack_id: '',
+              topology_id: numericTopoId,
+              hall_id: hallNumericId,
+              row_id: rowNumericId,
+              rack_id: undefined,
               rack_position: 1,
             });
           } catch { /* may already exist */ }
@@ -1088,10 +1216,11 @@ export function TopologyManagement() {
           // Create racks and assign devices
           const rowDevices = hallDevices.slice(deviceIdx, deviceIdx + devicesPerRow);
           for (let rackIdx = 0; rackIdx < rowDevices.length; rackIdx++) {
-            const rackId = `${rowId}-rack-${rackIdx + 1}`;
-            if (dcId) {
+            let rackNumericId: number | undefined;
+            if (dcId && rowNumericId) {
               try {
-                await svc.ipam.createRack({ id: rackId, name: `Rack ${rackIdx + 1}`, description: '', row_id: rowId });
+                const createdRack = await svc.ipam.createRack({ name: `Rack ${rackIdx + 1}`, description: '', row_id: String(rowNumericId) });
+                rackNumericId = createdRack.id;
               } catch { /* rack may already exist */ }
             }
 
@@ -1105,11 +1234,11 @@ export function TopologyManagement() {
                 vendor: dev.vendor,
                 model: dev.model,
                 device_type: dev.deviceType,
-                topology_id: topoId,
+                topology_id: numericTopoId,
                 topology_role: (dev.role || undefined) as TopologyRole | undefined,
-                hall_id: hallId,
-                row_id: rowId,
-                rack_id: rackId,
+                hall_id: hallNumericId,
+                row_id: rowNumericId,
+                rack_id: rackNumericId,
                 rack_position: 1,
               });
             } catch { /* may already exist */ }
@@ -1131,7 +1260,7 @@ export function TopologyManagement() {
     }
   };
 
-  const roleCountCell = (count: number, topologyId: string, role: string) => {
+  const roleCountCell = (count: number, topologyId: number, role: string) => {
     const key = `${topologyId}:${role}`;
     const isAdding = addingNode === key;
     const menuOpen = addMenuOpen === key;
@@ -1165,7 +1294,7 @@ export function TopologyManagement() {
 
   const columns: TableColumn<Topology>[] = [
     { header: 'Name', accessor: (t) => <strong>{t.name}</strong>, searchValue: (t) => t.name },
-    { header: 'ID', accessor: (t) => Cell.code(t.id), searchValue: (t) => t.id },
+    { header: 'ID', accessor: (t) => Cell.code(String(t.id)), searchValue: (t) => String(t.id) },
     { header: 'Description', accessor: (t) => Cell.truncate(t.description || '', 60), searchValue: (t) => t.description || '' },
     { header: 'Super-Spines', accessor: (t) => roleCountCell(t.super_spine_count || 0, t.id, 'super-spine'), searchable: false },
     { header: 'Spines', accessor: (t) => roleCountCell(t.spine_count || 0, t.id, 'spine'), searchable: false },
@@ -1184,34 +1313,38 @@ export function TopologyManagement() {
           <PlusIcon size={16} />
           Add Topology
         </Button>
-        <Button onClick={() => setShowVirtualClosDialog(true)} disabled={buildingVirtualClos}>
+        <Button onClick={() => setShowTopologyDialog(true)} disabled={buildingTopology}>
           <Icon name="lan" size={16} />
-          {buildingVirtualClos ? 'Building...' : 'Virtual CLOS'}
+          {buildingTopology ? 'Building...' : 'Topology Builder'}
         </Button>
-        <Button onClick={handleBuildLabClos} disabled={buildingLabClos} variant="secondary">
-          <Icon name="science" size={16} />
-          {buildingLabClos ? 'Spawning...' : 'Lab CLOS'}
-        </Button>
-        {hasVirtualClos && (
-          <Button variant="danger" onClick={handleTeardownVirtualClos}>
+        {hasBuiltTopology && (
+          <Button variant="danger" onClick={async () => {
+            if (await confirm({ title: 'Teardown Built Topologies', message: 'This will remove all devices, IPAM allocations, and containers for built topologies (CLOS and/or Hierarchical).', confirmText: 'Teardown', destructive: true })) {
+              // Teardown both if they exist
+              const closTopo = topologies.find(t => t.name === 'DC1 CLOS Fabric');
+              const hierTopo = topologies.find(t => t.name === 'DC1 Hierarchical Fabric');
+              if (closTopo) await handleTeardownTopology('clos');
+              if (hierTopo) await handleTeardownTopology('hierarchical');
+            }
+          }}>
             <TrashIcon size={16} />
-            Teardown Virtual
+            Teardown
           </Button>
         )}
       </ActionBar>
 
-      <Card title="CLOS Topologies" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card title="Topologies" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
         <InfoSection open={showInfo}>
           <div>
             <p>
-              Topologies represent CLOS fabric designs (e.g. "DC1-Fabric"). Each device
-              can be assigned to a topology with a role: <strong>super-spine</strong>,
-              <strong> spine</strong>, or <strong>leaf</strong>.
+              Topologies represent fabric designs. Each device can be assigned to a topology with a role:
+              CLOS (<strong>spine</strong>, <strong>leaf</strong>, <strong>super-spine</strong>) or
+              Hierarchical (<strong>core</strong>, <strong>distribution</strong>, <strong>access</strong>).
             </p>
             <ul>
-              <li>Assign devices to topologies via the device edit form</li>
+              <li>Use the <strong>Topology Builder</strong> to create CLOS or Hierarchical fabrics with full IPAM and port wiring</li>
+              <li>Toggle <strong>Spawn Containers</strong> to start cEOS/FRR Docker containers for each device</li>
               <li>Deleting a topology unassigns its devices (does not delete them)</li>
-              <li>Use <code>{'{{TopologyId}}'}</code> and <code>{'{{TopologyRole}}'}</code> in config templates</li>
             </ul>
           </div>
         </InfoSection>
@@ -1241,7 +1374,7 @@ export function TopologyManagement() {
               onClick: handleRebuildTopology,
               variant: 'secondary',
               tooltip: 'Teardown and rebuild topology (devices, port assignments, IPAM)',
-              disabled: (t) => t.id !== 'dc1-virtual' || rebuildingTopology === t.id,
+              disabled: (t) => (t.name !== 'DC1 CLOS Fabric' && t.name !== 'DC1 Hierarchical Fabric') || rebuildingTopology === t.id,
               loading: (t) => rebuildingTopology === t.id,
             },
             {
@@ -1290,13 +1423,13 @@ export function TopologyManagement() {
             }
 
             // Sort: super-spines first, then spines, then leaves, then unassigned
-            const roleWeight = (r?: string) => r === 'external' ? 0 : r === 'super-spine' ? 1 : r === 'spine' ? 2 : r === 'leaf' ? 3 : 4;
+            const roleWeight = (r?: string) => r === 'external' ? 0 : r === 'super-spine' ? 1 : r === 'spine' || r === 'core' ? 2 : r === 'leaf' || r === 'distribution' ? 3 : r === 'access' ? 4 : 5;
             const sorted = [...topoDevices].sort((a, b) => roleWeight(a.topology_role) - roleWeight(b.topology_role) || (a.hostname || '').localeCompare(b.hostname || ''));
 
-            const spines = topoDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine');
-            const leaves = topoDevices.filter(d => d.topology_role === 'leaf');
+            const spines = topoDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine' || d.topology_role === 'distribution');
+            const leaves = topoDevices.filter(d => d.topology_role === 'leaf' || d.topology_role === 'access');
             const ppDevices = topoDevices.filter(d => isPatchPanel(d));
-            const extDevices = topoDevices.filter(d => d.device_type === 'external' && !isPatchPanel(d));
+            const extDevices = topoDevices.filter(d => (d.device_type === 'external' || d.topology_role === 'core') && !isPatchPanel(d));
             const hasDiagram = spines.length > 0 && leaves.length > 0;
             const diagramOpen = expandedDiagram === t.id;
 
@@ -1305,7 +1438,7 @@ export function TopologyManagement() {
                 <Table<Device>
                   data={sorted}
                   columns={[
-                    { header: 'Role', accessor: (d) => Cell.status(d.topology_role || 'unassigned', d.topology_role === 'spine' || d.topology_role === 'super-spine' ? 'online' : d.topology_role === 'leaf' ? 'provisioning' : 'offline'), searchValue: (d) => d.topology_role || '' },
+                    { header: 'Role', accessor: (d) => Cell.status(d.topology_role || 'unassigned', d.topology_role === 'spine' || d.topology_role === 'super-spine' || d.topology_role === 'core' || d.topology_role === 'distribution' ? 'online' : d.topology_role === 'leaf' || d.topology_role === 'access' ? 'provisioning' : 'offline'), searchValue: (d) => d.topology_role || '' },
                     { header: 'Hostname', accessor: (d) => <strong>{d.hostname || '—'}</strong>, searchValue: (d) => d.hostname || '' },
                     { header: 'Vendor', accessor: (d) => d.vendor ? <VendorBadge vendor={d.vendor} /> : Cell.dash(''), searchValue: (d) => d.vendor || '' },
                     { header: 'IP Address', accessor: (d) => Cell.dash(d.ip), searchValue: (d) => d.ip || '' },
@@ -1406,15 +1539,7 @@ export function TopologyManagement() {
               required
               disabled={form.isEditing}
             />
-            <FormField
-              label="Topology ID"
-              name="id"
-              type="text"
-              value={form.formData.id}
-              onChange={form.handleChange}
-              placeholder="dc1-fabric (auto-generated)"
-              disabled={form.isEditing}
-            />
+            {/* Topology ID is auto-generated by the backend */}
             <div className="form-group">
               <label htmlFor="description">Description</label>
               <textarea
@@ -1748,108 +1873,312 @@ export function TopologyManagement() {
       )}
 
       <FormDialog
-        isOpen={showVirtualClosDialog}
-        onClose={() => setShowVirtualClosDialog(false)}
-        title="Virtual CLOS Fabric"
-        onSubmit={handleBuildVirtualClos}
-        submitText="Build Fabric"
+        isOpen={showTopologyDialog}
+        onClose={() => setShowTopologyDialog(false)}
+        title={`${topologyConfig.spawn_containers ? 'Container' : 'Template'} Build — ${topologyConfig.architecture === 'clos' ? 'CLOS' : 'Hierarchical'}`}
+        onSubmit={handlePreviewTopology}
+        submitText={previewLoading ? 'Loading Preview...' : 'Preview Build'}
         variant="wide"
       >
-        <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '0 0 12px' }}>
-          Creates virtual device records in a CLOS topology with port assignments and IPAM allocations. No containers are started.
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '24px' }}>
-          {/* Column 1: Spines */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-              Spines
+        {/* Row 1: Architecture + Spawn Containers */}
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+          <SelectField
+            label="Architecture"
+            name="architecture"
+            value={topologyConfig.architecture}
+            onChange={(e) => {
+              const arch = e.target.value as 'clos' | 'hierarchical';
+              setTopologyConfig(c => ({
+                ...c,
+                architecture: arch,
+                external_count: arch === 'clos' ? 2 : 0,
+                tier2_count: arch === 'clos' ? 16 : 4,
+                tier3_count: arch === 'clos' ? 0 : 8,
+              }));
+            }}
+            options={[
+              { value: 'clos', label: 'CLOS (Spine-Leaf)' },
+              { value: 'hierarchical', label: 'Hierarchical (3-Tier)' },
+            ]}
+          />
+          <div style={{ marginTop: '20px' }}>
+            <Checkbox
+              label="Spawn Containers"
+              checked={topologyConfig.spawn_containers}
+              onChange={(checked) => setTopologyConfig(c => ({ ...c, spawn_containers: checked }))}
+            />
+          </div>
+          {topologyConfig.spawn_containers && (
+            <div style={{ flex: 1, marginTop: '20px' }}>
+              <FormField
+                label=""
+                name="ceos_image"
+                value={topologyConfig.ceos_image}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, ceos_image: e.target.value }))}
+                placeholder="ceosimage:latest"
+              />
             </div>
-            <FormField
-              label="Count"
-              name="spines"
-              type="number"
-              value={String(virtualClosConfig.spines)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, spines: Math.max(1, parseInt(e.target.value) || 1) }))}
+          )}
+        </div>
+
+        {/* Super-Spine Toggle (CLOS only) */}
+        {topologyConfig.architecture === 'clos' && (
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+            <Checkbox
+              label="Enable Super-Spine (5-Stage CLOS)"
+              checked={topologyConfig.super_spine_enabled}
+              onChange={(checked) => setTopologyConfig(c => ({ ...c, super_spine_enabled: checked }))}
             />
-            <SelectField
-              label="Model"
-              name="spine_model"
-              value={virtualClosConfig.spine_model}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, spine_model: e.target.value }))}
-              options={vclosModelOptions}
-            />
-            <FormField
-              label="Uplinks / Spine"
-              name="uplinks_per_spine"
-              type="number"
-              value={String(virtualClosConfig.uplinks_per_spine)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, uplinks_per_spine: Math.max(1, parseInt(e.target.value) || 1) }))}
-              disabled={!virtualClosConfig.external_devices}
-            />
-            <FormField
-              label="External Devices"
-              name="external_devices"
-              type="number"
-              value={String(virtualClosConfig.external_devices)}
-              onChange={(e) => {
-                const count = Math.max(0, parseInt(e.target.value) || 0);
-                setVirtualClosConfig(c => {
-                  const names = [...c.external_names];
-                  while (names.length < count) names.push('');
-                  return { ...c, external_devices: count, external_names: names.slice(0, count) };
-                });
-              }}
-            />
-            {virtualClosConfig.external_devices > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {Array.from({ length: virtualClosConfig.external_devices }, (_, i) => (
-                  <FormField
-                    key={i}
-                    label={`External ${i + 1} Name`}
-                    name={`external_name_${i}`}
-                    value={virtualClosConfig.external_names[i] || ''}
-                    onChange={(e) => setVirtualClosConfig(c => {
-                      const names = [...c.external_names];
-                      names[i] = e.target.value;
-                      return { ...c, external_names: names };
-                    })}
-                    placeholder={`wan-router-${i + 1}`}
-                  />
-                ))}
-              </div>
+            {topologyConfig.super_spine_enabled && (
+              <span style={{ fontSize: '12px', opacity: 0.6 }}>
+                Spine and Leaf counts become per-pod
+              </span>
             )}
           </div>
+        )}
 
-          {/* Column 2: Leaves */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-              Leaves
+        {/* Row 2: Tier configuration columns */}
+        <div style={{ display: 'grid', gridTemplateColumns: topologyConfig.architecture === 'clos' && topologyConfig.super_spine_enabled ? '1fr 1fr 1fr 1fr 1fr' : '1fr 1fr 1fr 1fr', gap: '24px' }}>
+          {/* Column 1: External (CLOS) or Tier 1 Core (Hierarchical) */}
+          {topologyConfig.architecture === 'clos' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                External
+              </div>
+              <FormField
+                label="Count"
+                name="external_count"
+                type="number"
+                value={String(topologyConfig.external_count)}
+                onChange={(e) => {
+                  const count = Math.max(0, parseInt(e.target.value) || 0);
+                  setTopologyConfig(c => {
+                    const names = [...c.tier1_names];
+                    while (names.length < count) names.push('');
+                    return { ...c, external_count: count, tier1_names: names.slice(0, count) };
+                  });
+                }}
+              />
+              <FormField
+                label="Uplinks / Tier 1"
+                name="external_to_tier1_ratio"
+                type="number"
+                value={String(topologyConfig.external_to_tier1_ratio)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, external_to_tier1_ratio: Math.max(1, parseInt(e.target.value) || 1) }))}
+                disabled={!topologyConfig.external_count}
+              />
+              {topologyConfig.external_count > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {Array.from({ length: topologyConfig.external_count }, (_, i) => (
+                    <FormField
+                      key={i}
+                      label={`External ${i + 1} Name`}
+                      name={`external_name_${i}`}
+                      value={topologyConfig.tier1_names[i] || ''}
+                      onChange={(e) => setTopologyConfig(c => {
+                        const names = [...c.tier1_names];
+                        names[i] = e.target.value;
+                        return { ...c, tier1_names: names };
+                      })}
+                      placeholder={`wan-router-${i + 1}`}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
-            <FormField
-              label="Count"
-              name="leaves"
-              type="number"
-              value={String(virtualClosConfig.leaves)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, leaves: Math.max(1, parseInt(e.target.value) || 1) }))}
-            />
-            <SelectField
-              label="Model"
-              name="leaf_model"
-              value={virtualClosConfig.leaf_model}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, leaf_model: e.target.value }))}
-              options={vclosModelOptions}
-            />
-            <FormField
-              label="Links / Leaf"
-              name="links_per_leaf"
-              type="number"
-              value={String(virtualClosConfig.links_per_leaf)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, links_per_leaf: Math.max(1, parseInt(e.target.value) || 1) }))}
-              min={1}
-            />
-          </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                Core (Tier 1)
+              </div>
+              <FormField
+                label="Count"
+                name="tier1_count"
+                type="number"
+                value={String(topologyConfig.tier1_count)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_count: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+              <SelectField
+                label="Model"
+                name="tier1_model"
+                value={topologyConfig.tier1_model}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_model: e.target.value }))}
+                options={vclosModelOptions}
+              />
+              <FormField
+                label="Links / Tier 2"
+                name="tier1_to_tier2_ratio"
+                type="number"
+                value={String(topologyConfig.tier1_to_tier2_ratio)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_to_tier2_ratio: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+            </div>
+          )}
 
-          {/* Column 3: Location */}
+          {/* Super-Spine Column (CLOS + SS enabled only) */}
+          {topologyConfig.architecture === 'clos' && topologyConfig.super_spine_enabled && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                Super-Spine
+              </div>
+              <FormField
+                label="Count"
+                name="super_spine_count"
+                type="number"
+                value={String(topologyConfig.super_spine_count)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, super_spine_count: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+              <SelectField
+                label="Model"
+                name="super_spine_model"
+                value={topologyConfig.super_spine_model}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, super_spine_model: e.target.value }))}
+                options={vclosModelOptions}
+              />
+              <FormField
+                label="Links / Spine"
+                name="spine_to_super_spine_ratio"
+                type="number"
+                value={String(topologyConfig.spine_to_super_spine_ratio)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, spine_to_super_spine_ratio: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+              <FormField
+                label="Pods"
+                name="pods"
+                type="number"
+                value={String(topologyConfig.pods)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, pods: Math.max(2, parseInt(e.target.value) || 2) }))}
+              />
+            </div>
+          )}
+
+          {/* Column 2: Spine/Tier 1 (CLOS) or Distribution/Tier 2 (Hierarchical) */}
+          {topologyConfig.architecture === 'clos' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                Spine (Tier 1){topologyConfig.super_spine_enabled ? ' — Per Pod' : ''}
+              </div>
+              <FormField
+                label="Count"
+                name="tier1_count"
+                type="number"
+                value={String(topologyConfig.tier1_count)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_count: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+              <SelectField
+                label="Model"
+                name="tier1_model"
+                value={topologyConfig.tier1_model}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_model: e.target.value }))}
+                options={vclosModelOptions}
+              />
+              <FormField
+                label="Links / Tier 2"
+                name="tier1_to_tier2_ratio"
+                type="number"
+                value={String(topologyConfig.tier1_to_tier2_ratio)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_to_tier2_ratio: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                Distribution (Tier 2)
+              </div>
+              <FormField
+                label="Count"
+                name="tier2_count"
+                type="number"
+                value={String(topologyConfig.tier2_count)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_count: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+              <SelectField
+                label="Model"
+                name="tier2_model"
+                value={topologyConfig.tier2_model}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_model: e.target.value }))}
+                options={vclosModelOptions}
+              />
+              <FormField
+                label="Links / Tier 3"
+                name="tier2_to_tier3_ratio"
+                type="number"
+                value={String(topologyConfig.tier2_to_tier3_ratio)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_to_tier3_ratio: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+            </div>
+          )}
+
+          {/* Column 3: Leaf/Tier 2 (CLOS) or Access/Tier 3 (Hierarchical) */}
+          {topologyConfig.architecture === 'clos' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                Leaf (Tier 2){topologyConfig.super_spine_enabled ? ' — Per Pod' : ''}
+              </div>
+              <FormField
+                label="Count"
+                name="tier2_count"
+                type="number"
+                value={String(topologyConfig.tier2_count)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_count: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+              <SelectField
+                label="Model"
+                name="tier2_model"
+                value={topologyConfig.tier2_model}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_model: e.target.value }))}
+                options={vclosModelOptions}
+              />
+              {topologyConfig.datacenter_id && (
+                <SelectField
+                  label="Rack Placement"
+                  name="tier3_placement"
+                  value={topologyConfig.tier3_placement}
+                  onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_placement: e.target.value as 'top' | 'middle' | 'bottom' }))}
+                  options={[
+                    { value: 'top', label: 'Top of Rack (ToR)' },
+                    { value: 'middle', label: 'Middle of Rack (MoR)' },
+                    { value: 'bottom', label: 'Bottom of Rack (BoR)' },
+                  ]}
+                />
+              )}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                Access (Tier 3)
+              </div>
+              <FormField
+                label="Count"
+                name="tier3_count"
+                type="number"
+                value={String(topologyConfig.tier3_count)}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_count: Math.max(1, parseInt(e.target.value) || 1) }))}
+              />
+              <SelectField
+                label="Model"
+                name="tier3_model"
+                value={topologyConfig.tier3_model}
+                onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_model: e.target.value }))}
+                options={vclosModelOptions}
+              />
+              {topologyConfig.datacenter_id && (
+                <SelectField
+                  label="Rack Placement"
+                  name="tier3_placement"
+                  value={topologyConfig.tier3_placement}
+                  onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_placement: e.target.value as 'top' | 'middle' | 'bottom' }))}
+                  options={[
+                    { value: 'top', label: 'Top of Rack (ToR)' },
+                    { value: 'middle', label: 'Middle of Rack (MoR)' },
+                    { value: 'bottom', label: 'Bottom of Rack (BoR)' },
+                  ]}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Column 4: Location */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
               Location
@@ -1857,71 +2186,258 @@ export function TopologyManagement() {
             <SelectField
               label="Region"
               name="region_id"
-              value={virtualClosConfig.region_id}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, region_id: e.target.value, campus_id: '', datacenter_id: '' }))}
+              value={topologyConfig.region_id}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, region_id: e.target.value, campus_id: '', datacenter_id: '' }))}
               options={vclosRegionOptions}
             />
             <SelectField
               label="Campus"
               name="campus_id"
-              value={virtualClosConfig.campus_id}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, campus_id: e.target.value, datacenter_id: '' }))}
+              value={topologyConfig.campus_id}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, campus_id: e.target.value, datacenter_id: '' }))}
               options={vclosCampusOptions}
-              disabled={!virtualClosConfig.region_id}
+              disabled={!topologyConfig.region_id}
             />
             <SelectField
               label="Datacenter"
               name="datacenter_id"
-              value={virtualClosConfig.datacenter_id}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, datacenter_id: e.target.value }))}
+              value={topologyConfig.datacenter_id}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, datacenter_id: e.target.value }))}
               options={vclosDatacenterOptions}
-              disabled={!virtualClosConfig.campus_id}
+              disabled={!topologyConfig.campus_id}
             />
           </div>
+        </div>
 
-          {/* Column 4: Rack Layout */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', opacity: virtualClosConfig.datacenter_id ? 1 : 0.5 }}>
-            <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-              Rack Layout
-            </div>
-            {!virtualClosConfig.datacenter_id && (
-              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0', fontStyle: 'italic' }}>Select a datacenter to configure</p>
-            )}
+        {/* Row 3: Rack Layout (only when datacenter selected) */}
+        {topologyConfig.datacenter_id && (
+          <div style={{ marginTop: '16px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '24px' }}>
             <FormField
               label="Halls"
               name="halls"
               type="number"
-              value={String(virtualClosConfig.halls)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, halls: Math.max(1, parseInt(e.target.value) || 1) }))}
-              disabled={!virtualClosConfig.datacenter_id}
+              value={String(topologyConfig.halls)}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, halls: Math.max(1, parseInt(e.target.value) || 1) }))}
             />
             <FormField
               label="Rows / Hall"
               name="rows_per_hall"
               type="number"
-              value={String(virtualClosConfig.rows_per_hall)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, rows_per_hall: Math.max(1, parseInt(e.target.value) || 1) }))}
-              disabled={!virtualClosConfig.datacenter_id}
+              value={String(topologyConfig.rows_per_hall)}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, rows_per_hall: Math.max(1, parseInt(e.target.value) || 1) }))}
             />
             <FormField
               label="Racks / Row"
               name="racks_per_row"
               type="number"
-              value={String(virtualClosConfig.racks_per_row)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, racks_per_row: Math.max(1, parseInt(e.target.value) || 1) }))}
-              disabled={!virtualClosConfig.datacenter_id}
+              value={String(topologyConfig.racks_per_row)}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, racks_per_row: Math.max(1, parseInt(e.target.value) || 1) }))}
             />
             <FormField
-              label="Leaves / Rack"
-              name="leaves_per_rack"
+              label="Devices / Rack"
+              name="devices_per_rack"
               type="number"
-              value={String(virtualClosConfig.leaves_per_rack)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, leaves_per_rack: Math.max(1, parseInt(e.target.value) || 1) }))}
-              disabled={!virtualClosConfig.datacenter_id}
+              value={String(topologyConfig.devices_per_rack)}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, devices_per_rack: Math.max(1, parseInt(e.target.value) || 1) }))}
+            />
+            <FormField
+              label="Row Spacing (cm)"
+              name="row_spacing_cm"
+              type="number"
+              value={String(topologyConfig.row_spacing_cm)}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, row_spacing_cm: Math.max(30, parseInt(e.target.value) || 120) }))}
             />
           </div>
-        </div>
+        )}
       </FormDialog>
+
+      {/* Build Preview Modal */}
+      {showPreview && previewData && (
+        <Modal
+          title={`Build Preview — ${previewData.architecture === 'clos' ? 'CLOS' : 'Hierarchical'}`}
+          onClose={() => setShowPreview(false)}
+          variant="extra-wide"
+          footer={
+            <DialogActions>
+              <Button variant="secondary" onClick={() => { setShowPreview(false); setShowTopologyDialog(true); }}>
+                <Icon name="arrow_back" size={14} />
+                Back to Config
+              </Button>
+              <Button variant="secondary" onClick={handleDownloadBOM}>
+                <Icon name="download" size={14} />
+                Download BOM
+              </Button>
+              <Button onClick={handleConfirmBuild} disabled={buildingTopology}>
+                {buildingTopology ? <SpinnerIcon size={14} /> : <Icon name="build" size={14} />}
+                {buildingTopology ? 'Building...' : topologyConfig.spawn_containers ? 'Build & Spawn' : 'Build Fabric'}
+              </Button>
+            </DialogActions>
+          }
+        >
+          {/* Summary bar */}
+          <div style={{
+            display: 'flex', gap: '24px', padding: '12px 16px',
+            background: 'var(--color-bg-secondary, #1a1a2e)', borderRadius: '6px', marginBottom: '16px',
+            fontSize: '13px',
+          }}>
+            <div><strong>Topology:</strong> {previewData.topology_name}</div>
+            <div><strong>Devices:</strong> {previewData.devices.length}</div>
+            <div><strong>Fabric Links:</strong> {previewData.fabric_links.length}</div>
+            {previewData.racks.length > 0 && <div><strong>Racks:</strong> {previewData.racks.length}</div>}
+            <div><strong>Placement:</strong> {previewData.tier3_placement === 'top' ? 'Top of Rack' : previewData.tier3_placement === 'middle' ? 'Middle of Rack' : 'Bottom of Rack'}</div>
+          </div>
+
+          {/* Editable devices table */}
+          <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
+            <table className="table" style={{ width: '100%', fontSize: '12px' }}>
+              <thead>
+                <tr>
+                  <th style={{ width: '90px' }}>Role</th>
+                  <th>Hostname</th>
+                  <th style={{ width: '120px' }}>Loopback</th>
+                  <th style={{ width: '70px' }}>ASN</th>
+                  <th style={{ width: '130px' }}>Model</th>
+                  <th style={{ width: '120px' }}>Mgmt IP</th>
+                  {previewData.racks.length > 0 && <th style={{ width: '180px' }}>Rack</th>}
+                  {previewData.racks.length > 0 && <th style={{ width: '60px' }}>Pos</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {previewEdits.map((device) => (
+                  <tr key={device.index}>
+                    <td>
+                      <span className={`status-badge status-badge-${device.role === 'spine' || device.role === 'distribution' ? 'online' : device.role === 'leaf' || device.role === 'access' ? 'provisioning' : 'offline'}`}>
+                        {device.role}
+                      </span>
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        value={device.hostname}
+                        onChange={(e) => handlePreviewDeviceEdit(device.index, 'hostname', e.target.value)}
+                        style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        value={device.loopback}
+                        onChange={(e) => handlePreviewDeviceEdit(device.index, 'loopback', e.target.value)}
+                        style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        value={device.asn}
+                        onChange={(e) => handlePreviewDeviceEdit(device.index, 'asn', parseInt(e.target.value) || 0)}
+                        style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                      />
+                    </td>
+                    <td style={{ fontSize: '11px', opacity: 0.7 }}>{device.model}</td>
+                    <td>
+                      <input
+                        type="text"
+                        value={device.mgmt_ip}
+                        onChange={(e) => handlePreviewDeviceEdit(device.index, 'mgmt_ip', e.target.value)}
+                        style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                      />
+                    </td>
+                    {previewData.racks.length > 0 && (
+                      <td>
+                        <select
+                          value={device.rack_index ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '') {
+                              handlePreviewDeviceEdit(device.index, 'rack_index', null);
+                              handlePreviewDeviceEdit(device.index, 'rack_name', null);
+                            } else {
+                              const idx = parseInt(val);
+                              const rack = previewData.racks.find(r => r.index === idx);
+                              handlePreviewDeviceEdit(device.index, 'rack_index', idx);
+                              if (rack) {
+                                setPreviewEdits(prev => prev.map(d =>
+                                  d.index === device.index ? { ...d, rack_index: idx, rack_name: rack.name } : d
+                                ));
+                              }
+                            }
+                          }}
+                          style={{ width: '100%', padding: '2px 4px', fontSize: '11px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                        >
+                          <option value="">None</option>
+                          {previewData.racks.map(r => (
+                            <option key={r.index} value={r.index}>{r.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                    )}
+                    {previewData.racks.length > 0 && (
+                      <td>
+                        <input
+                          type="number"
+                          value={device.rack_position ?? ''}
+                          onChange={(e) => handlePreviewDeviceEdit(device.index, 'rack_position', e.target.value ? parseInt(e.target.value) : null)}
+                          style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                        />
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Fabric links (collapsible) */}
+          {previewData.fabric_links.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowLinks(!showLinks)}
+                style={{
+                  background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer',
+                  fontSize: '13px', padding: '4px 0', display: 'flex', alignItems: 'center', gap: '4px',
+                }}
+              >
+                <Icon name={showLinks ? 'expand_less' : 'expand_more'} size={16} />
+                {showLinks ? 'Hide' : 'Show'} {previewData.fabric_links.length} fabric links
+              </button>
+              {showLinks && (
+                <div style={{ overflowX: 'auto', maxHeight: '300px', overflowY: 'auto' }}>
+                  <table className="table" style={{ width: '100%', fontSize: '11px' }}>
+                    <thead>
+                      <tr>
+                        <th>Side A</th>
+                        <th>Interface</th>
+                        <th>IP</th>
+                        <th>Side B</th>
+                        <th>Interface</th>
+                        <th>IP</th>
+                        <th>Subnet</th>
+                        <th>Length</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.fabric_links.map((link, i) => (
+                        <tr key={i}>
+                          <td>{link.side_a_hostname}</td>
+                          <td style={{ opacity: 0.7 }}>{link.side_a_interface}</td>
+                          <td><code style={{ fontSize: '10px' }}>{link.side_a_ip}</code></td>
+                          <td>{link.side_b_hostname}</td>
+                          <td style={{ opacity: 0.7 }}>{link.side_b_interface}</td>
+                          <td><code style={{ fontSize: '10px' }}>{link.side_b_ip}</code></td>
+                          <td><code style={{ fontSize: '10px' }}>{link.subnet}</code></td>
+                          <td style={{ opacity: 0.7 }}>{link.cable_length_meters != null ? `${link.cable_length_meters}m` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
+      )}
+
       <ConfirmDialogRenderer />
     </>
   );

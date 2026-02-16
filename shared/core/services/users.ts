@@ -6,7 +6,7 @@ export class UserService extends BaseService {
     return this.get<User[]>('/users');
   }
 
-  async getById(id: string): Promise<User> {
+  async getById(id: number | string): Promise<User> {
     return this.get<User>(`/users/${encodeURIComponent(id)}`);
   }
 
@@ -14,11 +14,11 @@ export class UserService extends BaseService {
     return this.post<User>('/users', data);
   }
 
-  async update(id: string, data: Partial<UserFormData>): Promise<User> {
+  async update(id: number | string, data: Partial<UserFormData>): Promise<User> {
     return this.put<User>(`/users/${encodeURIComponent(id)}`, data);
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: number | string): Promise<void> {
     return this.delete<void>(`/users/${encodeURIComponent(id)}`);
   }
 }

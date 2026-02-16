@@ -45,12 +45,12 @@ export function SaveAsTemplateDialog({ isOpen, onClose, job, deviceMap, actionMa
         description: description.trim(),
         job_type: job.job_type,
         command: job.job_type === 'webhook' ? '' : job.command,
-        action_id: job.job_type === 'webhook' ? job.command : '',
+        action_id: job.job_type === 'webhook' ? Number(job.command) : undefined,
         target_mode: 'device',
         target_device_ids: job.device_id ? [job.device_id] : [],
         schedule,
         enabled: true,
-        credential_id: credentialId,
+        credential_id: credentialId ? Number(credentialId) : undefined,
       };
       const ok = await onCreate(req);
       if (ok) onClose();

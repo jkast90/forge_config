@@ -29,7 +29,7 @@ export interface Device {
 }
 
 export type DeviceStatus = 'online' | 'offline' | 'provisioning' | 'unknown';
-export type TopologyRole = 'super-spine' | 'spine' | 'leaf';
+export type TopologyRole = 'super-spine' | 'spine' | 'leaf' | 'core' | 'distribution' | 'access';
 
 export interface DeviceFormData {
   mac: string;
@@ -104,6 +104,8 @@ export interface Settings {
   logo_url: string;
   // Device naming
   hostname_pattern: string;
+  // Topology builder
+  cable_slack_percent: number;
 }
 
 export interface Branding {
@@ -787,7 +789,7 @@ export interface ChassisRow {
 }
 
 export interface ChassisLayout {
-  vendor_id: number;
+  vendor_id: string;
   model: string;
   display_name: string;
   rack_units: number;
@@ -869,6 +871,7 @@ export interface PortAssignment {
   patch_panel_b_hostname?: string;
   vrf_id?: number;
   vrf_name?: string;
+  cable_length_meters?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -883,4 +886,5 @@ export interface SetPortAssignmentRequest {
   patch_panel_b_id?: number;
   patch_panel_b_port?: string;
   vrf_id?: number;
+  cable_length_meters?: number | null;
 }

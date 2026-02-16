@@ -9,7 +9,6 @@ import {
   getVendorSelectOptions,
   getVendorName,
   filterByVendor,
-  generateId,
   EMPTY_TEMPLATE_FORM,
   SAMPLE_DEVICE_FOR_PREVIEW,
 } from '@core';
@@ -50,34 +49,31 @@ export function TemplateBuilder() {
   const form = useModalForm<Template, TemplateFormData>({
     emptyFormData: EMPTY_TEMPLATE_FORM,
     itemToFormData: (template) => ({
-      id: template.id,
       name: template.name,
       description: template.description || '',
-      vendor_id: template.vendor_id || '',
+      vendor_id: String(template.vendor_id || ''),
       content: template.content,
     }),
     onCreate: (data) => createTemplate({
-      id: data.id || generateId('tpl'),
       name: data.name,
       description: data.description || undefined,
-      vendor_id: data.vendor_id || undefined,
+      vendor_id: data.vendor_id ? Number(data.vendor_id) : undefined,
       content: data.content,
     }),
     onUpdate: (id, data) => updateTemplate(id, {
-      id: data.id || id,
       name: data.name,
       description: data.description || undefined,
-      vendor_id: data.vendor_id || undefined,
+      vendor_id: data.vendor_id ? Number(data.vendor_id) : undefined,
       content: data.content,
     }),
-    getItemId: (t) => t.id,
+    getItemId: (t) => String(t.id),
     modalName: 'template-form',
   });
 
   const [previewOutput, setPreviewOutput] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
+  const [previewTemplateId, setPreviewTemplateId] = useState<number | null>(null);
   const [previewDeviceMAC, setPreviewDeviceMAC] = useState<string>('');
   const [showTemplatizer, setShowTemplatizer] = useState(false);
   const modalRoute = useModalRoute();
@@ -87,7 +83,7 @@ export function TemplateBuilder() {
     if (modalRoute.isModal('template-form') && !form.isOpen) {
       const id = modalRoute.getParam('id');
       if (id) {
-        const template = templates.find(t => t.id === id);
+        const template = templates.find(t => String(t.id) === id);
         if (template) {
           form.openEdit(template);
         } else if (templates.length > 0) {
@@ -100,7 +96,7 @@ export function TemplateBuilder() {
     if (modalRoute.isModal('template-preview') && !showPreview) {
       const id = modalRoute.getParam('id');
       if (id) {
-        const template = templates.find(t => t.id === id);
+        const template = templates.find(t => String(t.id) === id);
         if (template) {
           handlePreview(template);
         } else if (templates.length > 0) {
@@ -134,7 +130,7 @@ export function TemplateBuilder() {
 
   // Filter templates by vendor (client-side for immediate UI response)
   const filteredTemplates = useMemo(
-    () => filterByVendor(templates, filterVendor, (t) => t.vendor_id),
+    () => filterByVendor(templates, filterVendor, (t) => t.vendor_id ? String(t.vendor_id) : undefined),
     [templates, filterVendor]
   );
 
@@ -143,7 +139,7 @@ export function TemplateBuilder() {
     await form.submit();
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
     const template = templates.find((t) => t.id === id);
     if (template && await confirm({ title: 'Delete Template', message: `Delete template "${template.name}"?`, confirmText: 'Delete', destructive: true })) {
       await deleteTemplate(id);
@@ -155,7 +151,7 @@ export function TemplateBuilder() {
     setPreviewDeviceMAC('');
     setPreviewOutput(null);
     setShowPreview(true);
-    modalRoute.openModal('template-preview', { id: template.id });
+    modalRoute.openModal('template-preview', { id: String(template.id) });
   };
 
   const handleGeneratePreview = async () => {
