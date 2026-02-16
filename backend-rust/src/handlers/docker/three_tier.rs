@@ -117,15 +117,17 @@ pub(super) async fn compute_three_tier_preview(
     } else {
         req.tier3_model.clone()
     };
-    let dc = req
-        .datacenter_id
-        .map(|id| id.to_string())
-        .unwrap_or_default();
+    let dc = match req.datacenter_id {
+        Some(id) => state.store.get_ipam_datacenter(id).await
+            .ok().flatten().map(|d| d.name).unwrap_or_default(),
+        None => String::new(),
+    };
     let dc = dc.as_str();
-    let region = req
-        .region_id
-        .map(|id| id.to_string())
-        .unwrap_or_default();
+    let region = match req.region_id {
+        Some(id) => state.store.get_ipam_region(id).await
+            .ok().flatten().map(|r| r.name).unwrap_or_default(),
+        None => String::new(),
+    };
     let region = region.as_str();
 
     // ── 4. Compute rack layout as named racks ───────────────────────────
@@ -410,9 +412,17 @@ pub async fn build_three_tier(
     let dist_model = if req.tier2_model.is_empty() { "7050CX3-32S".to_string() } else { req.tier2_model.clone() };
     let access_model = if req.tier3_model.is_empty() { "7050SX3-48YC8".to_string() } else { req.tier3_model.clone() };
     let datacenter_id = req.datacenter_id;
-    let dc = datacenter_id.map(|id| id.to_string()).unwrap_or_default();
+    let dc = match datacenter_id {
+        Some(id) => state.store.get_ipam_datacenter(id).await
+            .ok().flatten().map(|d| d.name).unwrap_or_default(),
+        None => String::new(),
+    };
     let dc = dc.as_str();
-    let region = req.region_id.map(|id| id.to_string()).unwrap_or_default();
+    let region = match req.region_id {
+        Some(id) => state.store.get_ipam_region(id).await
+            .ok().flatten().map(|r| r.name).unwrap_or_default(),
+        None => String::new(),
+    };
     let region = region.as_str();
 
     // Load hostname pattern + cable slack from settings
