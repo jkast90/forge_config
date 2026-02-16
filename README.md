@@ -1,14 +1,16 @@
 # ForgeConfig
 
-A containerized Network Device Provisioning server for network devices with web and mobile management interfaces.
+A containerized network device provisioning and infrastructure management server with web and mobile interfaces.
 
 ## Overview
 
-ForgeConfig automates the provisioning of network devices by:
+ForgeConfig automates the provisioning and management of network infrastructure by:
 - Assigning IP addresses via DHCP based on MAC address
 - Serving device-specific configurations via TFTP or HTTP
+- Building datacenter topologies (CLOS and hierarchical) with GPU cluster support
+- Managing IP address space, physical locations, and multi-tenant resources
 - Automatically backing up device configs after provisioning
-- Providing web and mobile interfaces for device management
+- Providing web and mobile interfaces for full infrastructure management
 
 ## Features
 
@@ -17,21 +19,26 @@ ForgeConfig automates the provisioning of network devices by:
 - **Config Backup** - Automatically SSHs into devices after provisioning to backup running configs
 - **Config Deploy** - Push configs to devices over SSH, with preview and diff support
 - **Remote Execution** - Run ad-hoc commands on devices via SSH
-- **Web UI** - React-based interface for managing devices, templates, vendors, groups, IPAM, and more
+- **Web UI** - React-based interface for managing devices, templates, vendors, groups, IPAM, topologies, and more
 - **Mobile App** - React Native (Expo) app with barcode scanner for easy device onboarding
 - **REST API** - Full API with 200+ endpoints for automation and integration
 - **Vendor Management** - Define vendor profiles with MAC prefixes, default templates, SSH settings, custom DHCP options, and quick actions
 - **Device Variables** - Per-device and per-group key-value variables for template rendering (Ansible-style inheritance)
 - **Groups** - Hierarchical device groups with variable inheritance and precedence
-- **IPAM** - IP Address Management with regions, campuses, datacenters, halls, rows, racks, prefixes, IP addresses, VRFs, roles, and tags
-- **Topologies** - CLOS fabric topology management with super-spine/spine/leaf roles and visual diagrams
+- **IPAM** - IP Address Management with prefixes, IP addresses, VRFs, roles, and tags
+- **Locations** - Physical hierarchy with regions, campuses, datacenters, halls, rows, and racks
+- **Topologies** - CLOS fabric and hierarchical (3-tier) topology builders with super-spine/spine/leaf/core/distribution/access roles, visual diagrams, and physical rack placement
+- **GPU Clusters** - Attach GPU compute clusters to topologies with configurable models, interconnects (InfiniBand, etc.), VRF isolation, and automatic leaf uplink port assignments
+- **Management Switches** - Auto-generated management switch placement with per-row, per-rack, or per-hall distribution strategies
+- **Tenants & VRFs** - Multi-tenant resource management with VRF-based network segmentation
+- **Topology Downloads** - Export cutsheet (CSV), BOM (CSV), rack sheet (XLSX), and SVG topology diagrams
 - **DHCP Options** - Configurable DHCP options (Option 43, 60, 66, 67, 125, 150, etc.) with per-vendor scoping
 - **Device Discovery** - Automatic detection of new devices via DHCP lease monitoring with rich metadata capture (vendor class, circuit ID, relay info)
 - **Docker Lab** - Spawn and manage test containers from the UI, including automated CLOS lab builds with FRR routing
-- **Virtual CLOS Builder** - Create CLOS fabric device topologies with IPAM integration (without Docker containers)
+- **Topology Builder** - Create topology device records with IPAM integration and rack placement (without Docker containers)
 - **Device Models** - Hardware model definitions with port layouts and chassis visualization
 - **Device Roles** - Role-based template assignment with multiple templates per role
-- **Port Assignments** - Per-port configuration with VLAN assignments and descriptions
+- **Port Assignments** - Per-port configuration with remote device linking, cable lengths, VRF assignments, and patch panel routing
 - **Credentials** - Reusable SSH and API key credential storage
 - **Job System** - Async job queue for command execution, config deploys, and webhooks with real-time WebSocket updates
 - **Job Templates** - Reusable job definitions with cron scheduling and group targeting
@@ -39,7 +46,7 @@ ForgeConfig automates the provisioning of network devices by:
 - **Output Parsers** - Regex-based extraction of structured data from command output
 - **NetBox Integration** - Bidirectional sync of devices and vendors with NetBox
 - **Templatizer** - Convert raw device configs into reusable Tera templates
-- **Hostname Patterns** - Configurable hostname auto-generation with `$datacenter`, `$role`, and `#` variables
+- **Hostname Patterns** - Configurable hostname auto-generation with `$datacenter`, `$region`, `$hall`, `$role`, and `#` variables
 - **WebSocket** - Real-time event streaming for discovery, status changes, and job progress
 - **JWT Authentication** - Secure API access with token-based auth and user management
 - **Themes** - 14 built-in themes including dark, light, solarized, dracula, nord, evergreen, ocean, nautical, and high-contrast variants
@@ -47,6 +54,7 @@ ForgeConfig automates the provisioning of network devices by:
 - **OpenGear Support** - Built-in support for OpenGear Lighthouse ZTP enrollment
 - **Notifications** - In-app notification center with history and action links
 - **ScratchPad** - Persistent notes accessible from the header
+- **QR / Barcode Generator** - Generate QR codes and barcodes for device serial numbers or URLs
 - **API History** - Request/response logging for debugging
 - **Telemetry** - Feature usage analytics and page navigation tracking
 - **Help Tour** - Interactive guided tour of the application
@@ -96,10 +104,10 @@ The device will receive its IP and config on next boot.
 
 ## Web UI Pages & Tabs
 
-The web UI has 10 primary pages, each with tabbed sub-sections:
+The web UI has 11 primary pages, each with tabbed sub-sections:
 
 ### Dashboard
-Overview of device status (online/offline/provisioning counts), recent devices, pending discoveries, topology and IPAM metrics, recent job statistics, and quick navigation cards.
+Overview of device status (online/offline/provisioning counts), recent devices, pending discoveries, topology and IPAM metrics, recent job statistics, feature overview cards with live counts, and quick action buttons.
 
 ### Devices
 | Tab | Description |
@@ -128,20 +136,24 @@ Overview of device status (online/offline/provisioning counts), recent devices, 
 | **Output Parsers** | Regex-based output extraction with named capture groups for structured result display |
 
 ### Topologies
-Topology table with expandable rows showing device assignments by role (super-spine, spine, leaf, external). Features include:
-- Visual topology diagrams
-- CLOS fabric builder (Docker containers with FRR routing)
-- Virtual CLOS builder (device records with IPAM/rack integration, no containers)
-- Per-device config preview, deploy, diff, and command execution
-- Port assignment management with chassis visualization
+Topology table with expandable rows showing device assignments by role. Features include:
+- **CLOS fabric** (spine/leaf/super-spine) and **hierarchical** (core/distribution/access) architectures
+- **GPU cluster** integration with VRF isolation, configurable models and interconnects
+- **Management switch** placement with per-row, per-rack, or per-hall distribution
+- **Topology preview** with device hostnames, IP assignments, rack placement, and cabling before deploy
+- Physical placement integration with **datacenter, halls, rows, and racks**
+- **Visual topology diagrams** in the expanded row
+- Docker-based CLOS lab builds with FRR routing
+- Per-device **config preview, deploy, diff**, and command execution
+- **Port assignment** management with chassis visualization
+- Download **cutsheet** (CSV), **BOM** (CSV), **rack sheet** (XLSX), and **SVG export**
 - Add/swap/remove devices per role
 
 ### IPAM (IP Address Management)
 | Tab | Description |
 |-----|-------------|
-| **Prefixes** | Network prefix hierarchy with supernets, subnets, next-available-prefix/IP allocation |
-| **IP Addresses** | Individual IP address assignments with device association |
-| **VRFs** | Virtual Routing and Forwarding instance management |
+| **Prefixes** | Network prefix hierarchy with supernets, subnets, next-available-prefix/IP allocation, VRF and datacenter association |
+| **IP Addresses** | Individual IP address assignments with device association, DNS names, and status tracking |
 | **Roles** | Prefix and IP address role categorization |
 
 ### Locations
@@ -152,7 +164,14 @@ Topology table with expandable rows showing device assignments by role (super-sp
 | **Datacenters** | Datacenter facilities within campuses |
 | **Halls** | Datacenter halls within datacenters |
 | **Rows** | Equipment rows within halls |
-| **Racks** | Physical racks with device assignments within rows |
+| **Racks** | Physical racks with device assignments and rack unit positioning |
+
+### Tenants
+| Tab | Description |
+|-----|-------------|
+| **Tenants** | Multi-tenant organization management with status tracking |
+| **VRFs** | Virtual Routing and Forwarding instances for network segmentation, associated with tenants |
+| **GPU Clusters** | GPU compute cluster management with model, node count, interconnect type, VRF, and topology association |
 
 ### Vendors & Models
 | Tab | Description |
@@ -166,16 +185,17 @@ Topology table with expandable rows showing device assignments by role (super-sp
 |-----|-------------|
 | **Users** | User management (create, edit, enable/disable, delete) |
 | **Branding** | Application name and logo customization |
-| **Device Naming** | Hostname pattern configuration (`$datacenter-$role-#`) with live preview |
+| **Device Naming** | Hostname pattern configuration (`$datacenter-$region-$hall-$role-#`) with live preview |
 
 ### Data Explorer
 Redux store inspector with real-time JSON tree navigation for debugging application state.
 
 ### Additional UI Features
 
-- **Settings Dialog** - Global settings for branding, device naming, SSH defaults, DHCP, backup, OpenGear enrollment, network interfaces with QR codes, table row density, and layout
+- **Settings Dialog** - Global settings for SSH defaults, DHCP, backup, OpenGear enrollment, network interfaces, table row density, and layout
 - **Notification Center** - Notification history with read/unread tracking and action buttons
 - **ScratchPad** - Persistent notes (local storage) accessible from the header
+- **QR / Barcode Generator** - Generate QR codes and barcodes from the footer toolbar
 - **API History** - Request/response debugging with timestamps and performance metrics
 - **Telemetry** - Feature usage analytics viewer
 - **Help Tour** - Interactive guided tour of all application features
@@ -591,11 +611,27 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 | DELETE | `/api/docker/containers/:id` | Remove a container |
 | POST | `/api/docker/containers/:id/start` | Start a container |
 | POST | `/api/docker/containers/:id/restart` | Restart a container |
-| POST | `/api/docker/clos-lab` | Build a CLOS lab topology |
+| POST | `/api/docker/clos-lab` | Build a CLOS lab topology (Docker containers) |
 | DELETE | `/api/docker/clos-lab` | Tear down CLOS lab |
-| POST | `/api/virtual-clos` | Build virtual CLOS topology (devices only) |
-| DELETE | `/api/virtual-clos` | Tear down virtual CLOS |
+| POST | `/api/topology/preview` | Preview topology (CLOS or hierarchical) |
+| POST | `/api/topology/build` | Build topology with device records and IPAM |
+| DELETE | `/api/virtual-clos` | Tear down topology (devices, IPAM, org hierarchy) |
 | POST | `/api/connect` | Test connectivity to IP |
+
+### Tenants & GPU Clusters
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tenants` | List all tenants |
+| POST | `/api/tenants` | Create a tenant |
+| GET | `/api/tenants/:id` | Get tenant |
+| PUT | `/api/tenants/:id` | Update tenant |
+| DELETE | `/api/tenants/:id` | Delete tenant |
+| GET | `/api/gpu-clusters` | List all GPU clusters |
+| POST | `/api/gpu-clusters` | Create a GPU cluster |
+| GET | `/api/gpu-clusters/:id` | Get GPU cluster |
+| PUT | `/api/gpu-clusters/:id` | Update GPU cluster |
+| DELETE | `/api/gpu-clusters/:id` | Delete GPU cluster |
 
 ### IPAM
 
@@ -644,6 +680,8 @@ Include the token in subsequent requests: `Authorization: Bearer <token>`
 | **VRFs** | | |
 | GET | `/api/ipam/vrfs` | List VRFs |
 | POST | `/api/ipam/vrfs` | Create VRF |
+| GET | `/api/ipam/vrfs/:id` | Get VRF |
+| PUT | `/api/ipam/vrfs/:id` | Update VRF |
 | DELETE | `/api/ipam/vrfs/:id` | Delete VRF |
 | **Prefixes** | | |
 | GET | `/api/ipam/prefixes` | List prefixes |
@@ -738,7 +776,7 @@ curl -X POST http://localhost:8080/api/devices \
 |---------|-------------|
 | **Application Name** | Custom name shown in the header and login page |
 | **Logo** | Custom logo (PNG, JPG, GIF, WebP, or SVG under 2MB) |
-| **Hostname Pattern** | Pattern for auto-generated hostnames (`$datacenter-$role-#`) |
+| **Hostname Pattern** | Pattern for auto-generated hostnames (`$datacenter-$region-$hall-$role-#`) |
 | **Default SSH User** | Username for device backup connections |
 | **Default SSH Password** | Password for device backup connections |
 | **Backup Command** | Command to run on device (default: `show running-config`) |
@@ -832,11 +870,18 @@ docker compose logs -f backend-rust test-client
 
 ### CLOS Lab
 
-You can also build an automated CLOS fabric lab from the Topologies page in the web UI, which spawns spine and leaf containers with pre-configured FRR routing and topology roles.
+You can build an automated CLOS fabric lab from the Topologies page in the web UI, which spawns spine and leaf containers with pre-configured FRR routing and topology roles.
 
-### Virtual CLOS
+### Topology Builder
 
-The Virtual CLOS builder creates device records with full IPAM integration (datacenters, halls, rows, racks) without requiring Docker containers. Configure spine count, leaf count, uplinks, external devices, and rack placement.
+The topology builder creates full datacenter topologies with IPAM integration:
+- **CLOS fabric** — configure spine count, leaf count, super-spines, pods, uplinks, external devices, and rack placement
+- **Hierarchical (3-tier)** — configure core, distribution, and access switch counts with similar physical placement
+- **GPU clusters** — attach GPU compute nodes striped across leaf/access racks with VRF isolation
+- **Management switches** — auto-placed per-row, per-rack, or per-hall
+- **Physical placement** — select datacenter, region, halls, rows, and racks
+- **Hostname patterns** — all devices follow the system naming pattern (e.g., `$datacenter-$role-#`)
+- **Preview before deploy** — review device hostnames, IP assignments, rack placement, and cabling before committing
 
 ---
 

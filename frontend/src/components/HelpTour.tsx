@@ -18,13 +18,13 @@ const SLIDES: Slide[] = [
     content: (
       <>
         <p>
-          ForgeConfig is a network device provisioning tool.
-          It automates device discovery, configuration templating, and deployment.
+          ForgeConfig is a network device provisioning and infrastructure management tool.
+          It automates device discovery, configuration templating, topology building, IPAM, and deployment.
         </p>
         <div className="help-tour-tips">
           <h4>Quick Tips</h4>
           <ul>
-            <li>Use the <strong>page selector</strong> in the header to navigate between sections</li>
+            <li>Use the <strong>page selector</strong> in the header to navigate between the 11 sections</li>
             <li>The <strong>footer toolbar</strong> provides quick access to settings, API history, telemetry, and this help guide</li>
             <li>Press <kbd>Escape</kbd> to close any dialog</li>
             <li>Most tables support <strong>search</strong>, <strong>sorting</strong>, and <strong>click-to-expand</strong> for details</li>
@@ -48,9 +48,10 @@ const SLIDES: Slide[] = [
           <ul>
             <li><strong>Metric cards</strong> show device counts, discovery status, topologies, and IPAM data</li>
             <li>Click any metric card to <strong>navigate</strong> to that section</li>
-            <li><strong>Device Status</strong> breaks down online, offline, provisioning, and unknown counts</li>
-            <li><strong>Recent activity</strong> shows the latest discovery events</li>
-            <li><strong>Feature links</strong> provide a quick overview of all configuration and infrastructure sections with live counts</li>
+            <li><strong>Device Status</strong> breaks down online, offline, provisioning, and unknown counts with backup summary</li>
+            <li><strong>Recent activity</strong> shows the latest discovery events with vendor identification</li>
+            <li><strong>Feature overview</strong> cards link to Configuration and Infrastructure sections with live counts</li>
+            <li><strong>Quick actions</strong> bar provides one-click access to common tasks (add device, check discovery, build topology, etc.)</li>
             <li>Data refreshes automatically every 10 seconds</li>
           </ul>
         </div>
@@ -64,7 +65,7 @@ const SLIDES: Slide[] = [
     content: (
       <>
         <p>
-          The Devices page combines device management and network discovery in a single view.
+          The Devices page combines device management, network discovery, and test containers in a single tabbed view.
         </p>
         <div className="help-tour-tips">
           <h4>Devices</h4>
@@ -80,6 +81,10 @@ const SLIDES: Slide[] = [
             <li>New devices appear automatically and can be added to your inventory</li>
             <li><strong>WebSocket</strong> notifications alert you in real-time when new devices appear</li>
           </ul>
+          <h4>Test Containers</h4>
+          <ul>
+            <li>Spawn, start, stop, and restart <strong>Docker containers</strong> that simulate network devices for testing</li>
+          </ul>
         </div>
       </>
     ),
@@ -91,16 +96,21 @@ const SLIDES: Slide[] = [
     content: (
       <>
         <p>
-          The Configuration page combines templates, groups, variables, and the variable inspector
-          into a single tabbed interface.
+          The Configuration page combines templates, roles, groups, variables, the variable inspector,
+          and credentials into a single tabbed interface.
         </p>
         <div className="help-tour-tips">
           <h4>Templates</h4>
           <ul>
-            <li>Configuration templates use <strong>Go template syntax</strong> — variables like {'{{.Hostname}}'} are replaced with device values at deploy time</li>
+            <li>Configuration templates use <strong>Tera syntax</strong> (Jinja2-like) — variables like {'{{Hostname}}'} are replaced with device values at deploy time</li>
             <li><strong>Variable chips</strong> insert template syntax at your cursor position</li>
             <li><strong>Preview</strong> renders a template with a real or sample device to verify output</li>
             <li><strong>Templatize Config</strong> takes a raw config and detects variables automatically</li>
+          </ul>
+          <h4>Roles</h4>
+          <ul>
+            <li>Define <strong>device roles</strong> (spine, leaf, etc.) with one or more templates per role</li>
+            <li>Role templates auto-update on server restart for built-in roles</li>
           </ul>
           <h4>Groups</h4>
           <ul>
@@ -108,15 +118,10 @@ const SLIDES: Slide[] = [
             <li>Assign <strong>group-level variables</strong> that are inherited by member devices</li>
             <li>Control variable <strong>precedence</strong> across the hierarchy</li>
           </ul>
-          <h4>Variables</h4>
+          <h4>Variables & Inspector</h4>
           <ul>
-            <li>Manage device-level variables in a <strong>spreadsheet-like</strong> interface</li>
-            <li><strong>Bulk operations</strong> let you set all devices to the same value at once</li>
-          </ul>
-          <h4>Inspector</h4>
-          <ul>
-            <li>Select any device to see all <strong>resolved variables</strong> and their sources (global, group, host)</li>
-            <li>Understand how variable <strong>precedence and inheritance</strong> works for each device</li>
+            <li>Manage device-level variables in a <strong>spreadsheet-like</strong> interface with <strong>bulk operations</strong></li>
+            <li>The <strong>Inspector</strong> shows all resolved variables for any device with their sources (device, group, "all" group)</li>
           </ul>
         </div>
       </>
@@ -163,17 +168,34 @@ const SLIDES: Slide[] = [
     content: (
       <>
         <p>
-          Build and manage CLOS fabric network topologies with spine, leaf,
-          and superspine roles.
+          Build and manage datacenter network topologies with full IPAM integration, GPU clusters,
+          and automated device provisioning.
         </p>
         <div className="help-tour-tips">
-          <h4>Features</h4>
+          <h4>Architecture</h4>
           <ul>
-            <li>Create topologies with <strong>named roles</strong> (spine, leaf, border-leaf, etc.) and define the number of nodes per role</li>
-            <li><strong>Connect devices</strong> to topology roles — assign real devices from your inventory to each position</li>
-            <li>View a <strong>visual topology diagram</strong> showing the fabric layout in the expanded row</li>
-            <li><strong>Deploy configurations</strong> to all devices in a topology at once</li>
-            <li>Send <strong>commands</strong> to topology members (show interfaces, show BGP, etc.)</li>
+            <li><strong>CLOS fabric</strong> — spine/leaf with optional super-spine (5-stage) and pod support</li>
+            <li><strong>Hierarchical</strong> — core/distribution/access 3-tier architecture</li>
+            <li>Configure <strong>management switches</strong> with per-row, per-rack, or per-hall distribution</li>
+          </ul>
+          <h4>GPU Clusters</h4>
+          <ul>
+            <li>Attach <strong>GPU compute clusters</strong> to topologies with configurable node count, model, and interconnect</li>
+            <li>GPU nodes are <strong>striped across leaf/access racks</strong> with automatic port assignments</li>
+            <li>Assign <strong>VRFs</strong> per GPU cluster for network segmentation</li>
+          </ul>
+          <h4>Topology Builder</h4>
+          <ul>
+            <li><strong>Preview</strong> the full topology before deploying — device hostnames, IP assignments, rack placement, and cabling</li>
+            <li>Select <strong>datacenter, region, halls, rows, and racks</strong> for physical placement</li>
+            <li>Hostnames follow the system <strong>hostname pattern</strong> (e.g., <code>$datacenter-$role-#</code>)</li>
+          </ul>
+          <h4>Management</h4>
+          <ul>
+            <li>View <strong>visual topology diagrams</strong> and device assignments in the expanded row</li>
+            <li>Per-device <strong>config preview, deploy, and diff</strong></li>
+            <li>Download <strong>cutsheet</strong> (CSV), <strong>BOM</strong>, <strong>rack sheet</strong> (XLSX), and <strong>SVG export</strong></li>
+            <li><strong>Port assignment</strong> management with chassis visualization</li>
           </ul>
         </div>
       </>
@@ -187,62 +209,127 @@ const SLIDES: Slide[] = [
       <>
         <p>
           IP Address Management provides hierarchical organization of your network's
-          IP space with prefixes, addresses, VRFs, and roles.
+          IP space with prefixes, addresses, and roles.
         </p>
         <div className="help-tour-tips">
           <h4>Features</h4>
           <ul>
-            <li><strong>Org Hierarchy</strong> — organize by Region, Location, and Datacenter</li>
-            <li><strong>Prefixes</strong> — manage network prefixes with CIDR notation, nesting, and supernet relationships</li>
-            <li><strong>IP Addresses</strong> — track individual IPs with assignment status and DNS names</li>
-            <li><strong>VRFs</strong> — Virtual Routing and Forwarding instances for network segmentation</li>
+            <li><strong>Prefixes</strong> — manage network prefixes with CIDR notation, nesting, supernet relationships, and next-available allocation</li>
+            <li><strong>IP Addresses</strong> — track individual IPs with assignment status, DNS names, and device association</li>
             <li><strong>Roles</strong> — classify resources (e.g., production, management, loopback)</li>
             <li><strong>Tags</strong> — attach arbitrary key-value metadata for filtering and organization</li>
-            <li>Use left-side tabs to navigate between IPAM sections</li>
+            <li>Prefixes and IPs can be associated with <strong>VRFs</strong> and <strong>datacenters</strong></li>
           </ul>
         </div>
       </>
     ),
   },
   {
-    title: 'Actions',
-    icon: 'terminal',
-    page: 'jobs',
+    title: 'Locations',
+    icon: 'account_tree',
+    page: 'locations',
     content: (
       <>
         <p>
-          Actions let you define and execute vendor-specific SSH commands
-          on your devices as quick one-click operations.
+          The Locations page manages the physical hierarchy of your infrastructure,
+          from regions down to individual racks.
         </p>
         <div className="help-tour-tips">
-          <h4>Features</h4>
+          <h4>Hierarchy</h4>
           <ul>
-            <li>Define <strong>reusable commands</strong> per vendor (e.g., "show version", "show ip bgp summary")</li>
-            <li>Organize commands with <strong>sort order</strong> and descriptions</li>
-            <li>Filter commands by <strong>vendor</strong></li>
-            <li>Execute commands on devices directly from the device table actions</li>
+            <li><strong>Regions</strong> — top-level geographic areas</li>
+            <li><strong>Campuses</strong> — physical campus locations within regions</li>
+            <li><strong>Datacenters</strong> — datacenter facilities within campuses</li>
+            <li><strong>Halls</strong> — datacenter halls or rooms</li>
+            <li><strong>Rows</strong> — equipment rows within halls</li>
+            <li><strong>Racks</strong> — physical racks with device assignments and rack unit positioning</li>
+          </ul>
+          <h4>Integration</h4>
+          <ul>
+            <li>The topology builder auto-creates <strong>halls, rows, and racks</strong> when deploying</li>
+            <li>Devices are placed at specific <strong>rack positions</strong> (rack units) within the hierarchy</li>
           </ul>
         </div>
       </>
     ),
   },
   {
-    title: 'Jobs',
+    title: 'Tenants',
+    icon: 'group',
+    page: 'tenants',
+    content: (
+      <>
+        <p>
+          The Tenants page manages multi-tenancy, VRFs, and GPU cluster resources.
+        </p>
+        <div className="help-tour-tips">
+          <h4>Tenants</h4>
+          <ul>
+            <li>Create <strong>tenant organizations</strong> to group network and compute resources</li>
+            <li>Track tenant <strong>status</strong> (active/inactive)</li>
+          </ul>
+          <h4>VRFs</h4>
+          <ul>
+            <li>Manage <strong>Virtual Routing and Forwarding</strong> instances for network segmentation</li>
+            <li>Associate VRFs with <strong>tenants</strong> and <strong>GPU clusters</strong></li>
+            <li>VRFs are used in topology builds for per-cluster network isolation</li>
+          </ul>
+          <h4>GPU Clusters</h4>
+          <ul>
+            <li>View and manage <strong>GPU compute clusters</strong> created by topology builds</li>
+            <li>Track cluster <strong>model, node count, interconnect type</strong>, and provisioning status</li>
+          </ul>
+        </div>
+      </>
+    ),
+  },
+  {
+    title: 'Jobs & Actions',
     icon: 'schedule',
     page: 'jobs',
     content: (
       <>
         <p>
-          The Jobs page shows a history of all background operations — config deployments,
-          backups, discovery scans, and more.
+          The Jobs page combines vendor actions, job history, job templates, credentials,
+          and output parsers in a single tabbed interface.
+        </p>
+        <div className="help-tour-tips">
+          <h4>Actions</h4>
+          <ul>
+            <li>Define <strong>reusable commands</strong> per vendor (e.g., "show version", "show ip bgp summary")</li>
+            <li>Execute commands on devices directly from the device table or topology view</li>
+            <li>Supports <strong>SSH commands</strong>, <strong>webhooks</strong>, and <strong>API integrations</strong> with variable substitution</li>
+          </ul>
+          <h4>Job History</h4>
+          <ul>
+            <li>View jobs with <strong>status indicators</strong> — completed, failed, running, queued</li>
+            <li>Click a job to <strong>expand</strong> and see detailed logs, output, and duration</li>
+            <li>Jobs update in <strong>real-time</strong> via WebSocket</li>
+          </ul>
+          <h4>Templates & Parsers</h4>
+          <ul>
+            <li><strong>Job templates</strong> define reusable job definitions with device/group targeting and cron scheduling</li>
+            <li><strong>Output parsers</strong> extract structured data from command output using regex capture groups</li>
+          </ul>
+        </div>
+      </>
+    ),
+  },
+  {
+    title: 'System',
+    icon: 'settings',
+    page: 'system',
+    content: (
+      <>
+        <p>
+          The System page manages users, branding, and device naming configuration.
         </p>
         <div className="help-tour-tips">
           <h4>Features</h4>
           <ul>
-            <li>View jobs with <strong>status indicators</strong> — completed, failed, running, queued</li>
-            <li>Click a job to <strong>expand</strong> and see detailed logs and output</li>
-            <li><strong>Duration</strong> tracking shows how long each job took</li>
-            <li>Jobs update in <strong>real-time</strong> via WebSocket</li>
+            <li><strong>Users</strong> — create, edit, enable/disable, and delete user accounts</li>
+            <li><strong>Branding</strong> — upload a custom logo and set an application name (shown on the header, login page, and browser tab)</li>
+            <li><strong>Device Naming</strong> — configure the hostname auto-generation pattern using <code>$datacenter</code>, <code>$region</code>, <code>$hall</code>, <code>$role</code>, and <code>#</code> (auto-incrementing number)</li>
           </ul>
         </div>
       </>
@@ -280,14 +367,16 @@ const SLIDES: Slide[] = [
           available from any page.
         </p>
         <div className="help-tour-tips">
-          <h4>Buttons (left to right)</h4>
+          <h4>Left Side</h4>
           <ul>
-            <li><Icon name="add_circle" size={16} /> <strong>Spawn Test Host</strong> — creates a Docker container that simulates a network device for testing</li>
-            <li><Icon name="restart_alt" size={16} /> <strong>Reset Discovery</strong> — clears the discovery tracking so all devices are treated as new</li>
-            <li><Icon name="insights" size={16} /> <strong>Telemetry</strong> — view application event tracking and performance metrics</li>
+            <li><Icon name="qr_code_2" size={16} /> <strong>QR / Barcode Generator</strong> — generate QR codes and barcodes for device serial numbers or URLs</li>
             <li><Icon name="history" size={16} /> <strong>API History</strong> — browse all API calls made by the app, with request/response details</li>
-            <li><Icon name="settings" size={16} /> <strong>Settings</strong> — configure server URL, SSH credentials, branding, layout, and other preferences</li>
-            <li><Icon name="palette" size={16} /> <strong>Theme</strong> — switch between light, dark, and system color themes</li>
+            <li><Icon name="insights" size={16} /> <strong>Telemetry</strong> — view application event tracking and performance metrics</li>
+          </ul>
+          <h4>Right Side</h4>
+          <ul>
+            <li><Icon name="settings" size={16} /> <strong>Settings</strong> — configure SSH credentials, DHCP, layout, and other preferences</li>
+            <li><Icon name="palette" size={16} /> <strong>Theme</strong> — choose from 14 themes (dark, light, solarized, dracula, nord, and more)</li>
             <li><Icon name="help" size={16} /> <strong>Help</strong> — open this guide</li>
           </ul>
         </div>
@@ -304,26 +393,21 @@ const SLIDES: Slide[] = [
           <ul>
             <li><kbd>Escape</kbd> — close any open dialog or modal</li>
           </ul>
+          <h4>Header Controls</h4>
+          <ul>
+            <li>Click the <strong>bell icon</strong> to view notification history with action links</li>
+            <li>Click the <strong>sticky note icon</strong> to open the scratch pad for quick notes (persists across sessions)</li>
+            <li>The <strong>page selector</strong> is searchable — type to filter pages</li>
+          </ul>
           <h4>Layout Settings</h4>
           <ul>
             <li>Open <strong>Settings</strong> to adjust <strong>page width</strong> (narrow, default, wide, full) and <strong>dialog size</strong></li>
             <li>Some pages (like Device Models) automatically use a wider layout for complex content</li>
             <li>Layout preferences persist across sessions</li>
           </ul>
-          <h4>Notifications</h4>
-          <ul>
-            <li>Click the <strong>bell icon</strong> in the header to view notification history</li>
-            <li>Toast notifications appear briefly for actions like deploy, backup, and errors</li>
-            <li>WebSocket events push real-time alerts when new devices are discovered</li>
-          </ul>
-          <h4>Scratch Pad</h4>
-          <ul>
-            <li>Click the <strong>sticky note icon</strong> in the header to open a quick notes panel</li>
-            <li>Notes are saved in your browser and persist across sessions</li>
-          </ul>
           <h4>Branding</h4>
           <ul>
-            <li>Upload a custom <strong>logo</strong> and set a custom <strong>app name</strong> in Settings</li>
+            <li>Upload a custom <strong>logo</strong> and set a custom <strong>app name</strong> in System &gt; Branding</li>
             <li>The logo and title update on the browser tab, header, and login page</li>
           </ul>
         </div>
