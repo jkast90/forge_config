@@ -50,7 +50,7 @@ CREATE TABLE templates_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
-    vendor_id TEXT DEFAULT '',
+    vendor_id INTEGER DEFAULT NULL,
     content TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -95,7 +95,7 @@ CREATE TABLE dhcp_options_new (
     name TEXT NOT NULL,
     value TEXT DEFAULT '',
     type TEXT DEFAULT 'string',
-    vendor_id TEXT DEFAULT '',
+    vendor_id INTEGER DEFAULT NULL,
     description TEXT DEFAULT '',
     enabled INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -119,7 +119,7 @@ UPDATE dhcp_options_new SET vendor_id = COALESCE(
 
 CREATE TABLE vendor_actions_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    vendor_id TEXT NOT NULL,
+    vendor_id INTEGER NOT NULL,
     label TEXT NOT NULL,
     command TEXT NOT NULL,
     sort_order INTEGER DEFAULT 0,
@@ -162,7 +162,7 @@ UPDATE job_templates SET action_id = COALESCE(
 
 CREATE TABLE device_models_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    vendor_id TEXT NOT NULL,
+    vendor_id INTEGER NOT NULL,
     model TEXT NOT NULL,
     display_name TEXT NOT NULL,
     rack_units INTEGER DEFAULT 1,

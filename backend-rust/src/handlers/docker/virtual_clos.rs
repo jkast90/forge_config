@@ -67,6 +67,8 @@ pub async fn build_virtual_clos(
     let external_count = req.external_devices;
     let uplinks_per_spine = req.uplinks_per_spine;
     let links_per_leaf = req.links_per_leaf;
+    let spine_model = if req.spine_model.is_empty() { "7050CX3-32S".to_string() } else { req.spine_model.clone() };
+    let leaf_model = if req.leaf_model.is_empty() { "7050SX3-48YC8".to_string() } else { req.leaf_model.clone() };
     let datacenter_id = req.datacenter_id;
     let dc = datacenter_id.map(|id| id.to_string()).unwrap_or_default();
     let dc = dc.as_str();
@@ -236,7 +238,7 @@ pub async fn build_virtual_clos(
 
     let mut nodes: Vec<VNode> = Vec::new();
 
-    // Spines: 7050CX3-32S (bigger — 32x QSFP28 100G)
+    // Spines: use spine_model from request (default: 7050CX3-32S)
     // Distribute spines round-robin across rows (one spine rack per row)
     for i in 1..=spine_count {
         let (h, r, rk, pos) = if !spine_racks.is_empty() {
@@ -253,7 +255,7 @@ pub async fn build_virtual_clos(
             role: "spine".to_string(),
             loopback: format!("10.255.0.{}", i),
             asn: 65000,
-            model: "7050CX3-32S".to_string(),
+            model: spine_model.clone(),
             mgmt_ip: format!("172.20.0.{}", 10 + i),
             hall_id: h,
             row_id: r,
@@ -263,7 +265,7 @@ pub async fn build_virtual_clos(
         });
     }
 
-    // Leaves: 7050SX3-48YC8 (48x SFP28 25G + 8x QSFP28 100G)
+    // Leaves: use leaf_model from request (default: 7050SX3-48YC8)
     // Distribute across racks: leaves_per_rack per rack
     for i in 1..=leaf_count {
         let (h, r, rk, pos) = if !rack_placements.is_empty() {
@@ -284,7 +286,7 @@ pub async fn build_virtual_clos(
             role: "leaf".to_string(),
             loopback: format!("10.255.1.{}", i),
             asn: 65000 + i as u32,
-            model: "7050SX3-48YC8".to_string(),
+            model: leaf_model.clone(),
             mgmt_ip: format!("172.20.1.{}", 10 + i),
             hall_id: h,
             row_id: r,
@@ -487,8 +489,7 @@ pub async fn build_virtual_clos(
         .collect();
 
     // Split spine 100G ports: first 2/3 for leaf-facing, last 1/3 for uplinks
-    let spine_model = "7050CX3-32S";
-    let spine_all_ports = model_100g_ports.get(spine_model).cloned().unwrap_or_default();
+    let spine_all_ports = model_100g_ports.get(&spine_model).cloned().unwrap_or_default();
     let spine_leaf_port_count = (spine_all_ports.len() * 2 + 2) / 3; // ceil(2/3)
     let spine_leaf_ports: Vec<String> = spine_all_ports.iter().take(spine_leaf_port_count).cloned().collect();
     let spine_uplink_ports: Vec<String> = spine_all_ports.iter().skip(spine_leaf_port_count).cloned().collect();

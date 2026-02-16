@@ -3,6 +3,7 @@ import type { Topology, TopologyFormData, Device, ConfigPreviewResult, Job, Topo
 import {
   useTopologies,
   useDevices,
+  useDeviceModels,
   useTemplates,
   useIpam,
   useAsyncModal,
@@ -51,6 +52,7 @@ export function TopologyManagement() {
     deleteTopology,
   } = useTopologies();
   const { devices, refresh: refreshDevices } = useDevices();
+  const { deviceModels } = useDeviceModels();
   const { templates } = useTemplates();
   const ipam = useIpam();
   const { regions, campuses, datacenters, halls, rows: ipamRows, racks } = ipam;
@@ -66,7 +68,7 @@ export function TopologyManagement() {
   const diagramRef = useRef<TopologyDiagramViewerHandle>(null);
   const [buildingVirtualClos, setBuildingVirtualClos] = useState(false);
   const [showVirtualClosDialog, setShowVirtualClosDialog] = useState(false);
-  const [virtualClosConfig, setVirtualClosConfig] = useState({ spines: 2, leaves: 16, region_id: '', campus_id: '', datacenter_id: '', halls: 1, rows_per_hall: 4, racks_per_row: 8, leaves_per_rack: 1, external_devices: 2, uplinks_per_spine: 2, links_per_leaf: 2, external_names: [] as string[] });
+  const [virtualClosConfig, setVirtualClosConfig] = useState({ spines: 2, leaves: 16, region_id: '', campus_id: '', datacenter_id: '', halls: 1, rows_per_hall: 4, racks_per_row: 8, leaves_per_rack: 1, external_devices: 2, uplinks_per_spine: 2, links_per_leaf: 2, external_names: [] as string[], spine_model: '', leaf_model: '' });
 
   const hasVirtualClos = useMemo(
     () => devices.some(d => d.topology_id === 'dc1-virtual'),
@@ -634,8 +636,10 @@ export function TopologyManagement() {
         external_devices: virtualClosConfig.external_devices || undefined,
         uplinks_per_spine: virtualClosConfig.external_devices ? virtualClosConfig.uplinks_per_spine : undefined,
         external_names: virtualClosConfig.external_devices ? virtualClosConfig.external_names.filter(n => n) : undefined,
+        spine_model: virtualClosConfig.spine_model || undefined,
+        leaf_model: virtualClosConfig.leaf_model || undefined,
       });
-      addNotification('success', `Virtual CLOS ready: ${result.devices.length} Arista switches in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
+      addNotification('success', `Virtual CLOS ready: ${result.devices.length} switches in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -777,6 +781,8 @@ export function TopologyManagement() {
         external_devices: virtualClosConfig.external_devices || undefined,
         uplinks_per_spine: virtualClosConfig.external_devices ? virtualClosConfig.uplinks_per_spine : undefined,
         external_names: virtualClosConfig.external_devices ? virtualClosConfig.external_names.filter(n => n) : undefined,
+        spine_model: virtualClosConfig.spine_model || undefined,
+        leaf_model: virtualClosConfig.leaf_model || undefined,
       });
       addNotification('success', `Rebuilt: ${result.devices.length} devices in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
       refreshDevices();
@@ -873,6 +879,10 @@ export function TopologyManagement() {
     { value: '', label: 'Select datacenter...' },
     ...vclosFilteredDatacenters.map(d => ({ value: d.id, label: d.name })),
   ], [vclosFilteredDatacenters]);
+  const vclosModelOptions = useMemo(() => [
+    { value: '', label: 'Default' },
+    ...deviceModels.map(m => ({ value: m.model, label: m.display_name || m.model })),
+  ], [deviceModels]);
 
   // Handle "Create New..." inline creation
   const handleCreateNewRegion = useCallback(async () => {
@@ -1746,35 +1756,35 @@ export function TopologyManagement() {
         variant="wide"
       >
         <p style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)', margin: '0 0 12px' }}>
-          Creates virtual Arista device records in a CLOS topology with port assignments and IPAM allocations. No containers are started.
+          Creates virtual device records in a CLOS topology with port assignments and IPAM allocations. No containers are started.
         </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px' }}>
-          {/* Column 1: Fabric */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '24px' }}>
+          {/* Column 1: Spines */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
-              Fabric
+              Spines
             </div>
             <FormField
-              label="Spines"
+              label="Count"
               name="spines"
               type="number"
               value={String(virtualClosConfig.spines)}
               onChange={(e) => setVirtualClosConfig(c => ({ ...c, spines: Math.max(1, parseInt(e.target.value) || 1) }))}
             />
-            <FormField
-              label="Leaves"
-              name="leaves"
-              type="number"
-              value={String(virtualClosConfig.leaves)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, leaves: Math.max(1, parseInt(e.target.value) || 1) }))}
+            <SelectField
+              label="Model"
+              name="spine_model"
+              value={virtualClosConfig.spine_model}
+              onChange={(e) => setVirtualClosConfig(c => ({ ...c, spine_model: e.target.value }))}
+              options={vclosModelOptions}
             />
             <FormField
-              label="Links / Leaf"
-              name="links_per_leaf"
+              label="Uplinks / Spine"
+              name="uplinks_per_spine"
               type="number"
-              value={String(virtualClosConfig.links_per_leaf)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, links_per_leaf: Math.max(1, parseInt(e.target.value) || 1) }))}
-              min={1}
+              value={String(virtualClosConfig.uplinks_per_spine)}
+              onChange={(e) => setVirtualClosConfig(c => ({ ...c, uplinks_per_spine: Math.max(1, parseInt(e.target.value) || 1) }))}
+              disabled={!virtualClosConfig.external_devices}
             />
             <FormField
               label="External Devices"
@@ -1789,14 +1799,6 @@ export function TopologyManagement() {
                   return { ...c, external_devices: count, external_names: names.slice(0, count) };
                 });
               }}
-            />
-            <FormField
-              label="Uplinks / Spine"
-              name="uplinks_per_spine"
-              type="number"
-              value={String(virtualClosConfig.uplinks_per_spine)}
-              onChange={(e) => setVirtualClosConfig(c => ({ ...c, uplinks_per_spine: Math.max(1, parseInt(e.target.value) || 1) }))}
-              disabled={!virtualClosConfig.external_devices}
             />
             {virtualClosConfig.external_devices > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -1818,7 +1820,36 @@ export function TopologyManagement() {
             )}
           </div>
 
-          {/* Column 2: Location */}
+          {/* Column 2: Leaves */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+              Leaves
+            </div>
+            <FormField
+              label="Count"
+              name="leaves"
+              type="number"
+              value={String(virtualClosConfig.leaves)}
+              onChange={(e) => setVirtualClosConfig(c => ({ ...c, leaves: Math.max(1, parseInt(e.target.value) || 1) }))}
+            />
+            <SelectField
+              label="Model"
+              name="leaf_model"
+              value={virtualClosConfig.leaf_model}
+              onChange={(e) => setVirtualClosConfig(c => ({ ...c, leaf_model: e.target.value }))}
+              options={vclosModelOptions}
+            />
+            <FormField
+              label="Links / Leaf"
+              name="links_per_leaf"
+              type="number"
+              value={String(virtualClosConfig.links_per_leaf)}
+              onChange={(e) => setVirtualClosConfig(c => ({ ...c, links_per_leaf: Math.max(1, parseInt(e.target.value) || 1) }))}
+              min={1}
+            />
+          </div>
+
+          {/* Column 3: Location */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
               Location
@@ -1848,7 +1879,7 @@ export function TopologyManagement() {
             />
           </div>
 
-          {/* Column 3: Rack Layout */}
+          {/* Column 4: Rack Layout */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', opacity: virtualClosConfig.datacenter_id ? 1 : 0.5 }}>
             <div style={{ fontSize: '13px', fontWeight: 600, opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
               Rack Layout

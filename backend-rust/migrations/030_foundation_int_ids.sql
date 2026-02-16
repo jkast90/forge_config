@@ -75,9 +75,9 @@ CREATE TABLE topologies_new (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
-    region_id TEXT DEFAULT '',
-    campus_id TEXT DEFAULT '',
-    datacenter_id TEXT DEFAULT '',
+    region_id INTEGER DEFAULT NULL,
+    campus_id INTEGER DEFAULT NULL,
+    datacenter_id INTEGER DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

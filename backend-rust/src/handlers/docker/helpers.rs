@@ -68,6 +68,12 @@ pub struct VirtualClosRequest {
     /// Custom hostnames for external devices (one per external device)
     #[serde(default)]
     pub external_names: Vec<String>,
+    /// Device model for spines (default: 7050CX3-32S)
+    #[serde(default)]
+    pub spine_model: String,
+    /// Device model for leaves (default: 7050SX3-48YC8)
+    #[serde(default)]
+    pub leaf_model: String,
     /// When true, also spawn cEOS Docker containers for each device
     #[serde(default)]
     pub spawn_containers: bool,
