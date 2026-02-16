@@ -77,6 +77,7 @@ export function LoginPage({ branding }: Props) {
           <form onSubmit={handleSubmit}>
             <div className="login-field">
               <label htmlFor="username">Username</label>
+              Default: admin/admin
               <input
                 id="username"
                 type="text"

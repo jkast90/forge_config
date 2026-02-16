@@ -576,7 +576,10 @@ vlan 10
 vlan 20
    name Storage
 !
-interface Loopback0
+{% for vrf in VRFs %}vrf instance {{vrf.name}}
+   rd {{vrf.name}}:{{vrf.id}}
+!
+{% endfor %}interface Loopback0
    ip address {{vars.Loopback}}/32
 !
 {% if vars.Peer49 is defined %}interface Ethernet49
@@ -635,7 +638,14 @@ interface Loopback0
    mtu 9214
    no shutdown
 !
-{% endif %}
+{% endif %}{% for vrf in VRFs %}{% for iface in vrf.interfaces %}interface {{iface.port_name}}
+   description {{iface.description}}
+   no switchport
+   vrf {{vrf.name}}
+   mtu 9214
+   no shutdown
+!
+{% endfor %}{% endfor %}
 interface Vxlan1
    vxlan source-interface Loopback0
    vxlan udp-port 4789
@@ -643,7 +653,8 @@ interface Vxlan1
    vxlan vlan 20 vni 10020
 !
 ip routing
-!
+{% for vrf in VRFs %}ip routing vrf {{vrf.name}}
+{% endfor %}!
 router bgp {{vars.ASN}}
    router-id {{vars.Loopback}}
    no bgp default ipv4-unicast
@@ -692,7 +703,13 @@ router bgp {{vars.ASN}}
       rd auto
       route-target both 20:10020
       redistribute learned
-!{% endif %}"#.to_string(),
+{% for vrf in VRFs %}   !
+   vrf {{vrf.name}}
+      rd {{vrf.name}}:{{vrf.id}}
+      route-target import evpn {{vrf.name}}:{{vrf.id}}
+      route-target export evpn {{vrf.name}}:{{vrf.id}}
+      redistribute connected
+{% endfor %}!{% endif %}"#.to_string(),
         },
         DefaultTemplate {
             id: "juniper-junos".to_string(),

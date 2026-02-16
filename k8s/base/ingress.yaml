@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: forgeconfig
+  namespace: forgeconfig
+  labels:
+    app.kubernetes.io/part-of: forgeconfig
+  annotations:
+    # Adjust these for your ingress controller (nginx shown here)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    # WebSocket support for /api/ws
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
+spec:
+  ingressClassName: nginx # Change to match your cluster's ingress controller
+  rules:
+    - host: forgeconfig.example.com # Replace with your domain
+      http:
+        paths:
+          # API and WebSocket traffic -> backend
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  name: http
+          # Everything else -> frontend
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  name: http
+  # Uncomment to enable TLS
+  # tls:
+  #   - hosts:
+  #       - forgeconfig.example.com
+  #     secretName: forgeconfig-tls

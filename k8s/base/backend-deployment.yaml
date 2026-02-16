@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: forgeconfig
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: forgeconfig
+spec:
+  replicas: 1 # SQLite requires single-writer; do not scale beyond 1
+  strategy:
+    type: Recreate # Avoid two pods fighting over the SQLite DB
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backend
+        app.kubernetes.io/part-of: forgeconfig
+    spec:
+      containers:
+        - name: backend
+          image: forgeconfig/backend:latest # Replace with your registry image
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: dhcp
+              containerPort: 67
+              protocol: UDP
+            - name: tftp
+              containerPort: 69
+              protocol: UDP
+          envFrom:
+            - configMapRef:
+                name: backend-config
+            - secretRef:
+                name: backend-secret
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tftp
+              mountPath: /tftp
+            - name: backups
+              mountPath: /backups
+            - name: templates
+              mountPath: /configs/templates
+              readOnly: true
+          securityContext:
+            capabilities:
+              add:
+                - NET_ADMIN # Required for dnsmasq DHCP
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /api/settings
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/settings
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: backend-data
+        - name: tftp
+          persistentVolumeClaim:
+            claimName: backend-tftp
+        - name: backups
+          persistentVolumeClaim:
+            claimName: backend-backups
+        - name: templates
+          configMap:
+            name: backend-templates
+            optional: true # Falls back to built-in defaults if no templates ConfigMap

@@ -8,6 +8,8 @@ interface DiagramProps {
   leaves: Device[];
   externals?: Device[];
   patchPanels?: Device[];
+  gpuNodes?: Device[];
+  mgmtSwitches?: Device[];
 }
 
 export interface TopologyDiagramViewerHandle {
@@ -15,7 +17,7 @@ export interface TopologyDiagramViewerHandle {
 }
 
 /** Interactive diagram viewer with zoom and pan controls */
-export const TopologyDiagramViewer = forwardRef<TopologyDiagramViewerHandle, DiagramProps>(function TopologyDiagramViewer({ spines, leaves, externals = [], patchPanels = [] }, ref) {
+export const TopologyDiagramViewer = forwardRef<TopologyDiagramViewerHandle, DiagramProps>(function TopologyDiagramViewer({ spines, leaves, externals = [], patchPanels = [], gpuNodes = [], mgmtSwitches = [] }, ref) {
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -49,8 +51,9 @@ export const TopologyDiagramViewer = forwardRef<TopologyDiagramViewerHandle, Dia
     if (!containerRef.current) return;
     const nodeW = 140;
     const hGap = 20;
-    const maxCount = Math.max(spines.length, leaves.length, externals.length, patchPanels.length);
-    const svgW = maxCount * (nodeW + hGap) - hGap + 40;
+    const maxCount = Math.max(spines.length, leaves.length, externals.length, patchPanels.length, gpuNodes.length);
+    const mgmtExtra = mgmtSwitches.length > 0 ? 180 : 0;
+    const svgW = maxCount * (nodeW + hGap) - hGap + 40 + mgmtExtra;
     const containerW = containerRef.current.clientWidth - 32;
     const fitZoom = Math.min(containerW / svgW, 2);
     setZoom(Math.max(fitZoom, 0.25));
@@ -125,18 +128,19 @@ export const TopologyDiagramViewer = forwardRef<TopologyDiagramViewerHandle, Dia
             display: 'inline-block',
           }}
         >
-          <TopologyDiagram ref={svgRef} spines={spines} leaves={leaves} externals={externals} patchPanels={patchPanels} />
+          <TopologyDiagram ref={svgRef} spines={spines} leaves={leaves} externals={externals} patchPanels={patchPanels} gpuNodes={gpuNodes} mgmtSwitches={mgmtSwitches} />
         </div>
       </div>
     </div>
   );
 });
 
-/** SVG network diagram showing CLOS spine-leaf topology with dual links, optional external tier, and patch panel layer */
-export const TopologyDiagram = forwardRef<SVGSVGElement, DiagramProps>(function TopologyDiagram({ spines, leaves, externals = [], patchPanels = [] }, ref) {
+/** SVG network diagram showing CLOS spine-leaf topology with dual links, optional external tier, patch panel layer, GPU nodes, and management switches */
+export const TopologyDiagram = forwardRef<SVGSVGElement, DiagramProps>(function TopologyDiagram({ spines, leaves, externals = [], patchPanels = [], gpuNodes = [], mgmtSwitches = [] }, ref) {
   const nodeW = 140;
   const nodeH = 48;
   const ppNodeH = 32; // Shorter height for patch panels (passive devices)
+  const gpuNodeH = 40; // Slightly shorter for GPU nodes
   const hGap = 20;
   const linksPerPair = 2;
   const linkSpacing = 6;
@@ -146,6 +150,12 @@ export const TopologyDiagram = forwardRef<SVGSVGElement, DiagramProps>(function 
   const padY = 20;
   const hasExternals = externals.length > 0;
   const hasPatchPanels = patchPanels.length > 0;
+  const hasGpuNodes = gpuNodes.length > 0;
+  const hasMgmt = mgmtSwitches.length > 0;
+  const mgmtNodeW = 120; // Slightly narrower for mgmt switches
+  const mgmtNodeH = 40;
+  const mgmtVGap = 12; // Vertical gap between stacked mgmt switches
+  const mgmtColumnW = hasMgmt ? mgmtNodeW + 40 : 0; // Extra right margin for mgmt column
 
   // Interface counts for spacing
   const spineDownIfCount = leaves.length * linksPerPair;
@@ -166,28 +176,45 @@ export const TopologyDiagram = forwardRef<SVGSVGElement, DiagramProps>(function 
     ? spineToNextGap + ppGap + ppNodeH + ppGap + leafFromPrevGap
     : 40 + spineDownIfBlockH + leafIfBlockH;
   const extSpineGap = hasExternals ? 40 + extIfBlockH + spineUpIfBlockH : 0;
+  const leafGpuGap = hasGpuNodes ? 60 : 0;
 
-  const maxCount = Math.max(spines.length, leaves.length, externals.length, patchPanels.length);
-  const totalW = maxCount * (nodeW + hGap) - hGap + padX * 2;
+  const maxCount = Math.max(spines.length, leaves.length, externals.length, patchPanels.length, gpuNodes.length);
+  const fabricW = maxCount * (nodeW + hGap) - hGap + padX * 2;
+  const totalW = fabricW + mgmtColumnW;
 
-  // Y positions for each tier (external at top, spine, patch panels, leaf at bottom)
+  // Y positions for each tier (external at top, spine, patch panels, leaf, GPU at bottom)
   const extY = padY;
   const spineY = hasExternals ? extY + nodeH + extSpineGap : padY;
   const ppY = spineY + nodeH + spineToNextGap + ppGap;
   const leafY = spineY + nodeH + spineLeafGap;
-  const totalH = leafY + nodeH + padY;
+  const gpuY = leafY + nodeH + leafGpuGap;
 
-  // Center each tier horizontally
-  const tierStartX = (count: number) => padX + (totalW - padX * 2 - (count * (nodeW + hGap) - hGap)) / 2;
+  // Management switches stacked vertically on the right side
+  const mgmtStackH = hasMgmt ? mgmtSwitches.length * (mgmtNodeH + mgmtVGap) - mgmtVGap : 0;
+  const mgmtX = fabricW + 20;
+  const mgmtStartY = spineY + (leafY + nodeH - spineY - mgmtStackH) / 2; // Vertically centered between spine and leaf
+  const mgmtPositions = mgmtSwitches.map((_, i) => ({ x: mgmtX, y: mgmtStartY + i * (mgmtNodeH + mgmtVGap) }));
+
+  const fabricBottomY = hasGpuNodes ? gpuY + gpuNodeH : leafY + nodeH;
+  const mgmtBottomY = hasMgmt ? mgmtStartY + mgmtStackH : 0;
+  const totalH = Math.max(fabricBottomY, mgmtBottomY) + padY;
+
+  // Center each tier horizontally within the fabric area (excluding mgmt column)
+  const tierStartX = (count: number) => padX + (fabricW - padX * 2 - (count * (nodeW + hGap) - hGap)) / 2;
   const extStartX = tierStartX(externals.length);
   const spineStartX = tierStartX(spines.length);
   const ppStartX = tierStartX(patchPanels.length);
   const leafStartX = tierStartX(leaves.length);
+  const gpuStartX = tierStartX(gpuNodes.length);
 
   const extPositions = externals.map((_, i) => ({ x: extStartX + i * (nodeW + hGap), y: extY }));
   const spinePositions = spines.map((_, i) => ({ x: spineStartX + i * (nodeW + hGap), y: spineY }));
   const ppPositions = patchPanels.map((_, i) => ({ x: ppStartX + i * (nodeW + hGap), y: ppY }));
   const leafPositions = leaves.map((_, i) => ({ x: leafStartX + i * (nodeW + hGap), y: leafY }));
+  const gpuPositions = gpuNodes.map((_, i) => ({ x: gpuStartX + i * (nodeW + hGap), y: gpuY }));
+
+  // Map each GPU node to its parent leaf (round-robin striping, matching backend logic)
+  const gpuToLeaf: number[] = gpuNodes.map((_, gi) => leaves.length > 0 ? gi % leaves.length : -1);
 
   const statusColor = (d: Device) =>
     d.status === 'online' ? 'var(--color-success, #22c55e)' : d.status === 'provisioning' ? 'var(--color-warning, #f59e0b)' : 'var(--color-text-muted, #888)';
@@ -234,22 +261,23 @@ export const TopologyDiagram = forwardRef<SVGSVGElement, DiagramProps>(function 
     }
   }
 
-  const renderNode = (d: Device, pos: { x: number; y: number }, opts?: { borderColor?: string; height?: number; dashed?: boolean }) => {
+  const renderNode = (d: Device, pos: { x: number; y: number }, opts?: { borderColor?: string; height?: number; width?: number; dashed?: boolean }) => {
     const h = opts?.height || nodeH;
+    const w = opts?.width || nodeW;
     return (
       <g key={d.id}>
         <rect
-          x={pos.x} y={pos.y} width={nodeW} height={h} rx={6}
+          x={pos.x} y={pos.y} width={w} height={h} rx={6}
           fill="var(--color-bg-primary, #1a1a2e)"
           stroke={opts?.borderColor || statusColor(d)}
           strokeWidth={opts?.dashed ? 1.5 : 2}
           strokeDasharray={opts?.dashed ? '4 2' : undefined}
         />
-        <text x={pos.x + nodeW / 2} y={pos.y + (h < 40 ? h / 2 + 4 : 18)} textAnchor="middle" fill="var(--color-text, #e0e0e0)" fontSize={h < 40 ? 10 : 12} fontWeight={600}>
+        <text x={pos.x + w / 2} y={pos.y + (h < 40 ? h / 2 + 4 : 18)} textAnchor="middle" fill="var(--color-text, #e0e0e0)" fontSize={h < 40 ? 10 : 12} fontWeight={600}>
           {d.hostname || d.mac?.slice(-8) || String(d.id)}
         </text>
         {h >= 40 && (
-          <text x={pos.x + nodeW / 2} y={pos.y + 34} textAnchor="middle" fill="var(--color-text-muted, #888)" fontSize={10}>
+          <text x={pos.x + w / 2} y={pos.y + 34} textAnchor="middle" fill="var(--color-text-muted, #888)" fontSize={10}>
             {d.ip || '—'}
           </text>
         )}
@@ -398,6 +426,34 @@ export const TopologyDiagram = forwardRef<SVGSVGElement, DiagramProps>(function 
         </g>
       ))}
 
+      {/* GPU uplink lines: leaf <-> GPU node (2 links per pair) */}
+      {gpuNodes.map((_, gi) => {
+        const li = gpuToLeaf[gi];
+        if (li < 0) return null;
+        const gp = gpuPositions[gi];
+        const lp = leafPositions[li];
+        return Array.from({ length: linksPerPair }, (__, link) => {
+          const off = (link - (linksPerPair - 1) / 2) * linkSpacing;
+          return (
+            <line
+              key={`gpu-link-${gi}-${link}`}
+              x1={lp.x + nodeW / 2 + off} y1={lp.y + nodeH}
+              x2={gp.x + nodeW / 2 + off} y2={gp.y}
+              stroke="var(--color-accent-green, #22c55e)"
+              strokeWidth={1.5}
+              opacity={0.45}
+            />
+          );
+        });
+      })}
+
+      {/* GPU nodes */}
+      {gpuNodes.map((d, i) => (
+        <g key={`gpu-${d.id}`}>
+          {renderNode(d, gpuPositions[i], { borderColor: 'var(--color-accent-green, #22c55e)', height: gpuNodeH })}
+        </g>
+      ))}
+
       {/* Tier labels */}
       {hasExternals && (
         <text x={8} y={extY + nodeH / 2 + 4} fill="var(--color-accent-purple, #a855f7)" fontSize={9} fontWeight={600} transform={`rotate(-90, 8, ${extY + nodeH / 2})`} textAnchor="middle">
@@ -415,6 +471,55 @@ export const TopologyDiagram = forwardRef<SVGSVGElement, DiagramProps>(function 
       <text x={8} y={leafY + nodeH / 2 + 4} fill="var(--color-text-muted, #888)" fontSize={9} fontWeight={600} transform={`rotate(-90, 8, ${leafY + nodeH / 2})`} textAnchor="middle">
         LEAF
       </text>
+      {hasGpuNodes && (
+        <text x={8} y={gpuY + gpuNodeH / 2 + 4} fill="var(--color-accent-green, #22c55e)" fontSize={9} fontWeight={600} transform={`rotate(-90, 8, ${gpuY + gpuNodeH / 2})`} textAnchor="middle">
+          GPU
+        </text>
+      )}
+
+      {/* Management switches — stacked vertically on the right */}
+      {hasMgmt && (
+        <>
+          {/* Dashed management lines from spines/leaves to mgmt column */}
+          {spines.map((_, si) => mgmtSwitches.map((_, mi) => (
+            <line
+              key={`mgmt-spine-${si}-${mi}`}
+              x1={spinePositions[si].x + nodeW} y1={spinePositions[si].y + nodeH / 2}
+              x2={mgmtPositions[mi].x} y2={mgmtPositions[mi].y + mgmtNodeH / 2}
+              stroke="var(--color-text-muted, #888)"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+              opacity={0.2}
+            />
+          )))}
+          {leaves.map((_, li) => mgmtSwitches.map((_, mi) => (
+            <line
+              key={`mgmt-leaf-${li}-${mi}`}
+              x1={leafPositions[li].x + nodeW} y1={leafPositions[li].y + nodeH / 2}
+              x2={mgmtPositions[mi].x} y2={mgmtPositions[mi].y + mgmtNodeH / 2}
+              stroke="var(--color-text-muted, #888)"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+              opacity={0.2}
+            />
+          )))}
+          {mgmtSwitches.map((d, i) => (
+            <g key={`mgmt-${d.id}`}>
+              {renderNode(d, mgmtPositions[i], { borderColor: 'var(--color-accent-blue, #3b82f6)', height: mgmtNodeH, width: mgmtNodeW })}
+            </g>
+          ))}
+          <text
+            x={mgmtX + mgmtNodeW / 2}
+            y={mgmtStartY - 10}
+            fill="var(--color-accent-blue, #3b82f6)"
+            fontSize={9}
+            fontWeight={600}
+            textAnchor="middle"
+          >
+            MGMT
+          </text>
+        </>
+      )}
     </svg>
   );
 });

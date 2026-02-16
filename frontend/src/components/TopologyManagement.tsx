@@ -18,6 +18,8 @@ import {
   isPatchPanel,
 } from '@core';
 import { ActionBar } from './ActionBar';
+import { ActionMenu } from './ActionMenu';
+import { Tooltip } from './Tooltip';
 import { Button } from './Button';
 import { Card } from './Card';
 import { Checkbox } from './Checkbox';
@@ -229,6 +231,7 @@ export function TopologyManagement() {
 
   const [generatingCutsheet, setGeneratingCutsheet] = useState(false);
   const [generatingConnectionSheet, setGeneratingConnectionSheet] = useState(false);
+  const [generatingBOM, setGeneratingBOM] = useState(false);
 
   const handleGenerateCutsheet = async (topology: Topology) => {
     const topoDevices = devicesByTopology[topology.id] || [];
@@ -336,6 +339,91 @@ export function TopologyManagement() {
       addNotification('error', `Failed to generate cutsheet: ${msg}`);
     } finally {
       setGeneratingCutsheet(false);
+    }
+  };
+
+  const handleDownloadTopologyBOM = async (topology: Topology) => {
+    const topoDevices = devicesByTopology[topology.id] || [];
+    if (topoDevices.length === 0) {
+      addNotification('error', 'No devices in this topology');
+      return;
+    }
+    setGeneratingBOM(true);
+    try {
+      // Fetch port assignments for all devices to get cable lengths
+      const allAssignments: PortAssignment[] = [];
+      await Promise.all(
+        topoDevices.map(async (d) => {
+          try {
+            const pas = await getServices().portAssignments.list(d.id);
+            allAssignments.push(...pas);
+          } catch { /* skip */ }
+        })
+      );
+
+      const csvRows: string[] = ['Category,Item,Specification,Quantity,Unit Length,Notes'];
+      const excludedRoles = new Set(['patch-panel']);
+
+      // Device BOM: group by model + role
+      const deviceGroups = new Map<string, { model: string; role: string; count: number }>();
+      for (const dev of topoDevices) {
+        if (excludedRoles.has(dev.topology_role || '') || dev.device_type === 'external') continue;
+        const model = dev.model || 'Unknown';
+        const role = dev.topology_role || 'unknown';
+        const key = `${model}|${role}`;
+        const existing = deviceGroups.get(key);
+        if (existing) existing.count++;
+        else deviceGroups.set(key, { model, role, count: 1 });
+      }
+      for (const { model, role, count } of deviceGroups.values()) {
+        csvRows.push(`Device,${model},${role},${count},,`);
+      }
+
+      // Fiber BOM: group fabric links by cable length (deduplicate A→B / B→A pairs)
+      const standardLengths = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50];
+      const roundToStandard = (m: number) => standardLengths.find(l => l >= m) ?? Math.ceil(m);
+      const seenLinks = new Set<string>();
+      const fiberGroups = new Map<number, number>();
+      let totalFabricLinks = 0;
+      for (const pa of allAssignments) {
+        if (!pa.remote_device_id) continue;
+        // Deduplicate: only count A→B, not B→A
+        const linkKey = [Math.min(pa.device_id, pa.remote_device_id), Math.max(pa.device_id, pa.remote_device_id), pa.port_name, pa.remote_port_name].join(':');
+        if (seenLinks.has(linkKey)) continue;
+        seenLinks.add(linkKey);
+        const length = pa.cable_length_meters ?? 3;
+        const rounded = roundToStandard(length);
+        fiberGroups.set(rounded, (fiberGroups.get(rounded) || 0) + 1);
+        totalFabricLinks++;
+      }
+      for (const [length, qty] of [...fiberGroups.entries()].sort((a, b) => a[0] - b[0])) {
+        csvRows.push(`Fiber,DAC/AOC Cable,100G,${qty},${length}m,`);
+      }
+      if (totalFabricLinks > 0) {
+        csvRows.push(`Optic,QSFP28,100G,${totalFabricLinks * 2},,2 per fabric link`);
+      }
+
+      // Management ethernet cables
+      const managedDevices = topoDevices.filter(d =>
+        !excludedRoles.has(d.topology_role || '') && d.device_type !== 'external' && d.topology_role !== 'mgmt-switch'
+      );
+      const hasMgmt = topoDevices.some(d => d.topology_role === 'mgmt-switch');
+      if (hasMgmt && managedDevices.length > 0) {
+        csvRows.push(`Mgmt Ethernet,Cat6 Ethernet Cable,1G,${managedDevices.length},2m,OOB management per device`);
+      }
+
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${topology.name.replace(/\s+/g, '-')}-BOM.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to generate BOM: ${msg}`);
+    } finally {
+      setGeneratingBOM(false);
     }
   };
 
@@ -1459,72 +1547,89 @@ export function TopologyManagement() {
           getRowKey={(t) => t.id}
           tableId="topologies"
           onEdit={form.openEdit}
-          onDelete={handleDelete}
-          deleteConfirmMessage={(t) =>
-            `Delete topology "${t.name}"? ${(t.device_count || 0) > 0 ? `${t.device_count} device(s) will be unassigned.` : ''}`
-          }
-          actions={[
-            {
-              icon: (t) => deployingTopology === t.id ? <SpinnerIcon size={14} /> : <Icon name="rocket_launch" size={14} />,
-              label: 'Deploy',
-              onClick: handleDeployTopology,
-              variant: 'primary',
-              tooltip: 'Deploy configs to all devices, then backup',
-              disabled: (t) => deployingTopology === t.id || !(t.device_count && t.device_count > 0),
-              loading: (t) => deployingTopology === t.id,
-            },
-            {
-              icon: (t) => rebuildingTopology === t.id ? <SpinnerIcon size={14} /> : <Icon name="refresh" size={14} />,
-              label: 'Rebuild',
-              onClick: handleRebuildTopology,
-              variant: 'secondary',
-              tooltip: 'Teardown and rebuild topology (devices, port assignments, IPAM)',
-              disabled: (t) => (t.name !== 'DC1 CLOS Fabric' && t.name !== 'DC1 Hierarchical Fabric') || rebuildingTopology === t.id,
-              loading: (t) => rebuildingTopology === t.id,
-            },
-            {
-              icon: generatingCutsheet ? <SpinnerIcon size={14} /> : <Icon name="download" size={14} />,
-              label: 'Cutsheet',
-              onClick: handleGenerateCutsheet,
-              variant: 'secondary',
-              tooltip: 'Download connection cutsheet (CSV)',
-              disabled: (t) => generatingCutsheet || !t.spine_count || !t.leaf_count,
-            },
-            {
-              icon: generatingConnectionSheet ? <SpinnerIcon size={14} /> : <Icon name="grid_on" size={14} />,
-              label: 'Rack Sheet',
-              onClick: handleGenerateConnectionSheet,
-              variant: 'secondary',
-              tooltip: 'Download rack connection sheet (XLSX)',
-              disabled: (t) => generatingConnectionSheet || !(t.device_count && t.device_count > 0),
-            },
-            {
-              icon: <Icon name="image" size={14} />,
-              label: 'Export SVG',
-              onClick: (t) => {
-                // Ensure diagram is expanded so the SVG ref is mounted
-                if (expandedDiagram !== t.id) setExpandedDiagram(t.id);
-                // Allow a tick for render, then export
-                setTimeout(() => diagramRef.current?.exportSvg(), 100);
-              },
-              variant: 'secondary',
-              tooltip: 'Export fabric diagram as SVG',
-              disabled: (t) => {
-                const td = devicesByTopology[t.id] || [];
-                const hasSpines = td.some(d => d.topology_role === 'spine' || d.topology_role === 'super-spine');
-                const hasLeaves = td.some(d => d.topology_role === 'leaf');
-                return !hasSpines || !hasLeaves;
-              },
-            },
-            {
-              icon: <TrashIcon size={14} />,
-              label: 'Delete All',
-              onClick: handleDeleteWithDevices,
-              variant: 'danger',
-              tooltip: 'Delete topology and all its devices',
-              disabled: (t) => !(t.device_count && t.device_count > 0),
-            },
-          ] as TableAction<Topology>[]}
+          renderActions={(t) => {
+            const hasDevices = !!(t.device_count && t.device_count > 0);
+            const td = devicesByTopology[t.id] || [];
+            const hasSpines = td.some(d => d.topology_role === 'spine' || d.topology_role === 'super-spine');
+            const hasLeaves = td.some(d => d.topology_role === 'leaf');
+            return (
+              <>
+                <Tooltip content="Deploy configs to all devices, then backup">
+                  <IconButton
+                    variant="primary"
+                    onClick={(e) => { e.stopPropagation(); handleDeployTopology(t); }}
+                    disabled={deployingTopology === t.id || !hasDevices}
+                    isLoading={deployingTopology === t.id}
+                  >
+                    <Icon name="rocket_launch" size={14} />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content="Teardown and rebuild topology">
+                  <IconButton
+                    variant="secondary"
+                    onClick={(e) => { e.stopPropagation(); handleRebuildTopology(t); }}
+                    disabled={(t.name !== 'DC1 CLOS Fabric' && t.name !== 'DC1 Hierarchical Fabric') || rebuildingTopology === t.id}
+                    isLoading={rebuildingTopology === t.id}
+                  >
+                    <Icon name="refresh" size={14} />
+                  </IconButton>
+                </Tooltip>
+                <ActionMenu
+                  icon={<Icon name="download" size={14} />}
+                  tooltip="Downloads"
+                  items={[
+                    {
+                      icon: <Icon name="download" size={14} />,
+                      label: 'Cutsheet (CSV)',
+                      onClick: () => handleGenerateCutsheet(t),
+                      disabled: generatingCutsheet || !hasSpines || !hasLeaves,
+                    },
+                    {
+                      icon: <Icon name="receipt_long" size={14} />,
+                      label: 'Bill of Materials (CSV)',
+                      onClick: () => handleDownloadTopologyBOM(t),
+                      disabled: generatingBOM || !hasDevices,
+                    },
+                    {
+                      icon: <Icon name="grid_on" size={14} />,
+                      label: 'Rack Sheet (XLSX)',
+                      onClick: () => handleGenerateConnectionSheet(t),
+                      disabled: generatingConnectionSheet || !hasDevices,
+                    },
+                    {
+                      icon: <Icon name="image" size={14} />,
+                      label: 'Export SVG',
+                      onClick: () => {
+                        if (expandedDiagram !== t.id) setExpandedDiagram(t.id);
+                        setTimeout(() => diagramRef.current?.exportSvg(), 100);
+                      },
+                      disabled: !hasSpines || !hasLeaves,
+                    },
+                  ]}
+                />
+                <ActionMenu
+                  icon={<TrashIcon size={14} />}
+                  variant="danger"
+                  tooltip="Delete"
+                  items={[
+                    {
+                      icon: <TrashIcon size={14} />,
+                      label: 'Delete (unassign devices)',
+                      onClick: () => handleDelete(t),
+                      variant: 'danger',
+                    },
+                    {
+                      icon: <TrashIcon size={14} />,
+                      label: 'Delete with all devices',
+                      onClick: () => handleDeleteWithDevices(t),
+                      disabled: !hasDevices,
+                      variant: 'danger',
+                    },
+                  ]}
+                />
+              </>
+            );
+          }}
           renderExpandedRow={(t) => {
             const topoDevices = devicesByTopology[t.id] || [];
             if (topoDevices.length === 0) {
@@ -1543,6 +1648,8 @@ export function TopologyManagement() {
             const leaves = topoDevices.filter(d => d.topology_role === 'leaf' || d.topology_role === 'access');
             const ppDevices = topoDevices.filter(d => isPatchPanel(d));
             const extDevices = topoDevices.filter(d => (d.device_type === 'external' || d.topology_role === 'core') && !isPatchPanel(d));
+            const gpuDevices = topoDevices.filter(d => d.topology_role === 'gpu-node');
+            const mgmtDevices = topoDevices.filter(d => d.topology_role === 'mgmt-switch');
             const hasDiagram = spines.length > 0 && leaves.length > 0;
             const diagramOpen = expandedDiagram === t.id;
 
@@ -1556,7 +1663,7 @@ export function TopologyManagement() {
                     { header: 'Vendor', accessor: (d) => d.vendor ? <VendorBadge vendor={d.vendor} /> : Cell.dash(''), searchValue: (d) => d.vendor || '' },
                     { header: 'IP Address', accessor: (d) => Cell.dash(d.ip), searchValue: (d) => d.ip || '' },
                     { header: 'MAC Address', accessor: (d) => Cell.code(d.mac || ''), searchValue: (d) => d.mac || '' },
-                    { header: 'Status', accessor: (d) => Cell.status(d.status, d.status as 'online' | 'offline' | 'provisioning'), searchValue: (d) => d.status },
+                    { header: 'Status', accessor: (d) => d.device_type === 'external' || isPatchPanel(d) ? Cell.dash('') : Cell.status(d.status, d.status as 'online' | 'offline' | 'provisioning'), searchValue: (d) => d.status },
                     { header: 'Template', accessor: (d) => Cell.dash(d.config_template ? templateMap[d.config_template] || d.config_template : ''), searchValue: (d) => d.config_template || '' },
                   ] as TableColumn<Device>[]}
                   getRowKey={(d) => d.id}
@@ -1614,7 +1721,7 @@ export function TopologyManagement() {
                       <span>Fabric Diagram</span>
                     </button>
                     {diagramOpen && (
-                      <TopologyDiagramViewer ref={diagramRef} spines={spines} leaves={leaves} externals={extDevices} patchPanels={ppDevices} />
+                      <TopologyDiagramViewer ref={diagramRef} spines={spines} leaves={leaves} externals={extDevices} patchPanels={ppDevices} gpuNodes={gpuDevices} mgmtSwitches={mgmtDevices} />
                     )}
                   </div>
                 )}

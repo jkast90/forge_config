@@ -1763,6 +1763,55 @@ th:hover .column-filter-toggle,
   color: var(--color-text-muted);
 }
 
+/* Action Menu */
+.action-menu-dropdown {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-lg);
+  z-index: 10000;
+  overflow: hidden;
+  min-width: 160px;
+  animation: selectFieldSlide var(--transition-fast) ease;
+  padding: 4px 0;
+}
+
+.action-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.8125rem;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast);
+}
+
+.action-menu-item:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+}
+
+.action-menu-item.danger {
+  color: var(--color-accent-red);
+}
+
+.action-menu-item.disabled,
+.action-menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.action-menu-item-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 /* Two-column form grid */
 .form-grid-2col {
   display: grid;

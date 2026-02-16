@@ -466,14 +466,9 @@ pub(super) async fn compute_clos_preview(
             .collect();
         let total_leaves = leaf_devs.len();
         let gpu_model_name = format!("{} 8-GPU Node", req.gpu_model);
-        let topology_name_slug = if req.topology_name.is_empty() {
-            VIRTUAL_CLOS_TOPOLOGY_NAME.to_string()
-        } else {
-            req.topology_name.clone()
-        };
-        let topology_name_slug = topology_name_slug.to_lowercase().replace(' ', "-");
 
         let mut clusters: Vec<TopologyPreviewGpuCluster> = Vec::new();
+        let mut gpu_counter: usize = 0;
 
         for ci in 0..req.gpu_cluster_count {
             let mut device_indices: Vec<usize> = Vec::new();
@@ -489,7 +484,8 @@ pub(super) async fn compute_clos_preview(
                     .unwrap_or((0, String::new(), None, None));
                 leaf_assignments.push(leaf_hostname.clone());
 
-                let gpu_hostname = format!("{}-gpu-{}-n{}", topology_name_slug, ci + 1, ni + 1);
+                gpu_counter += 1;
+                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, "", "gpu-node", gpu_counter);
 
                 // Place GPU node in same rack as its assigned leaf, 4U below leaf
                 let gpu_rack_name = leaf_rack_idx.and_then(|ri| leaf_rack_names.get(ri).cloned());
@@ -599,12 +595,11 @@ pub(super) async fn compute_clos_preview(
 
     // ── 9. Add management switches based on distribution setting ────────
     let mgmt_model = if req.mgmt_switch_model.is_empty() { "CCS-720XP-48ZC2".to_string() } else { req.mgmt_switch_model.clone() };
-    let topology_name_for_mgmt = if req.topology_name.is_empty() { VIRTUAL_CLOS_TOPOLOGY_NAME } else { &req.topology_name };
     let mgmt_dist = if req.mgmt_switch_distribution.is_empty() { "per-row" } else { &req.mgmt_switch_distribution };
     let mgmt_count_per_row = req.mgmt_switches_per_row.max(1);
     let mut mgmt_counter: usize = 0;
     for h in 1..=hall_count {
-        let _hall_name = format!("Hall {}", h);
+        let hall_str = h.to_string();
         // Per-hall: one mgmt switch for the entire hall, placed in first rack of first row
         if mgmt_dist == "per-hall" {
             let row_name = format!("Hall {} Row 1", h);
@@ -616,7 +611,7 @@ pub(super) async fn compute_clos_preview(
             mgmt_counter += 1;
             devices.push(TopologyPreviewDevice {
                 index: dev_index,
-                hostname: format!("{}-mgmt-h{}", topology_name_for_mgmt, h),
+                hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter),
                 role: "mgmt-switch".to_string(),
                 loopback: String::new(),
                 asn: 0,
@@ -635,11 +630,11 @@ pub(super) async fn compute_clos_preview(
             if mgmt_dist == "per-rack" {
                 // Per-rack: one mgmt switch in each rack of the row
                 let row_racks: Vec<_> = racks.iter().filter(|rk| rk.row_name == row_name).collect();
-                for (ri, rack) in row_racks.iter().enumerate() {
+                for (_ri, rack) in row_racks.iter().enumerate() {
                     mgmt_counter += 1;
                     devices.push(TopologyPreviewDevice {
                         index: dev_index,
-                        hostname: format!("{}-mgmt-h{}-r{}-rk{}", topology_name_for_mgmt, h, r, ri + 1),
+                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter),
                         role: "mgmt-switch".to_string(),
                         loopback: String::new(),
                         asn: 0,
@@ -662,10 +657,9 @@ pub(super) async fn compute_clos_preview(
                 };
                 for m in 1..=count {
                     mgmt_counter += 1;
-                    let suffix = if count > 1 { format!("-{}", m) } else { String::new() };
                     devices.push(TopologyPreviewDevice {
                         index: dev_index,
-                        hostname: format!("{}-mgmt-h{}-r{}{}", topology_name_for_mgmt, h, r, suffix),
+                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter),
                         role: "mgmt-switch".to_string(),
                         loopback: String::new(),
                         asn: 0,
@@ -1001,7 +995,8 @@ pub async fn build_virtual_clos(
                 if mgmt_switches.iter().any(|(h, _, _, _)| *h == hall_id) { continue; }
                 mgmt_counter += 1;
                 let rack_id = row_first_rack.get(&row_id).copied();
-                let hostname = format!("vclos-mgmt-h{}", mgmt_switches.len() + 1);
+                let hall_str = hall_id.to_string();
+                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter);
                 let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, rack_id, 41);
                 match state.store.create_device(&req).await {
                     Ok(dev) => { mgmt_switches.push((hall_id, row_id, None, dev.id)); }
@@ -1012,7 +1007,8 @@ pub async fn build_virtual_clos(
             // One mgmt switch per rack
             for &(hall_id, row_id, rack_id) in &all_racks {
                 mgmt_counter += 1;
-                let hostname = format!("vclos-mgmt-{}", mgmt_counter);
+                let hall_str = hall_id.to_string();
+                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter);
                 let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, Some(rack_id), 41);
                 match state.store.create_device(&req).await {
                     Ok(dev) => { mgmt_switches.push((hall_id, row_id, Some(rack_id), dev.id)); }
@@ -1030,8 +1026,8 @@ pub async fn build_virtual_clos(
                 let rack_id = row_first_rack.get(&row_id).copied();
                 for m in 1..=count {
                     mgmt_counter += 1;
-                    let suffix = if count > 1 { format!("-{}", m) } else { String::new() };
-                    let hostname = format!("vclos-mgmt-{}{}", mgmt_counter, suffix);
+                    let hall_str = hall_id.to_string();
+                    let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter);
                     let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, rack_id, 41 - m as i32 + 1);
                     match state.store.create_device(&req).await {
                         Ok(dev) => { mgmt_switches.push((hall_id, row_id, None, dev.id)); }
@@ -2293,6 +2289,7 @@ pub async fn build_virtual_clos(
         let total_leaves = leaf_created.len().max(1);
         let gpu_model_name = format!("{} 8-GPU Node", req.gpu_model);
         let topology_slug = topo_name.to_lowercase().replace(' ', "-");
+        let mut gpu_counter: usize = 0;
 
         for ci in 0..req.gpu_cluster_count {
             let cluster_vrf_id = req.gpu_vrf_ids.get(ci).copied().filter(|&id| id > 0);
@@ -2327,7 +2324,9 @@ pub async fn build_virtual_clos(
             for ni in 0..req.gpu_nodes_per_cluster {
                 let leaf_idx = (ci * req.gpu_nodes_per_cluster + ni) % total_leaves;
                 let (_, leaf_node) = &leaf_created[leaf_idx];
-                let gpu_hostname = format!("{}-gpu-{}-n{}", topology_slug, ci + 1, ni + 1);
+                gpu_counter += 1;
+                let hall_str = leaf_node.hall_id.map(|id| id.to_string()).unwrap_or_default();
+                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "gpu-node", gpu_counter);
 
                 // Apply overrides if present
                 let ov_dev = overrides.as_ref().and_then(|ov| {
@@ -2379,7 +2378,9 @@ pub async fn build_virtual_clos(
                     if gpu_dev_id == 0 { continue; }
                     let leaf_idx = (ci * req.gpu_nodes_per_cluster + ni) % total_leaves;
                     let (leaf_dev_id, leaf_node) = &leaf_created[leaf_idx];
-                    let gpu_host = format!("{}-gpu-{}-n{}", topology_slug, ci + 1, ni + 1);
+                    let hall_str = leaf_node.hall_id.map(|id| id.to_string()).unwrap_or_default();
+                    let gpu_node_idx = gpu_counter - req.gpu_nodes_per_cluster + ni + 1;
+                    let gpu_host = resolve_hostname(hostname_pattern, dc, region, &hall_str, "gpu-node", gpu_node_idx);
 
                     for ul in 0..2usize {
                         let gpu_port = format!("Ethernet{}", ul + 1);

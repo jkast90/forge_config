@@ -258,6 +258,7 @@ export function LoginScreen() {
         <Text style={styles.title}>ForgeConfig</Text>
 
         <Text style={styles.label}>Username</Text>
+        Default: admin/admin
         <TextInput
           style={styles.inputStandalone}
           value={username}

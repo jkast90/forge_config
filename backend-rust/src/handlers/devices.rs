@@ -345,6 +345,7 @@ fn render_device_config(
     settings: &Settings,
     role_template: Option<&Template>,
     vars: &std::collections::HashMap<String, String>,
+    port_assignments: Option<&[crate::models::PortAssignment]>,
 ) -> Result<String, ApiError> {
     let tera_content = crate::utils::convert_go_template_to_tera(&template.content);
 
@@ -375,6 +376,38 @@ fn render_device_config(
     context.insert("Subnet", &settings.dhcp_subnet);
     context.insert("Gateway", &settings.dhcp_gateway);
     context.insert("vars", vars);
+
+    // Build VRF context from port assignments
+    if let Some(assignments) = port_assignments {
+        let mut vrf_map: std::collections::HashMap<String, serde_json::Value> = std::collections::HashMap::new();
+        for pa in assignments {
+            if let Some(vrf_id) = pa.vrf_id {
+                let vrf_key = vrf_id.to_string();
+                let iface = serde_json::json!({
+                    "port_name": pa.port_name,
+                    "remote_device": pa.remote_device_hostname.clone().unwrap_or_default(),
+                    "remote_port": pa.remote_port_name,
+                    "description": pa.description.clone().unwrap_or_default(),
+                });
+                if let Some(existing) = vrf_map.get_mut(&vrf_key) {
+                    if let Some(arr) = existing.get_mut("interfaces").and_then(|v| v.as_array_mut()) {
+                        arr.push(iface);
+                    }
+                } else {
+                    vrf_map.insert(vrf_key.clone(), serde_json::json!({
+                        "id": vrf_id,
+                        "name": pa.vrf_name.clone().unwrap_or(vrf_key),
+                        "interfaces": [iface],
+                    }));
+                }
+            }
+        }
+        let vrfs: Vec<serde_json::Value> = vrf_map.into_values().collect();
+        context.insert("VRFs", &vrfs);
+    } else {
+        let empty: Vec<serde_json::Value> = vec![];
+        context.insert("VRFs", &empty);
+    }
 
     tera.render("device", &context)
         .map_err(|e| ApiError::bad_request(format!("Template rendering failed: {}", e)))
@@ -438,7 +471,10 @@ pub async fn preview_device_config(
         .await
         .unwrap_or_default();
 
-    let content = render_device_config(&device, &template, &settings, role_template.as_ref(), &vars)?;
+    // Load port assignments for VRF context
+    let port_assignments = state.store.list_port_assignments(device.id).await.unwrap_or_default();
+
+    let content = render_device_config(&device, &template, &settings, role_template.as_ref(), &vars, Some(&port_assignments))?;
 
     Ok(Json(DeviceConfigPreviewResponse {
         mac: device.mac.unwrap_or_default(),

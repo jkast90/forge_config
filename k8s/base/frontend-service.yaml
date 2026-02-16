@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: forgeconfig
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/part-of: forgeconfig
+spec:
+  selector:
+    app.kubernetes.io/name: frontend
+  ports:
+    - name: http
+      port: 5173
+      targetPort: http
+      protocol: TCP

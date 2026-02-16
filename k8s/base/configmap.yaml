@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: forgeconfig
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: forgeconfig
+data:
+  DB_PATH: /data/forge-config.db
+  TFTP_DIR: /tftp
+  BACKUP_DIR: /backups
+  TEMPLATES_DIR: /configs/templates
+  RUST_LOG: info
+  LISTEN_ADDR: 0.0.0.0:8080
+  DHCP_INTERFACE: eth0
+  FRONTEND_DIR: /app/frontend
+  DNSMASQ_CONFIG: /dnsmasq/dnsmasq.conf
+  DNSMASQ_PID: /var/run/dnsmasq.pid
+  LEASE_PATH: /var/lib/misc/dnsmasq.leases
+  DB_MAX_CONNECTIONS: "5"

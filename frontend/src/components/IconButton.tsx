@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, ButtonHTMLAttributes, ReactNode } from 'react';
 
 type IconButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 type IconButtonSize = 'sm' | 'md' | 'lg';
@@ -10,7 +10,7 @@ interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
 }
 
-export function IconButton({
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({
   variant = 'secondary',
   size = 'sm',
   children,
@@ -18,7 +18,7 @@ export function IconButton({
   disabled,
   className = '',
   ...props
-}: IconButtonProps) {
+}, ref) {
   const classes = [
     'icon-btn',
     `icon-btn-${variant}`,
@@ -30,6 +30,7 @@ export function IconButton({
 
   return (
     <button
+      ref={ref}
       className={classes}
       disabled={disabled || isLoading}
       {...props}
@@ -37,4 +38,4 @@ export function IconButton({
       {isLoading ? <span className="btn-spinner" /> : children}
     </button>
   );
-}
+});
