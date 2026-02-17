@@ -33,6 +33,7 @@ import { LoadingState } from './LoadingState';
 import { Table, Cell } from './Table';
 import type { TableColumn } from './Table';
 import { ChassisPreview } from './ChassisPreview';
+import { NumberInput } from './NumberInput';
 import { PlusIcon, TrashIcon, Icon } from './Icon';
 
 // ---------------------------------------------------------------------------
@@ -68,13 +69,12 @@ interface PortEditorProps {
 function PortEditor({ port, onChange, onRemove }: PortEditorProps) {
   return (
     <div className="chassis-editor-port">
-      <input
-        type="number"
-        className="chassis-editor-input chassis-editor-col"
+      <NumberInput
         value={port.col}
-        onChange={(e) => onChange({ ...port, col: parseInt(e.target.value) || 1 })}
-        title="Column"
+        onChange={(v) => onChange({ ...port, col: v })}
         min={1}
+        size="sm"
+        className="chassis-editor-col"
       />
       <input
         type="text"
@@ -237,10 +237,10 @@ function SectionEditor({ section, onChange, onRemove }: SectionEditorProps) {
       {showBulk && (
         <div className="chassis-editor-bulk">
           <div className="chassis-editor-bulk-row">
-            <label>Count <input type="number" min={1} max={64} value={bulk.count} onChange={(e) => setBulk({ ...bulk, count: parseInt(e.target.value) || 1 })} /></label>
-            <label>Start Col <input type="number" min={1} value={bulk.startCol} onChange={(e) => setBulk({ ...bulk, startCol: parseInt(e.target.value) || 1 })} /></label>
+            <label>Count <NumberInput size="sm" min={1} max={64} value={bulk.count} onChange={(v) => setBulk({ ...bulk, count: v })} /></label>
+            <label>Start Col <NumberInput size="sm" min={1} value={bulk.startCol} onChange={(v) => setBulk({ ...bulk, startCol: v })} /></label>
             <label>Prefix <input type="text" value={bulk.namePrefix} onChange={(e) => setBulk({ ...bulk, namePrefix: e.target.value })} placeholder="Ethernet" /></label>
-            <label>Start # <input type="number" min={0} value={bulk.startIndex} onChange={(e) => setBulk({ ...bulk, startIndex: parseInt(e.target.value) || 0 })} /></label>
+            <label>Start # <NumberInput size="sm" min={0} value={bulk.startIndex} onChange={(v) => setBulk({ ...bulk, startIndex: v })} /></label>
           </div>
           <div className="chassis-editor-bulk-row">
             <label>Connector

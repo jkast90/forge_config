@@ -1,4 +1,5 @@
-import { InputHTMLAttributes, TextareaHTMLAttributes, ChangeEvent } from 'react';
+import { InputHTMLAttributes, TextareaHTMLAttributes, ChangeEvent, useCallback } from 'react';
+import { NumberInput } from './NumberInput';
 
 interface FormFieldProps {
   label: string;
@@ -23,6 +24,12 @@ interface FormFieldProps {
 export function FormField({ label, name, id, error, type, rows, ...rest }: FormFieldProps) {
   const fieldId = id || name;
 
+  const handleNumberChange = useCallback((v: number) => {
+    if (!rest.onChange) return;
+    const syntheticEvent = { target: { name, value: String(v) } } as ChangeEvent<HTMLInputElement>;
+    rest.onChange(syntheticEvent);
+  }, [name, rest.onChange]);
+
   return (
     <div className={`form-group${error ? ' has-error' : ''}`}>
       <label htmlFor={fieldId}>{label}</label>
@@ -38,6 +45,15 @@ export function FormField({ label, name, id, error, type, rows, ...rest }: FormF
           disabled={rest.disabled}
           required={rest.required}
           autoFocus={rest.autoFocus}
+        />
+      ) : type === 'number' ? (
+        <NumberInput
+          value={rest.value as number | string}
+          onChange={handleNumberChange}
+          min={rest.min != null ? Number(rest.min) : undefined}
+          max={rest.max != null ? Number(rest.max) : undefined}
+          step={rest.step != null ? Number(rest.step) : undefined}
+          disabled={rest.disabled}
         />
       ) : (
         <input
