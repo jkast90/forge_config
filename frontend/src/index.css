@@ -3761,7 +3761,6 @@ th:hover .column-filter-toggle,
 /* Scrollbar: brass rails */
 [data-theme="nautical-dark"] ::-webkit-scrollbar-thumb {
   background: rgba(201, 168, 76, 0.25);
-  border-radius: 2px;
 }
 
 [data-theme="nautical-dark"] ::-webkit-scrollbar-thumb:hover {
@@ -3808,7 +3807,6 @@ th:hover .column-filter-toggle,
 /* Cards: weathered driftwood panels */
 [data-theme="nautical-light"] .card {
   border: 1px solid rgba(139, 111, 46, 0.18);
-  border-radius: 8px;
   background: linear-gradient(180deg, #faf8f5 0%, #f5f0e8 100%);
   box-shadow: 0 1px 3px rgba(139, 111, 46, 0.08);
 }
@@ -3822,14 +3820,7 @@ th:hover .column-filter-toggle,
 [data-theme="nautical-light"] th {
   background: rgba(139, 111, 46, 0.06);
   border-bottom: 2px solid rgba(139, 111, 46, 0.15);
-  letter-spacing: 0.1em;
-  font-size: 0.7rem;
-  text-transform: uppercase;
   color: #6b5a30;
-}
-
-[data-theme="nautical-light"] tbody tr {
-  border-left: 2px solid transparent;
 }
 
 [data-theme="nautical-light"] tbody tr:hover {
@@ -3847,11 +3838,6 @@ th:hover .column-filter-toggle,
   border: 1px solid rgba(42, 100, 150, 0.15);
   color: #1a5a3a;
   border-radius: 4px;
-}
-
-/* Buttons: rounded like polished sea stones */
-[data-theme="nautical-light"] .btn {
-  border-radius: 6px;
 }
 
 [data-theme="nautical-light"] .tab.active,
@@ -3877,20 +3863,8 @@ th:hover .column-filter-toggle,
 
 /* Tabs: harbor navigation markers */
 [data-theme="nautical-light"] .tabs {
-  border-radius: 6px;
   border: 1px solid rgba(139, 111, 46, 0.12);
   background: rgba(139, 111, 46, 0.04);
-}
-
-[data-theme="nautical-light"] .tab {
-  border-radius: 4px;
-}
-
-/* Status badges: maritime signal flags */
-[data-theme="nautical-light"] .status {
-  border-radius: 4px;
-  letter-spacing: 0.06em;
-  font-size: 0.7rem;
 }
 
 [data-theme="nautical-light"] .status.online {
@@ -3905,18 +3879,11 @@ th:hover .column-filter-toggle,
   border: 1px solid rgba(184, 138, 42, 0.3);
 }
 
-[data-theme="nautical-light"] .badge {
-  border-radius: 4px;
-  letter-spacing: 0.06em;
-  font-size: 0.7rem;
-}
-
 /* Form inputs: etched into driftwood */
 [data-theme="nautical-light"] .form-group input,
 [data-theme="nautical-light"] .form-group textarea,
 [data-theme="nautical-light"] .form-group select,
 [data-theme="nautical-light"] .select-field-trigger {
-  border-radius: 6px;
   border-color: rgba(139, 111, 46, 0.2);
   background: #fdfcfa;
 }
@@ -3932,7 +3899,6 @@ th:hover .column-filter-toggle,
 /* Modals: parchment chart overlay */
 [data-theme="nautical-light"] .modal {
   border: 1px solid rgba(139, 111, 46, 0.2);
-  border-radius: 8px;
   background: linear-gradient(180deg, #fdfcfa 0%, #f5f0e8 100%);
   box-shadow: 0 8px 32px rgba(139, 111, 46, 0.15);
 }
@@ -3943,7 +3909,6 @@ th:hover .column-filter-toggle,
 
 /* Info sections: weathered note cards with rope border */
 [data-theme="nautical-light"] .info-section {
-  border-radius: 6px;
   border-color: rgba(139, 111, 46, 0.15);
   border-left: 3px solid rgba(42, 100, 150, 0.35);
   background: rgba(42, 100, 150, 0.03);
@@ -3951,12 +3916,10 @@ th:hover .column-filter-toggle,
 
 /* Dropdowns: harbor markers */
 [data-theme="nautical-light"] .dropdown-select-trigger {
-  border-radius: 6px;
   border-color: rgba(139, 111, 46, 0.2);
 }
 
 [data-theme="nautical-light"] .dropdown-select-menu {
-  border-radius: 6px;
   border: 1px solid rgba(139, 111, 46, 0.15);
   background: #fdfcfa;
   box-shadow: 0 4px 16px rgba(139, 111, 46, 0.12);
@@ -3964,8 +3927,6 @@ th:hover .column-filter-toggle,
 
 /* Empty states: blank page in harbor logbook */
 [data-theme="nautical-light"] .table-empty {
-  border-radius: 6px;
-  border-style: solid;
   border-color: rgba(139, 111, 46, 0.15);
   background: rgba(139, 111, 46, 0.03);
 }
@@ -3973,7 +3934,6 @@ th:hover .column-filter-toggle,
 /* Scrollbar: rope-textured */
 [data-theme="nautical-light"] ::-webkit-scrollbar-thumb {
   background: rgba(139, 111, 46, 0.2);
-  border-radius: 2px;
 }
 
 [data-theme="nautical-light"] ::-webkit-scrollbar-thumb:hover {
@@ -4217,20 +4177,33 @@ th:hover .column-filter-toggle,
 }
 
 /* Focus-visible: strong outline for keyboard navigation */
+[data-theme="contrast-dark"] *:focus-visible,
+[data-theme="contrast-light"] *:focus-visible {
+  outline-offset: 2px;
+}
+
 [data-theme="contrast-dark"] *:focus-visible {
   outline: 3px solid #5cb8ff;
-  outline-offset: 2px;
 }
 
 [data-theme="contrast-light"] *:focus-visible {
   outline: 3px solid #0050a0;
-  outline-offset: 2px;
 }
 
-/* Modals: thick border, squared */
+/* Modals, info sections, dropdowns: shared border-radius */
+[data-theme="contrast-dark"] .modal,
+[data-theme="contrast-light"] .modal,
+[data-theme="contrast-dark"] .info-section,
+[data-theme="contrast-light"] .info-section,
+[data-theme="contrast-dark"] .dropdown-select-trigger,
+[data-theme="contrast-light"] .dropdown-select-trigger,
+[data-theme="contrast-dark"] .dropdown-select-menu,
+[data-theme="contrast-light"] .dropdown-select-menu {
+  border-radius: 6px;
+}
+
 [data-theme="contrast-dark"] .modal {
   border: 2px solid #888888;
-  border-radius: 6px;
 }
 
 [data-theme="contrast-dark"] .modal-overlay {
@@ -4239,7 +4212,6 @@ th:hover .column-filter-toggle,
 
 [data-theme="contrast-light"] .modal {
   border: 2px solid #333333;
-  border-radius: 6px;
 }
 
 [data-theme="contrast-light"] .modal-overlay {
@@ -4250,34 +4222,28 @@ th:hover .column-filter-toggle,
 [data-theme="contrast-dark"] .info-section {
   border: 2px solid #444444;
   border-left: 4px solid #5cb8ff;
-  border-radius: 6px;
 }
 
 [data-theme="contrast-light"] .info-section {
   border: 2px solid #333333;
   border-left: 4px solid #0050a0;
-  border-radius: 6px;
 }
 
 /* Dropdowns: thick borders */
 [data-theme="contrast-dark"] .dropdown-select-trigger {
   border: 2px solid #444444;
-  border-radius: 6px;
 }
 
 [data-theme="contrast-dark"] .dropdown-select-menu {
   border: 2px solid #888888;
-  border-radius: 6px;
 }
 
 [data-theme="contrast-light"] .dropdown-select-trigger {
   border: 2px solid #333333;
-  border-radius: 6px;
 }
 
 [data-theme="contrast-light"] .dropdown-select-menu {
   border: 2px solid #333333;
-  border-radius: 6px;
 }
 
 /* Empty state: solid border (not dashed) */
@@ -4304,9 +4270,13 @@ th:hover .column-filter-toggle,
 }
 
 /* Scrollbar: high visibility */
+[data-theme="contrast-dark"] ::-webkit-scrollbar-thumb,
+[data-theme="contrast-light"] ::-webkit-scrollbar-thumb {
+  border-radius: 0;
+}
+
 [data-theme="contrast-dark"] ::-webkit-scrollbar-thumb {
   background: #888888;
-  border-radius: 0;
 }
 
 [data-theme="contrast-dark"] ::-webkit-scrollbar-thumb:hover {
@@ -4319,7 +4289,6 @@ th:hover .column-filter-toggle,
 
 [data-theme="contrast-light"] ::-webkit-scrollbar-thumb {
   background: #555555;
-  border-radius: 0;
 }
 
 [data-theme="contrast-light"] ::-webkit-scrollbar-thumb:hover {
