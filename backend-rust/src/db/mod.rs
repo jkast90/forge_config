@@ -106,6 +106,7 @@ impl Store {
         // Seed defaults
         self.seed_default_vendors().await?;
         self.seed_default_templates().await?;
+        self.resolve_vendor_default_templates().await?;
         self.seed_default_dhcp_options().await?;
         self.seed_default_user().await?;
         self.seed_default_vendor_actions().await?;
@@ -217,6 +218,41 @@ impl Store {
                 .bind(&name)
                 .execute(&self.pool)
                 .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Resolve vendor default_template from text seed IDs (e.g. "arista-eos") to integer template IDs.
+    /// Runs after both vendors and templates are seeded.
+    async fn resolve_vendor_default_templates(&self) -> Result<()> {
+        // Build mapping from seed text ID → template name
+        let template_id_to_name: HashMap<String, String> = seeds::seed_template_params()
+            .into_iter()
+            .map(|(id, name, _, _, _)| (id, name))
+            .collect();
+
+        for (_id, _name, _, _, _, _, _, _, default_template) in seeds::seed_vendor_params() {
+            if default_template.is_empty() {
+                continue;
+            }
+            // Already an integer ID? Skip.
+            if default_template.parse::<i64>().is_ok() {
+                continue;
+            }
+            // Look up the template name from the seed ID
+            if let Some(template_name) = template_id_to_name.get(&default_template) {
+                let tid: Option<(i64,)> = sqlx::query_as("SELECT id FROM templates WHERE name = ?")
+                    .bind(template_name)
+                    .fetch_optional(&self.pool)
+                    .await?;
+                if let Some((template_id,)) = tid {
+                    sqlx::query("UPDATE vendors SET default_template = ? WHERE default_template = ?")
+                        .bind(template_id.to_string())
+                        .bind(&default_template)
+                        .execute(&self.pool)
+                        .await?;
+                }
             }
         }
         Ok(())

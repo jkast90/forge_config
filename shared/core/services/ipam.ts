@@ -218,7 +218,7 @@ export class IpamService extends BaseService {
     return this.get<IpamVrf[]>('/ipam/vrfs');
   }
 
-  async createVrf(data: { id: number | string; name: string; rd?: string; description?: string; tenant_id?: number }): Promise<IpamVrf> {
+  async createVrf(data: { name: string; rd?: string; description?: string; tenant_id?: number }): Promise<IpamVrf> {
     return this.post<IpamVrf>('/ipam/vrfs', data);
   }
 

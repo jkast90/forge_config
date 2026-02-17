@@ -11,10 +11,9 @@ import {
   CodeGeneratorDialog,
   Dashboard,
   DataExplorer,
-  DevicesPage,
   DropdownSelect,
   ErrorBoundary,
-  Tenants,
+  Resources,
   HelpTour,
   Notifications,
   NotificationPopup,
@@ -65,11 +64,10 @@ const PAGES: DropdownOption[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', description: 'Overview and activity' },
   { id: 'config', label: 'Configuration', icon: 'description', description: 'Templates, groups, variables' },
   { id: 'explorer', label: 'Data Explorer', icon: 'storage', description: 'Inspect Redux store data' },
-  { id: 'devices', label: 'Devices', icon: 'devices', description: 'Devices, discovery, test containers' },
+  { id: 'resources', label: 'Devices & Tenants', icon: 'devices', description: 'Devices, tenants, VRFs, GPU clusters' },
   { id: 'ipam', label: 'IPAM', icon: 'lan', description: 'IP Address Management' },
   { id: 'jobs', label: 'Jobs', icon: 'schedule', description: 'Actions, job history, templates, credentials' },
   { id: 'locations', label: 'Locations', icon: 'account_tree', description: 'Regions, campuses, datacenters' },
-  { id: 'tenants', label: 'Tenants', icon: 'group', description: 'Tenants, VRFs, GPU clusters' },
   { id: 'topologies', label: 'Topologies', icon: 'hub', description: 'Network topologies' },
   { id: 'system', label: 'System', icon: 'settings', description: 'Users, branding, device naming' },
   { id: 'vendors-models', label: 'Vendors & Models', icon: 'business', description: 'Vendors, DHCP options, device models' },
@@ -129,7 +127,7 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
     // Migrate old page IDs to combined page
     if (saved === 'vendors' || saved === 'dhcp' || saved === 'device-models') return 'vendors-models';
     if (saved === 'templates' || saved === 'groups' || saved === 'variables' || saved === 'inspector') return 'config';
-    if (saved === 'discovery') return 'devices';
+    if (saved === 'devices' || saved === 'tenants' || saved === 'discovery') return 'resources';
     if (saved === 'actions') return 'jobs';
     if (saved === 'users') return 'system';
     return saved;
@@ -331,12 +329,12 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
           <Dashboard onNavigate={handlePageChange} />
         )}
 
-        {activePage === 'devices' && (
-          <DevicesPage
-            onEdit={handleEdit}
-            onDelete={deleteDevice}
-            onBackup={triggerBackup}
-            onRefresh={refresh}
+        {activePage === 'resources' && (
+          <Resources
+            onEditDevice={handleEdit}
+            onDeleteDevice={deleteDevice}
+            onBackupDevice={triggerBackup}
+            onRefreshDevices={refresh}
             onAddDiscoveredDevice={(device) => {
               setEditingDevice(null);
               setInitialDeviceData(device);
@@ -344,10 +342,6 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
               modalRoute.openModal('device-form');
             }}
           />
-        )}
-
-        {activePage === 'tenants' && (
-          <Tenants />
         )}
 
         {activePage === 'topologies' && (

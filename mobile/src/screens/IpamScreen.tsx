@@ -82,7 +82,7 @@ export function IpamScreen() {
 
   // VRF form
   const [showVrfForm, setShowVrfForm] = useState(false);
-  const [vrfForm, setVrfForm] = useState({ id: '', name: '', rd: '', description: '' });
+  const [vrfForm, setVrfForm] = useState({ name: '', rd: '', description: '' });
 
   // Role form
   const [showRoleForm, setShowRoleForm] = useState(false);
@@ -231,12 +231,11 @@ export function IpamScreen() {
   const handleSubmitVrf = async () => {
     if (!vrfForm.name.trim()) { showError('VRF name is required'); return; }
     const success = await createVrf({
-      id: vrfForm.id || vrfForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
       name: vrfForm.name,
       rd: vrfForm.rd || undefined,
       description: vrfForm.description || undefined,
     });
-    if (success) { setShowVrfForm(false); setVrfForm({ id: '', name: '', rd: '', description: '' }); }
+    if (success) { setShowVrfForm(false); setVrfForm({ name: '', rd: '', description: '' }); }
   };
 
   // Role CRUD
@@ -395,7 +394,7 @@ export function IpamScreen() {
   const tabData = {
     prefixes: { data: prefixes, render: renderPrefix, empty: 'No prefixes', add: handleAddPrefix, addLabel: 'Add Prefix' },
     ips: { data: ipAddresses, render: renderIp, empty: 'No IP addresses', add: handleAddIp, addLabel: 'Add IP' },
-    vrfs: { data: vrfs, render: renderVrf, empty: 'No VRFs', add: () => { setVrfForm({ id: '', name: '', rd: '', description: '' }); setShowVrfForm(true); }, addLabel: 'Add VRF' },
+    vrfs: { data: vrfs, render: renderVrf, empty: 'No VRFs', add: () => { setVrfForm({ name: '', rd: '', description: '' }); setShowVrfForm(true); }, addLabel: 'Add VRF' },
     roles: { data: roles, render: renderRole, empty: 'No roles', add: () => { setRoleForm({ id: '', name: '', description: '' }); setShowRoleForm(true); }, addLabel: 'Add Role' },
   };
 
@@ -479,7 +478,6 @@ export function IpamScreen() {
         size="medium"
       >
         <FormInput label="Name *" value={vrfForm.name} onChangeText={t => setVrfForm(p => ({ ...p, name: t }))} placeholder="MGMT" />
-        <FormInput label="ID" value={vrfForm.id} onChangeText={t => setVrfForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" />
         <FormInput label="Route Distinguisher" value={vrfForm.rd} onChangeText={t => setVrfForm(p => ({ ...p, rd: t }))} placeholder="65000:1" />
         <FormInput label="Description" value={vrfForm.description} onChangeText={t => setVrfForm(p => ({ ...p, description: t }))} placeholder="Management VRF" />
       </FormModal>

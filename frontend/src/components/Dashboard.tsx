@@ -114,7 +114,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           icon="devices"
           color="var(--gradient-primary)"
           subtitle={`${statusCounts.online} online`}
-          onClick={() => onNavigate?.('devices')}
+          onClick={() => onNavigate?.('resources')}
         />
         <MetricCard
           title="Pending Discovery"
@@ -122,7 +122,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           icon="radar"
           color="var(--gradient-accent)"
           subtitle="Waiting to be added"
-          onClick={() => onNavigate?.('devices')}
+          onClick={() => onNavigate?.('resources')}
         />
         <MetricCard
           title="Topologies"
@@ -145,7 +145,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       <div className="dashboard-grid">
         {/* Device Status Overview */}
         <Card title="Device Status" headerAction={
-          <Button variant="secondary" size="sm" onClick={() => onNavigate?.('devices')}>
+          <Button variant="secondary" size="sm" onClick={() => onNavigate?.('resources')}>
             View All
           </Button>
         }>
@@ -200,7 +200,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
         {/* Recent Activity */}
         <Card title="Recent Activity" headerAction={
-          <Button variant="secondary" size="sm" onClick={() => onNavigate?.('devices')}>
+          <Button variant="secondary" size="sm" onClick={() => onNavigate?.('resources')}>
             View All
           </Button>
         }>
@@ -310,11 +310,11 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       {/* Quick Actions */}
       <Card title="Quick Actions">
         <div className="quick-actions">
-          <Button onClick={() => onNavigate?.('devices')}>
+          <Button onClick={() => onNavigate?.('resources')}>
             <Icon name="add" size={16} />
             Add Device
           </Button>
-          <Button variant="secondary" onClick={() => onNavigate?.('devices')}>
+          <Button variant="secondary" onClick={() => onNavigate?.('resources')}>
             <Icon name="search" size={16} />
             Check Discovery
           </Button>

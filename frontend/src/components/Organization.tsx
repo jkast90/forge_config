@@ -68,7 +68,7 @@ export function Locations() {
           {activeTab === 'campuses' && <CampusesTab campuses={campuses} regions={regions} ipam={ipam} />}
           {activeTab === 'datacenters' && <DatacentersTab datacenters={datacenters} campuses={campuses} ipam={ipam} />}
           {activeTab === 'halls' && <HallsTab halls={halls} datacenters={datacenters} ipam={ipam} />}
-          {activeTab === 'rows' && <RowsTab rows={rows} halls={halls} ipam={ipam} />}
+          {activeTab === 'rows' && <RowsTab rows={rows} halls={halls} racks={racks} devices={devices} ipam={ipam} />}
           {activeTab === 'racks' && <RacksTab racks={racks} rows={rows} devices={devices} ipam={ipam} />}
         </SideTabs>
       </Card>
@@ -437,20 +437,48 @@ function HallsTab({ halls, datacenters, ipam }: {
 // Rows Tab
 // ============================================================
 
-function RowsTab({ rows, halls, ipam }: {
+function RowsTab({ rows, halls, racks, devices, ipam }: {
   rows: IpamRow[];
   halls: IpamHall[];
+  racks: IpamRack[];
+  devices: Device[];
   ipam: ReturnType<typeof useIpam>;
 }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<IpamRow | null>(null);
   const [form, setForm] = useState<IpamRowFormData>(EMPTY_ROW_FORM);
+  const [viewingRow, setViewingRow] = useState<IpamRow | null>(null);
   const { confirm, ConfirmDialogRenderer } = useConfirm();
 
   const hallOptions = useMemo(() => [
     { value: '', label: 'Select a hall...' },
     ...halls.map(h => ({ value: String(h.id), label: `${h.name} (${h.datacenter_name || h.datacenter_id})` })),
   ], [halls]);
+
+  // Racks belonging to the viewed row, sorted by name
+  const rowRacks = useMemo(() =>
+    viewingRow ? racks.filter(rk => rk.row_id === viewingRow.id).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })) : [],
+    [viewingRow, racks]
+  );
+
+  // Devices grouped by rack_id for the viewed row's racks
+  const devicesByRack = useMemo(() => {
+    if (!viewingRow) return new Map<number, Device[]>();
+    const rackIds = new Set(rowRacks.map(rk => rk.id));
+    const map = new Map<number, Device[]>();
+    for (const d of devices) {
+      if (d.rack_id != null && rackIds.has(d.rack_id)) {
+        const arr = map.get(d.rack_id) || [];
+        arr.push(d);
+        map.set(d.rack_id, arr);
+      }
+    }
+    // Sort each rack's devices by position
+    for (const [, arr] of map) {
+      arr.sort((a, b) => (a.rack_position ?? 999) - (b.rack_position ?? 999));
+    }
+    return map;
+  }, [viewingRow, rowRacks, devices]);
 
   const handleOpenCreate = useCallback(() => {
     setEditing(null);
@@ -492,9 +520,16 @@ function RowsTab({ rows, halls, ipam }: {
   ], []);
 
   const actions: TableAction<IpamRow>[] = useMemo(() => [
+    { icon: <Icon name="visibility" size={14} />, label: 'View Row', onClick: setViewingRow, variant: 'secondary' as const, tooltip: 'View rack elevations' },
     { icon: <EditIcon size={14} />, label: 'Edit', onClick: handleOpenEdit },
     { icon: <TrashIcon size={14} />, label: 'Delete', onClick: handleDelete, variant: 'danger' as const },
   ], [handleOpenEdit, handleDelete]);
+
+  const totalDevices = useMemo(() => {
+    let count = 0;
+    for (const [, arr] of devicesByRack) count += arr.length;
+    return count;
+  }, [devicesByRack]);
 
   return (
     <>
@@ -519,6 +554,30 @@ function RowsTab({ rows, halls, ipam }: {
           <SelectField label="Hall" name="hall_id" value={form.hall_id} onChange={(e) => setForm(f => ({ ...f, hall_id: e.target.value }))} options={hallOptions} />
         </div>
       </FormDialog>
+
+      <Modal isOpen={!!viewingRow} title={`Row: ${viewingRow?.name || ''}`} onClose={() => setViewingRow(null)} variant="extra-wide">
+        <div style={{ marginBottom: '12px', display: 'flex', gap: '16px', fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>
+          <span><strong>Hall:</strong> {viewingRow?.hall_name || viewingRow?.hall_id}</span>
+          {viewingRow?.description && <span><strong>Description:</strong> {viewingRow.description}</span>}
+          <span><strong>Racks:</strong> {rowRacks.length}</span>
+          <span><strong>Devices:</strong> {totalDevices}</span>
+        </div>
+        {rowRacks.length === 0 ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+            No racks in this row.
+          </div>
+        ) : (
+          <div className="row-elevation-layout">
+            {rowRacks.map(rk => (
+              <div key={rk.id} className="row-elevation-rack">
+                <div className="row-elevation-rack-label">{rk.name}</div>
+                <RackElevation devices={devicesByRack.get(rk.id) || []} />
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
       <ConfirmDialogRenderer />
     </>
   );

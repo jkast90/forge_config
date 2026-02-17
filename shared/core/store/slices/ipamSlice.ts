@@ -170,7 +170,7 @@ export const fetchVrfs = createAsyncThunk('ipam/fetchVrfs', async () => {
   return getServices().ipam.listVrfs();
 });
 
-export const createVrf = createAsyncThunk('ipam/createVrf', async (data: { id: number | string; name: string; rd?: string; description?: string; tenant_id?: number }) => {
+export const createVrf = createAsyncThunk('ipam/createVrf', async (data: { name: string; rd?: string; description?: string; tenant_id?: number }) => {
   return getServices().ipam.createVrf(data);
 });
 

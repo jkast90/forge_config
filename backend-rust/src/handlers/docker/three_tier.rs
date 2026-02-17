@@ -661,8 +661,13 @@ pub async fn build_three_tier(
         None => vendor_name.to_string(),
     };
 
-    // Look up device roles to resolve config_template + group_names per topology role
-    let mut role_templates: HashMap<String, String> = HashMap::new();
+    // Resolve the vendor's base template ID for config_template on devices
+    let vendor_base_template_id: String = match state.store.get_vendor_by_name(vendor_name).await? {
+        Some(v) if !v.default_template.is_empty() => v.default_template,
+        _ => String::new(),
+    };
+
+    // Look up device roles to resolve group_names per topology role
     let mut role_group_names: HashMap<String, Vec<String>> = HashMap::new();
     for role_name in ["core", "distribution", "access"] {
         // Try vendor-prefixed name first (e.g. "arista-core"), then plain role name
@@ -672,11 +677,6 @@ pub async fn build_three_tier(
             _ => state.store.find_device_role_by_name(role_name).await.ok().flatten(),
         };
         if let Some(role) = found_role {
-            if let Some(tids) = &role.template_ids {
-                if let Some(first_id) = tids.first() {
-                    role_templates.insert(role_name.to_string(), first_id.to_string());
-                }
-            }
             if !role.group_names.is_empty() {
                 role_group_names.insert(role_name.to_string(), role.group_names.clone());
             }
@@ -1022,7 +1022,7 @@ pub async fn build_three_tier(
             vendor: Some(vendor_id.to_string()),
             model: Some(node.model.to_string()),
             serial_number: Some(serial),
-            config_template: role_templates.get(&node.role).cloned().unwrap_or_default(),
+            config_template: vendor_base_template_id.clone(),
             ssh_user: Some("admin".to_string()),
             ssh_pass: Some("admin".to_string()),
             topology_id: Some(topo_id),
@@ -1667,7 +1667,7 @@ pub async fn build_three_tier(
                                             vendor: Some(vendor_id.to_string()),
                                             model: Some(node.model.clone()),
                                             serial_number: Some(serial.clone()),
-                                            config_template: role_templates.get(&node.role).cloned().unwrap_or_default(),
+                                            config_template: vendor_base_template_id.clone(),
                                             ssh_user: Some("admin".to_string()),
                                             ssh_pass: Some("admin".to_string()),
                                             topology_id: Some(topo_id),

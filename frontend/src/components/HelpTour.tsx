@@ -61,7 +61,7 @@ const SLIDES: Slide[] = [
   {
     title: 'Devices & Discovery',
     icon: 'devices',
-    page: 'devices',
+    page: 'resources',
     content: (
       <>
         <p>
@@ -256,7 +256,7 @@ const SLIDES: Slide[] = [
   {
     title: 'Tenants',
     icon: 'group',
-    page: 'tenants',
+    page: 'resources',
     content: (
       <>
         <p>

@@ -706,6 +706,7 @@ export function TopologyManagement() {
         hostname: `${roleLabel}-${Date.now() % 10000}`,
       });
       addNotification('success', `Spawned ${roleLabel} and added to topology`, navigateAction('View Topology', 'topologies'));
+      refreshTopologies();
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -725,6 +726,7 @@ export function TopologyManagement() {
       });
       addNotification('success', `Assigned ${device.hostname || device.mac || String(device.id)} as ${assignTarget.role}`, navigateAction('View Topology', 'topologies'));
       setAssignTarget(null);
+      refreshTopologies();
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -751,6 +753,7 @@ export function TopologyManagement() {
       });
       addNotification('success', `Swapped ${swapDevice.hostname || swapDevice.mac || String(swapDevice.id)} with ${replacement.hostname || replacement.mac || String(replacement.id)}`, navigateAction('View Topology', 'topologies'));
       setSwapDevice(null);
+      refreshTopologies();
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -842,6 +845,7 @@ export function TopologyManagement() {
       });
       const mode = topologyConfig.spawn_containers ? 'Container' : 'Template';
       addNotification('success', `${mode} Build complete: ${result.devices.length} devices in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
+      refreshTopologies();
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -954,6 +958,7 @@ export function TopologyManagement() {
     try {
       await getServices().testContainers.teardownTopology(architecture);
       addNotification('success', `${architecture === 'clos' ? 'CLOS' : 'Hierarchical'} topology torn down`, navigateAction('View Topologies', 'topologies'));
+      refreshTopologies();
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1072,6 +1077,7 @@ export function TopologyManagement() {
         devices_per_rack: cfg.datacenter_id ? cfg.devices_per_rack : undefined,
       });
       addNotification('success', `Rebuilt: ${result.devices.length} devices in ${result.topology_name}`, navigateAction('View Topology', 'topologies'));
+      refreshTopologies();
       refreshDevices();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1443,6 +1449,7 @@ export function TopologyManagement() {
       }
 
       form.close();
+      refreshTopologies();
       refreshDevices();
       addNotification('success', `Topology "${data.name}" created with ${spines} spines, ${leaves} leaves, ${hallAssignments.length} hall(s)`, navigateAction('View Topologies', 'topologies'));
     } catch (err) {

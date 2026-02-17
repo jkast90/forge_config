@@ -83,7 +83,7 @@ export interface UseIpamReturn {
   createRole: (data: { id: string; name: string; description?: string }) => Promise<boolean>;
   deleteRole: (id: string) => Promise<boolean>;
   // VRFs
-  createVrf: (data: { id: string; name: string; rd?: string; description?: string; tenant_id?: number }) => Promise<boolean>;
+  createVrf: (data: { name: string; rd?: string; description?: string; tenant_id?: number }) => Promise<boolean>;
   deleteVrf: (id: string) => Promise<boolean>;
   // Prefixes
   createPrefix: (data: IpamPrefixFormData) => Promise<boolean>;
@@ -409,7 +409,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   }, [dispatch]);
 
   // ========== VRFs ==========
-  const createVrf = useCallback(async (data: { id: string; name: string; rd?: string; description?: string; tenant_id?: number }): Promise<boolean> => {
+  const createVrf = useCallback(async (data: { name: string; rd?: string; description?: string; tenant_id?: number }): Promise<boolean> => {
     try {
       await dispatch(createVrfThunk(data)).unwrap();
       addNotification('success', 'VRF created', navigateAction('View VRFs', 'tenants', 'vrfs'));

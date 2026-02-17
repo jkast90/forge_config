@@ -3588,6 +3588,30 @@ th:hover .column-filter-toggle,
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   Nautical shared: structural rules common to dark & light
+   ═══════════════════════════════════════════════════════════════ */
+
+[data-theme*="nautical"] .card { border-radius: 8px; }
+[data-theme*="nautical"] .card h2 { letter-spacing: 0.02em; }
+[data-theme*="nautical"] th { letter-spacing: 0.1em; font-size: 0.7rem; text-transform: uppercase; }
+[data-theme*="nautical"] tbody tr { border-left: 2px solid transparent; }
+[data-theme*="nautical"] .btn { border-radius: 6px; }
+[data-theme*="nautical"] .tab { border-radius: 4px; }
+[data-theme*="nautical"] .tabs { border-radius: 6px; }
+[data-theme*="nautical"] .status { border-radius: 4px; letter-spacing: 0.06em; font-size: 0.7rem; }
+[data-theme*="nautical"] .badge { border-radius: 4px; letter-spacing: 0.06em; font-size: 0.7rem; }
+[data-theme*="nautical"] .form-group input,
+[data-theme*="nautical"] .form-group textarea,
+[data-theme*="nautical"] .form-group select,
+[data-theme*="nautical"] .select-field-trigger { border-radius: 6px; }
+[data-theme*="nautical"] .modal { border-radius: 8px; }
+[data-theme*="nautical"] .info-section { border-radius: 6px; }
+[data-theme*="nautical"] .dropdown-select-trigger { border-radius: 6px; }
+[data-theme*="nautical"] .dropdown-select-menu { border-radius: 6px; }
+[data-theme*="nautical"] .table-empty { border-radius: 6px; border-style: solid; }
+[data-theme*="nautical"] ::-webkit-scrollbar-thumb { border-radius: 2px; }
+
+/* ═══════════════════════════════════════════════════════════════
    Nautical Dark: Captain's cabin — brass fittings, dark wood, porthole views
    ═══════════════════════════════════════════════════════════════ */
 
@@ -3622,7 +3646,6 @@ th:hover .column-filter-toggle,
 /* Cards: dark wood panels with brass edges */
 [data-theme="nautical-dark"] .card {
   border: 1px solid rgba(201, 168, 76, 0.18);
-  border-radius: 8px;
   box-shadow: inset 0 1px 0 rgba(201, 168, 76, 0.08), 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -3631,21 +3654,9 @@ th:hover .column-filter-toggle,
   box-shadow: inset 0 1px 0 rgba(201, 168, 76, 0.12), 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-/* Card titles: like instrument labels */
-[data-theme="nautical-dark"] .card h2 {
-  letter-spacing: 0.02em;
-}
-
 /* Tables: ship's manifest / logbook feel */
 [data-theme="nautical-dark"] th {
   border-bottom: 2px solid rgba(201, 168, 76, 0.25);
-  letter-spacing: 0.1em;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-}
-
-[data-theme="nautical-dark"] tbody tr {
-  border-left: 2px solid transparent;
 }
 
 [data-theme="nautical-dark"] tbody tr:hover {
@@ -3662,11 +3673,6 @@ th:hover .column-filter-toggle,
   border: 1px solid rgba(201, 168, 76, 0.15);
   background: rgba(11, 22, 34, 0.6);
   color: #45b8ac;
-}
-
-/* Buttons: polished brass controls */
-[data-theme="nautical-dark"] .btn {
-  border-radius: 6px;
 }
 
 [data-theme="nautical-dark"] .tab.active,
@@ -3690,19 +3696,7 @@ th:hover .column-filter-toggle,
 
 /* Tabs: navigation chart tabs */
 [data-theme="nautical-dark"] .tabs {
-  border-radius: 6px;
   border: 1px solid rgba(201, 168, 76, 0.12);
-}
-
-[data-theme="nautical-dark"] .tab {
-  border-radius: 4px;
-}
-
-/* Status badges: port/starboard lights */
-[data-theme="nautical-dark"] .status {
-  border-radius: 4px;
-  letter-spacing: 0.06em;
-  font-size: 0.7rem;
 }
 
 [data-theme="nautical-dark"] .status.online {
@@ -3717,18 +3711,11 @@ th:hover .column-filter-toggle,
   border: 1px solid rgba(212, 160, 60, 0.3);
 }
 
-[data-theme="nautical-dark"] .badge {
-  border-radius: 4px;
-  letter-spacing: 0.06em;
-  font-size: 0.7rem;
-}
-
 /* Form inputs: recessed instrument panels */
 [data-theme="nautical-dark"] .form-group input,
 [data-theme="nautical-dark"] .form-group textarea,
 [data-theme="nautical-dark"] .form-group select,
 [data-theme="nautical-dark"] .select-field-trigger {
-  border-radius: 6px;
   border-color: rgba(201, 168, 76, 0.15);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
 }
@@ -3744,7 +3731,6 @@ th:hover .column-filter-toggle,
 /* Modals: captain's chart overlay */
 [data-theme="nautical-dark"] .modal {
   border: 1px solid rgba(201, 168, 76, 0.25);
-  border-radius: 8px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(201, 168, 76, 0.1);
 }
 
@@ -3754,26 +3740,21 @@ th:hover .column-filter-toggle,
 
 /* Info sections: like weathered parchment notes */
 [data-theme="nautical-dark"] .info-section {
-  border-radius: 6px;
   border-color: rgba(201, 168, 76, 0.12);
   border-left: 3px solid rgba(201, 168, 76, 0.3);
 }
 
 /* Dropdowns: brass-framed selectors */
 [data-theme="nautical-dark"] .dropdown-select-trigger {
-  border-radius: 6px;
   border-color: rgba(201, 168, 76, 0.15);
 }
 
 [data-theme="nautical-dark"] .dropdown-select-menu {
-  border-radius: 6px;
   border: 1px solid rgba(201, 168, 76, 0.2);
 }
 
 /* Empty states: like blank pages in a ship's log */
 [data-theme="nautical-dark"] .table-empty {
-  border-radius: 6px;
-  border-style: solid;
   border-color: rgba(201, 168, 76, 0.12);
 }
 
@@ -5785,18 +5766,23 @@ tr.disabled-row td {
   font-weight: 600;
 }
 
-.data-explorer-list {
+/* Shared list styles (Data Explorer + JSON Viewer) */
+
+.data-explorer-list,
+.json-viewer-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.data-explorer-entry {
+.data-explorer-entry,
+.json-viewer-entry {
   border-radius: 4px;
   overflow: hidden;
 }
 
-.data-explorer-row {
+.data-explorer-row,
+.json-viewer-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -5805,11 +5791,13 @@ tr.disabled-row td {
   transition: background var(--transition-fast);
 }
 
-.data-explorer-row:hover {
+.data-explorer-row:hover,
+.json-viewer-row:hover {
   background: var(--color-bg-hover);
 }
 
-.data-explorer-summary {
+.data-explorer-summary,
+.json-viewer-summary {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -5818,19 +5806,22 @@ tr.disabled-row td {
   overflow: hidden;
 }
 
-.data-explorer-field {
+.data-explorer-field,
+.json-viewer-field {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   font-size: 0.8rem;
 }
 
-.data-explorer-field-label {
+.data-explorer-field-label,
+.json-viewer-field-label {
   color: var(--color-text-muted);
   font-size: 0.7rem;
 }
 
-.data-explorer-field-value {
+.data-explorer-field-value,
+.json-viewer-field-value {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.75rem;
   color: var(--color-text-primary);
@@ -5840,11 +5831,13 @@ tr.disabled-row td {
   white-space: nowrap;
 }
 
-.data-explorer-detail {
+.data-explorer-detail,
+.json-viewer-detail {
   padding: 4px 8px 8px 32px;
 }
 
-.data-explorer-detail .pre-scrollable {
+.data-explorer-detail .pre-scrollable,
+.json-viewer-detail .pre-scrollable {
   max-height: 300px;
 }
 
@@ -5978,30 +5971,6 @@ tr.disabled-row td {
   outline: none;
 }
 
-.json-viewer-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.json-viewer-entry {
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.json-viewer-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  transition: background var(--transition-fast);
-}
-
-.json-viewer-row:hover {
-  background: var(--color-bg-hover);
-}
-
 .json-viewer-row-copy {
   flex-shrink: 0;
   border: none;
@@ -6020,45 +5989,6 @@ tr.disabled-row td {
 .json-viewer-row-copy:hover {
   color: var(--color-text-secondary);
   background: var(--color-bg-card);
-}
-
-.json-viewer-summary {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.json-viewer-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.8rem;
-}
-
-.json-viewer-field-label {
-  color: var(--color-text-muted);
-  font-size: 0.7rem;
-}
-
-.json-viewer-field-value {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 0.75rem;
-  color: var(--color-text-primary);
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.json-viewer-detail {
-  padding: 4px 8px 8px 32px;
-}
-
-.json-viewer-detail .pre-scrollable {
-  max-height: 300px;
 }
 
 /* ========================================
@@ -7088,4 +7018,30 @@ tr.disabled-row td {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+/* ===== Row Elevation (multi-rack view) ===== */
+
+.row-elevation-layout {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  align-items: flex-start;
+}
+
+.row-elevation-rack {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.row-elevation-rack-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-align: center;
+  white-space: nowrap;
 }

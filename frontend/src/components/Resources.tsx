@@ -1,10 +1,13 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import type { Tenant, TenantFormData, GpuCluster, GpuClusterFormData, IpamVrf } from '@core';
+import type { Device, DeviceFormData, Tenant, TenantFormData, GpuCluster, GpuClusterFormData, IpamVrf } from '@core';
 import {
   useTenants,
   useGpuClusters,
   useIpam,
   useTopologies,
+  useDevices,
+  useDiscovery,
+  useTestContainers,
   usePersistedTab,
   useModalForm,
   useModalRoute,
@@ -20,6 +23,8 @@ import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
 import { useConfirm } from './ConfirmDialog';
+import { DeviceList } from './DeviceList';
+import { Discovery } from './Discovery';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { LoadingState } from './LoadingState';
@@ -28,60 +33,90 @@ import { SideTabs } from './SideTabs';
 import type { SideTab } from './SideTabs';
 import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
-import { PlusIcon, TrashIcon, Icon } from './Icon';
+import { TestContainers } from './TestContainers';
+import { PlusIcon, TrashIcon, RefreshIcon, Icon } from './Icon';
 
-type TenantsTab = 'tenants' | 'vrfs' | 'gpu-clusters';
+interface ResourcesProps {
+  onEditDevice: (device: Device) => void;
+  onDeleteDevice: (id: number) => Promise<boolean>;
+  onBackupDevice: (id: number) => Promise<boolean>;
+  onRefreshDevices: () => void;
+  onAddDiscoveredDevice: (device: Partial<DeviceFormData>) => void;
+}
 
-export function Tenants() {
-  const [activeTab, setActiveTab] = usePersistedTab<TenantsTab>('tenants', ['tenants', 'vrfs', 'gpu-clusters'], 'tab_tenants');
+type Tab = 'devices' | 'discovery' | 'containers' | 'tenants' | 'vrfs' | 'gpu-clusters';
 
+export function Resources({ onEditDevice, onDeleteDevice, onBackupDevice, onRefreshDevices, onAddDiscoveredDevice }: ResourcesProps) {
+  const [activeTab, setActiveTab] = usePersistedTab<Tab>('devices', ['devices', 'discovery', 'containers', 'tenants', 'vrfs', 'gpu-clusters'], 'tab_resources');
+
+  const { devices } = useDevices();
+  const { discovered } = useDiscovery();
+  const { containers } = useTestContainers();
   const { tenants, loading: tenantsLoading, error: tenantsError, createTenant, updateTenant, deleteTenant } = useTenants();
   const { gpuClusters, loading: gpuLoading, error: gpuError, createGpuCluster, updateGpuCluster, deleteGpuCluster } = useGpuClusters();
   const ipam = useIpam();
   const { topologies } = useTopologies();
 
   const { vrfs } = ipam;
-  const loading = tenantsLoading || gpuLoading || ipam.loading;
-  const error = tenantsError || gpuError || ipam.error;
+
+  const tabs: SideTab[] = [
+    { id: 'devices', label: 'Devices', icon: 'devices', count: devices.length },
+    { id: 'discovery', label: 'Discovery', icon: 'radar', count: discovered.length },
+    { id: 'containers', label: 'Test Containers', icon: 'science', count: containers.length },
+    { id: 'tenants', label: 'Tenants', icon: 'group', count: tenants.length },
+    { id: 'vrfs', label: 'VRFs', icon: 'route', count: vrfs.length },
+    { id: 'gpu-clusters', label: 'GPU Clusters', icon: 'memory', count: gpuClusters.length },
+  ];
 
   return (
-    <LoadingState loading={loading} error={error} loadingMessage="Loading tenant data...">
-      <Card title="Tenants">
-        <SideTabs
-          tabs={[
-            { id: 'tenants', label: 'Tenants', icon: 'group', count: tenants.length },
-            { id: 'vrfs', label: 'VRFs', icon: 'route', count: vrfs.length },
-            { id: 'gpu-clusters', label: 'GPU Clusters', icon: 'memory', count: gpuClusters.length },
-          ] as SideTab[]}
-          activeTab={activeTab}
-          onTabChange={(id) => setActiveTab(id as TenantsTab)}
-        >
-          {activeTab === 'tenants' && (
-            <TenantsTab
-              tenants={tenants}
-              createTenant={createTenant}
-              updateTenant={updateTenant}
-              deleteTenant={deleteTenant}
+    <Card title="Devices & Tenants">
+      <SideTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={(id) => setActiveTab(id as Tab)}
+      >
+        {activeTab === 'devices' && (
+          <>
+            <div className="actions-bar">
+              <Button onClick={onRefreshDevices}>
+                <RefreshIcon size={16} />
+                Refresh
+              </Button>
+            </div>
+            <DeviceList
+              onEdit={onEditDevice}
+              onDelete={onDeleteDevice}
+              onBackup={onBackupDevice}
+              onRefresh={onRefreshDevices}
             />
-          )}
+          </>
+        )}
+        {activeTab === 'discovery' && <Discovery onAddDevice={onAddDiscoveredDevice} />}
+        {activeTab === 'containers' && <TestContainers />}
 
-          {activeTab === 'vrfs' && (
-            <VrfsTab vrfs={vrfs} tenants={tenants} ipam={ipam} />
-          )}
-
-          {activeTab === 'gpu-clusters' && (
-            <GpuClustersTab
-              gpuClusters={gpuClusters}
-              vrfs={vrfs}
-              topologies={topologies}
-              createGpuCluster={createGpuCluster}
-              updateGpuCluster={updateGpuCluster}
-              deleteGpuCluster={deleteGpuCluster}
-            />
-          )}
-        </SideTabs>
-      </Card>
-    </LoadingState>
+        {activeTab === 'tenants' && (
+          <TenantsTab
+            tenants={tenants}
+            createTenant={createTenant}
+            updateTenant={updateTenant}
+            deleteTenant={deleteTenant}
+          />
+        )}
+        {activeTab === 'vrfs' && (
+          <VrfsTab vrfs={vrfs} tenants={tenants} ipam={ipam} />
+        )}
+        {activeTab === 'gpu-clusters' && (
+          <GpuClustersTab
+            gpuClusters={gpuClusters}
+            vrfs={vrfs}
+            topologies={topologies}
+            createGpuCluster={createGpuCluster}
+            updateGpuCluster={updateGpuCluster}
+            deleteGpuCluster={deleteGpuCluster}
+          />
+        )}
+      </SideTabs>
+    </Card>
   );
 }
 
@@ -208,7 +243,6 @@ function VrfsTab({ vrfs, tenants, ipam }: {
 }) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showForm, setShowForm] = useState(false);
-  const [vrfId, setVrfId] = useState('');
   const [vrfName, setVrfName] = useState('');
   const [vrfRd, setVrfRd] = useState('');
   const [vrfDesc, setVrfDesc] = useState('');
@@ -226,12 +260,11 @@ function VrfsTab({ vrfs, tenants, ipam }: {
   }, [tenants]);
 
   const handleCreate = useCallback(async () => {
-    if (!vrfId.trim() || !vrfName.trim()) {
-      addNotification('error', 'ID and Name are required');
+    if (!vrfName.trim()) {
+      addNotification('error', 'Name is required');
       return;
     }
     const success = await ipam.createVrf({
-      id: vrfId.trim(),
       name: vrfName.trim(),
       rd: vrfRd || undefined,
       description: vrfDesc || undefined,
@@ -239,13 +272,12 @@ function VrfsTab({ vrfs, tenants, ipam }: {
     });
     if (success) {
       setShowForm(false);
-      setVrfId('');
       setVrfName('');
       setVrfRd('');
       setVrfDesc('');
       setVrfTenantId('');
     }
-  }, [vrfId, vrfName, vrfRd, vrfDesc, vrfTenantId, ipam]);
+  }, [vrfName, vrfRd, vrfDesc, vrfTenantId, ipam]);
 
   const handleDelete = useCallback(async (vrf: IpamVrf) => {
     if (!(await confirm({ title: 'Delete VRF', message: `Delete VRF "${vrf.name}"? Prefixes in this VRF will become global.`, confirmText: 'Delete', destructive: true }))) return;
@@ -285,7 +317,7 @@ function VrfsTab({ vrfs, tenants, ipam }: {
         columns={columns}
         actions={actions}
         getRowKey={(row) => row.id}
-        tableId="tenants-vrfs"
+        tableId="resources-vrfs"
         emptyMessage="No VRFs defined."
         emptyDescription="All prefixes are in the global routing table."
         searchable
@@ -294,7 +326,6 @@ function VrfsTab({ vrfs, tenants, ipam }: {
 
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title="Create VRF" onSubmit={(e) => { e.preventDefault(); handleCreate(); }} submitText="Create">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <FormField label="ID" name="vrfId" value={vrfId} onChange={(e) => setVrfId(e.target.value)} placeholder="e.g., vrf-mgmt" />
           <FormField label="Name" name="vrfName" value={vrfName} onChange={(e) => setVrfName(e.target.value)} placeholder="e.g., Management" />
           <FormField label="Route Distinguisher" name="vrfRd" value={vrfRd} onChange={(e) => setVrfRd(e.target.value)} placeholder="e.g., 65000:100 (optional)" />
           <FormField label="Description" name="vrfDesc" value={vrfDesc} onChange={(e) => setVrfDesc(e.target.value)} placeholder="Optional description" />
