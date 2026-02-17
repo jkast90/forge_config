@@ -98,14 +98,15 @@ pub(super) async fn compute_clos_preview(
 
     // ── 4. Compute rack layout as named racks ───────────────────────────
     let mut racks: Vec<TopologyPreviewRack> = Vec::new();
-    let mut leaf_rack_names: Vec<String> = Vec::new();
-    let mut spine_rack_names: Vec<String> = Vec::new();
+    let mut leaf_rack_names: Vec<(String, String)> = Vec::new(); // (rack_name, row_number)
+    let mut spine_rack_names: Vec<(String, String)> = Vec::new(); // (rack_name, row_number)
     let mut rack_index: usize = 0;
 
     for h in 1..=hall_count {
         let hall_name = format!("Hall {}", h);
         for r in 1..=rows_per_hall {
             let row_name = format!("Hall {} Row {}", h, r);
+            let row_num = r.to_string();
             let mid = racks_per_row / 2;
             for k in 1..=racks_per_row {
                 if k == mid + 1 {
@@ -117,7 +118,7 @@ pub(super) async fn compute_clos_preview(
                         row_name: row_name.clone(),
                         rack_type: "spine".to_string(),
                     });
-                    spine_rack_names.push(spine_rack_name);
+                    spine_rack_names.push((spine_rack_name, row_num.clone()));
                     rack_index += 1;
                 }
 
@@ -129,7 +130,7 @@ pub(super) async fn compute_clos_preview(
                     row_name: row_name.clone(),
                     rack_type: "leaf".to_string(),
                 });
-                leaf_rack_names.push(leaf_rack_name);
+                leaf_rack_names.push((leaf_rack_name, row_num.clone()));
                 rack_index += 1;
             }
         }
@@ -141,12 +142,13 @@ pub(super) async fn compute_clos_preview(
 
     // Spines: round-robin across spine racks
     for i in 1..=total_spines {
-        let (rack_name, rack_idx, pos) = if !spine_rack_names.is_empty() {
+        let (rack_name, row_num, rack_idx, pos) = if !spine_rack_names.is_empty() {
             let ridx = (i - 1) % spine_rack_names.len();
             let pos_in_rack = ((i - 1) / spine_rack_names.len()) as i32 + 1;
-            (Some(spine_rack_names[ridx].clone()), Some(ridx), Some(pos_in_rack))
+            let (rn, rw) = spine_rack_names[ridx].clone();
+            (Some(rn), rw, Some(ridx), Some(pos_in_rack))
         } else {
-            (None, None, None)
+            (None, String::new(), None, None)
         };
         let hall_name = rack_name.as_ref()
             .and_then(|_| if hall_count > 0 {
@@ -158,7 +160,7 @@ pub(super) async fn compute_clos_preview(
             .unwrap_or_default();
         devices.push(TopologyPreviewDevice {
             index: dev_index,
-            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "spine", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, &row_num, "spine", i),
             role: "spine".to_string(),
             loopback: format!("10.255.0.{}", i),
             asn: 65000,
@@ -174,24 +176,25 @@ pub(super) async fn compute_clos_preview(
 
     // Leaves: distributed by leaves_per_rack, with rack position from placement strategy
     for i in 1..=total_leaves {
-        let (rack_name, rack_idx, pos) = if !leaf_rack_names.is_empty() {
+        let (rack_name, row_num, rack_idx, pos) = if !leaf_rack_names.is_empty() {
             let ridx = (i - 1) / leaves_per_rack;
             let device_in_rack = (i - 1) % leaves_per_rack;
             if ridx < leaf_rack_names.len() {
                 let pos = compute_rack_position(device_in_rack, placement, 42);
-                (Some(leaf_rack_names[ridx].clone()), Some(ridx), Some(pos))
+                let (rn, rw) = leaf_rack_names[ridx].clone();
+                (Some(rn), rw, Some(ridx), Some(pos))
             } else {
-                (None, None, None)
+                (None, String::new(), None, None)
             }
         } else {
-            (None, None, None)
+            (None, String::new(), None, None)
         };
         let hall_name = rack_name.as_ref()
             .and_then(|_| if hall_count > 0 { Some("1".to_string()) } else { None })
             .unwrap_or_default();
         devices.push(TopologyPreviewDevice {
             index: dev_index,
-            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "leaf", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, &row_num, "leaf", i),
             role: "leaf".to_string(),
             loopback: format!("10.255.1.{}", i),
             asn: 65000 + i as u32,
@@ -211,13 +214,13 @@ pub(super) async fn compute_clos_preview(
             let ridx = (i - 1) % spine_rack_names.len();
             let spines_in_this_rack = (total_spines + spine_rack_names.len() - 1) / spine_rack_names.len().max(1);
             let pos_in_rack = spines_in_this_rack as i32 + ((i - 1) / spine_rack_names.len()) as i32 + 1;
-            (Some(spine_rack_names[ridx].clone()), Some(ridx), Some(pos_in_rack))
+            (Some(spine_rack_names[ridx].0.clone()), Some(ridx), Some(pos_in_rack))
         } else {
             (None, None, None)
         };
         devices.push(TopologyPreviewDevice {
             index: dev_index,
-            hostname: resolve_hostname(hostname_pattern, dc, region, "", "super-spine", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, "", "", "super-spine", i),
             role: "super-spine".to_string(),
             loopback: format!("10.255.3.{}", i),
             asn: 65500,
@@ -237,7 +240,7 @@ pub(super) async fn compute_clos_preview(
         let hostname = external_names.get(i - 1)
             .filter(|n| !n.is_empty())
             .cloned()
-            .unwrap_or_else(|| resolve_hostname(hostname_pattern, dc, region, "", "external", i));
+            .unwrap_or_else(|| resolve_hostname(hostname_pattern, dc, region, "", "", "external", i));
         devices.push(TopologyPreviewDevice {
             index: dev_index,
             hostname,
@@ -485,10 +488,10 @@ pub(super) async fn compute_clos_preview(
                 leaf_assignments.push(leaf_hostname.clone());
 
                 gpu_counter += 1;
-                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, "", "gpu-node", gpu_counter);
+                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, "", "", "gpu-node", gpu_counter);
 
                 // Place GPU node in same rack as its assigned leaf, 4U below leaf
-                let gpu_rack_name = leaf_rack_idx.and_then(|ri| leaf_rack_names.get(ri).cloned());
+                let gpu_rack_name = leaf_rack_idx.and_then(|ri| leaf_rack_names.get(ri).map(|(n, _)| n.clone()));
                 let gpu_rack_pos = leaf_rack_pos.map(|p| p + 4 + (ni as i32 * 4));
 
                 devices.push(TopologyPreviewDevice {
@@ -611,7 +614,7 @@ pub(super) async fn compute_clos_preview(
             mgmt_counter += 1;
             devices.push(TopologyPreviewDevice {
                 index: dev_index,
-                hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter),
+                hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "", "mgmt-switch", mgmt_counter),
                 role: "mgmt-switch".to_string(),
                 loopback: String::new(),
                 asn: 0,
@@ -627,6 +630,7 @@ pub(super) async fn compute_clos_preview(
         }
         for r in 1..=rows_per_hall {
             let row_name = format!("Hall {} Row {}", h, r);
+            let row_str = r.to_string();
             if mgmt_dist == "per-rack" {
                 // Per-rack: one mgmt switch in each rack of the row
                 let row_racks: Vec<_> = racks.iter().filter(|rk| rk.row_name == row_name).collect();
@@ -634,7 +638,7 @@ pub(super) async fn compute_clos_preview(
                     mgmt_counter += 1;
                     devices.push(TopologyPreviewDevice {
                         index: dev_index,
-                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter),
+                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter),
                         role: "mgmt-switch".to_string(),
                         loopback: String::new(),
                         asn: 0,
@@ -659,7 +663,7 @@ pub(super) async fn compute_clos_preview(
                     mgmt_counter += 1;
                     devices.push(TopologyPreviewDevice {
                         index: dev_index,
-                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter),
+                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter),
                         role: "mgmt-switch".to_string(),
                         loopback: String::new(),
                         asn: 0,
@@ -712,13 +716,18 @@ const VIRTUAL_CLOS_LOOPBACK_CIDR: &str = "10.255.0.0/16";
 const VIRTUAL_CLOS_P2P_PARENT_CIDR: &str = "10.0.0.0/8";
 
 /// Resolve a hostname from the pattern, substituting variables.
-fn resolve_hostname(pattern: &str, datacenter: &str, region: &str, hall: &str, role: &str, index: usize) -> String {
+fn resolve_hostname(pattern: &str, datacenter: &str, region: &str, hall: &str, row: &str, role: &str, index: usize) -> String {
+    // Zero-pad numeric values to 2 digits (e.g. "1" -> "01", "25" -> "25")
+    let pad = |s: &str| -> String {
+        if let Ok(n) = s.parse::<usize>() { format!("{:02}", n) } else { s.to_string() }
+    };
     let result = pattern
         .replace("$region", region)
         .replace("$datacenter", datacenter)
-        .replace("$hall", hall)
+        .replace("$hall", &pad(hall))
+        .replace("$row", &pad(row))
         .replace("$role", role)
-        .replace('#', &index.to_string());
+        .replace('#', &format!("{:02}", index));
     // Clean leading/trailing hyphens and collapse double hyphens from empty variables
     let mut cleaned = result.trim_matches('-').to_string();
     while cleaned.contains("--") {
@@ -853,6 +862,8 @@ pub async fn build_virtual_clos(
     let mut mgmt_switches: Vec<(i64, i64, Option<i64>, i64)> = Vec::new();
     // Map row_id -> first rack ID (for patch panel placement)
     let mut row_first_rack: HashMap<i64, i64> = HashMap::new();
+    // Map DB IDs -> sequential numbers for hostname resolution
+    let mut row_id_to_num: HashMap<i64, String> = HashMap::new();
 
     if let Some(dc_id) = datacenter_id {
         for h in 1..=hall_count {
@@ -882,6 +893,7 @@ pub async fn build_virtual_clos(
                         continue;
                     }
                 };
+                row_id_to_num.insert(row_id, r.to_string());
 
                 // Create leaf racks with spine rack in the middle of the row
                 let mid = racks_per_row / 2; // e.g., 8 racks → spine after rack 4
@@ -996,7 +1008,8 @@ pub async fn build_virtual_clos(
                 mgmt_counter += 1;
                 let rack_id = row_first_rack.get(&row_id).copied();
                 let hall_str = hall_id.to_string();
-                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter);
+                let row_str = row_id_to_num.get(&row_id).cloned().unwrap_or_default();
+                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter);
                 let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, rack_id, 41);
                 match state.store.create_device(&req).await {
                     Ok(dev) => { mgmt_switches.push((hall_id, row_id, None, dev.id)); }
@@ -1008,7 +1021,8 @@ pub async fn build_virtual_clos(
             for &(hall_id, row_id, rack_id) in &all_racks {
                 mgmt_counter += 1;
                 let hall_str = hall_id.to_string();
-                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter);
+                let row_str = row_id_to_num.get(&row_id).cloned().unwrap_or_default();
+                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter);
                 let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, Some(rack_id), 41);
                 match state.store.create_device(&req).await {
                     Ok(dev) => { mgmt_switches.push((hall_id, row_id, Some(rack_id), dev.id)); }
@@ -1027,7 +1041,8 @@ pub async fn build_virtual_clos(
                 for m in 1..=count {
                     mgmt_counter += 1;
                     let hall_str = hall_id.to_string();
-                    let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter);
+                    let row_str = row_id_to_num.get(&row_id).cloned().unwrap_or_default();
+                    let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter);
                     let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, rack_id, 41 - m as i32 + 1);
                     match state.store.create_device(&req).await {
                         Ok(dev) => { mgmt_switches.push((hall_id, row_id, None, dev.id)); }
@@ -1054,8 +1069,9 @@ pub async fn build_virtual_clos(
             (None, None, None, None)
         };
         let hall_name = h.map(|id| id.to_string()).unwrap_or_default();
+        let row_name = r.and_then(|id| row_id_to_num.get(&id).cloned()).unwrap_or_default();
         nodes.push(VNode {
-            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "spine", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, &row_name, "spine", i),
             role: "spine".to_string(),
             loopback: format!("10.255.0.{}", i),
             asn: 65000,
@@ -1087,8 +1103,9 @@ pub async fn build_virtual_clos(
             (None, None, None, None)
         };
         let hall_name = h.map(|id| id.to_string()).unwrap_or_default();
+        let row_name = r.and_then(|id| row_id_to_num.get(&id).cloned()).unwrap_or_default();
         nodes.push(VNode {
-            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "leaf", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, &row_name, "leaf", i),
             role: "leaf".to_string(),
             loopback: format!("10.255.1.{}", i),
             asn: 65000 + i as u32,
@@ -1108,7 +1125,7 @@ pub async fn build_virtual_clos(
         let hostname = external_names.get(i - 1)
             .filter(|n| !n.is_empty())
             .cloned()
-            .unwrap_or_else(|| resolve_hostname(hostname_pattern, dc, region, "", "external", i));
+            .unwrap_or_else(|| resolve_hostname(hostname_pattern, dc, region, "", "", "external", i));
         nodes.push(VNode {
             hostname,
             role: "external".to_string(),
@@ -1136,7 +1153,7 @@ pub async fn build_virtual_clos(
             (None, None, None, None)
         };
         nodes.push(VNode {
-            hostname: resolve_hostname(hostname_pattern, dc, region, "", "super-spine", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, "", "", "super-spine", i),
             role: "super-spine".to_string(),
             loopback: format!("10.255.3.{}", i),
             asn: 65500,
@@ -2326,7 +2343,8 @@ pub async fn build_virtual_clos(
                 let (_, leaf_node) = &leaf_created[leaf_idx];
                 gpu_counter += 1;
                 let hall_str = leaf_node.hall_id.map(|id| id.to_string()).unwrap_or_default();
-                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "gpu-node", gpu_counter);
+                let row_str = leaf_node.row_id.and_then(|id| row_id_to_num.get(&id).cloned()).unwrap_or_default();
+                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "gpu-node", gpu_counter);
 
                 // Apply overrides if present
                 let ov_dev = overrides.as_ref().and_then(|ov| {
@@ -2379,8 +2397,9 @@ pub async fn build_virtual_clos(
                     let leaf_idx = (ci * req.gpu_nodes_per_cluster + ni) % total_leaves;
                     let (leaf_dev_id, leaf_node) = &leaf_created[leaf_idx];
                     let hall_str = leaf_node.hall_id.map(|id| id.to_string()).unwrap_or_default();
+                    let row_str = leaf_node.row_id.and_then(|id| row_id_to_num.get(&id).cloned()).unwrap_or_default();
                     let gpu_node_idx = gpu_counter - req.gpu_nodes_per_cluster + ni + 1;
-                    let gpu_host = resolve_hostname(hostname_pattern, dc, region, &hall_str, "gpu-node", gpu_node_idx);
+                    let gpu_host = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "gpu-node", gpu_node_idx);
 
                     for ul in 0..2usize {
                         let gpu_port = format!("Ethernet{}", ul + 1);

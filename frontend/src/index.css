@@ -1620,6 +1620,84 @@ th:hover .column-filter-toggle,
   color: var(--color-status-error);
 }
 
+/* Number Input with stepper buttons */
+.number-input {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--color-bg-secondary);
+  /* 6 digits (~7ch) + padding + 2 buttons (28px each) */
+  width: 120px;
+}
+
+.number-input input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  text-align: center;
+  padding: 4px 2px;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.number-input-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex-shrink: 0;
+  border: none;
+  background: var(--color-bg-tertiary, var(--color-bg-hover));
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.number-input-btn:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+
+.number-input-btn:active:not(:disabled) {
+  background: var(--color-border);
+}
+
+.number-input-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.number-input:focus-within {
+  border-color: var(--color-accent-blue);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.number-input-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Small variant for inline table usage */
+.number-input-sm {
+  width: 96px;
+  border-radius: 3px;
+}
+
+.number-input-sm input {
+  font-size: 12px;
+  padding: 2px 1px;
+}
+
+.number-input-sm .number-input-btn {
+  width: 22px;
+}
+
 /* Custom Select Field (replaces native <select>) */
 .select-field {
   position: relative;
@@ -2907,7 +2985,7 @@ th:hover .column-filter-toggle,
 }
 
 .modal-extra-wide {
-  max-width: 1000px;
+  max-width: 1400px;
   width: 95%;
   max-height: 85vh;
 }

@@ -21,6 +21,7 @@ export { Drawer } from './Drawer';
 export { FormDialog } from './FormDialog';
 export type { FormDialogProps } from './FormDialog';
 export { FormField } from './FormField';
+export { NumberInput } from './NumberInput';
 export { HelpTour } from './HelpTour';
 export { InfoSection } from './InfoSection';
 export { Jobs } from './Jobs';

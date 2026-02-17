@@ -398,8 +398,8 @@ function DeviceNamingPanel() {
             />
           </div>
           <p className="settings-hint">
-            Pattern for auto-generated device hostnames. Variables: <code>$region</code>, <code>$datacenter</code>, <code>$hall</code>, <code>$role</code> (spine, leaf, external), <code>#</code> (auto-incrementing number).
-            Example: dc1-spine-1, dc1-leaf-2
+            Pattern for auto-generated device hostnames. Variables: <code>$region</code>, <code>$datacenter</code>, <code>$hall</code>, <code>$row</code>, <code>$role</code> (spine, leaf, external), <code>#</code> (auto-incrementing number). Hall, row, and # are zero-padded to 2 digits.
+            Example: dc1-spine-01, dc1-r01-leaf-02
           </p>
           <div className="form-row" style={{ marginTop: 16 }}>
             <FormField

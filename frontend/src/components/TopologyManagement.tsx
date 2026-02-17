@@ -31,6 +31,7 @@ import { ConfigViewer } from './ConfigViewer';
 import { DialogActions } from './DialogActions';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
+import { NumberInput } from './NumberInput';
 import { ModelSelector } from './ModelSelector';
 import { SelectField } from './SelectField';
 import { InfoSection } from './InfoSection';
@@ -260,7 +261,7 @@ export function TopologyManagement() {
       const csvEscape = (v: string) => v.includes(',') ? `"${v}"` : v;
 
       const rows: string[] = [
-        'Side A Hostname,Side A Interface,Side A Role,Side A Patch Panel,Side A PP Port,Side B Hostname,Side B Interface,Side B Role,Side B Patch Panel,Side B PP Port,Cable Length (m)',
+        'Side A Hostname,Side A Interface,Side A Patch Panel,Side A PP Port,Side B Hostname,Side B Interface,Side B Patch Panel,Side B PP Port,Cable Length (m)',
       ];
 
       // Check if any device has port assignments
@@ -284,12 +285,10 @@ export function TopologyManagement() {
             rows.push([
               csvEscape(device.hostname || device.mac || String(device.id)),
               csvEscape(pa.port_name),
-              device.topology_role || '',
               pa.patch_panel_a_hostname ? csvEscape(`${pa.patch_panel_a_hostname}`) : '',
               pa.patch_panel_a_port || '',
               csvEscape(pa.remote_device_hostname || (remoteDevice ? remoteDevice.hostname || remoteDevice.mac || String(remoteDevice.id) : String(pa.remote_device_id))),
               csvEscape(pa.remote_port_name || ''),
-              remoteDevice?.topology_role || '',
               pa.patch_panel_b_hostname ? csvEscape(`${pa.patch_panel_b_hostname}`) : '',
               pa.patch_panel_b_port || '',
               pa.cable_length_meters != null ? String(pa.cable_length_meters) : '',
@@ -312,12 +311,10 @@ export function TopologyManagement() {
               rows.push([
                 csvEscape(spine.hostname || spine.mac || String(spine.id)),
                 nextIf(spine),
-                spine.topology_role || 'spine',
                 '', // Side A Patch Panel
                 '', // Side A PP Port
                 csvEscape(leaf.hostname || leaf.mac || String(leaf.id)),
                 nextIf(leaf),
-                leaf.topology_role || 'leaf',
                 '', // Side B Patch Panel
                 '', // Side B PP Port
                 '', // Cable Length
@@ -2767,11 +2764,12 @@ export function TopologyManagement() {
                       {device.role === 'gpu-node' ? (
                         <span style={{ opacity: 0.4 }}>—</span>
                       ) : (
-                        <input
-                          type="number"
+                        <NumberInput
                           value={device.asn}
-                          onChange={(e) => handlePreviewDeviceEdit(device.index, 'asn', parseInt(e.target.value) || 0)}
-                          style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                          onChange={(v) => handlePreviewDeviceEdit(device.index, 'asn', v)}
+                          min={1}
+                          max={4294967295}
+                          size="sm"
                         />
                       )}
                     </td>
@@ -2819,11 +2817,12 @@ export function TopologyManagement() {
                     )}
                     {previewData.racks.length > 0 && (
                       <td>
-                        <input
-                          type="number"
-                          value={device.rack_position ?? ''}
-                          onChange={(e) => handlePreviewDeviceEdit(device.index, 'rack_position', e.target.value ? parseInt(e.target.value) : null)}
-                          style={{ width: '100%', padding: '2px 6px', fontSize: '12px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
+                        <NumberInput
+                          value={device.rack_position ?? 0}
+                          onChange={(v) => handlePreviewDeviceEdit(device.index, 'rack_position', v || null)}
+                          min={0}
+                          max={48}
+                          size="sm"
                         />
                       </td>
                     )}

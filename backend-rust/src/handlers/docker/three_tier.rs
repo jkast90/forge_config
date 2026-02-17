@@ -33,13 +33,18 @@ const THREE_TIER_LOOPBACK_CIDR: &str = "10.254.0.0/16";
 const THREE_TIER_P2P_PARENT_CIDR: &str = "10.0.0.0/8";
 
 /// Resolve a hostname from the pattern, substituting variables.
-fn resolve_hostname(pattern: &str, datacenter: &str, region: &str, hall: &str, role: &str, index: usize) -> String {
+fn resolve_hostname(pattern: &str, datacenter: &str, region: &str, hall: &str, row: &str, role: &str, index: usize) -> String {
+    // Zero-pad numeric values to 2 digits (e.g. "1" -> "01", "25" -> "25")
+    let pad = |s: &str| -> String {
+        if let Ok(n) = s.parse::<usize>() { format!("{:02}", n) } else { s.to_string() }
+    };
     let result = pattern
         .replace("$region", region)
         .replace("$datacenter", datacenter)
-        .replace("$hall", hall)
+        .replace("$hall", &pad(hall))
+        .replace("$row", &pad(row))
         .replace("$role", role)
-        .replace('#', &index.to_string());
+        .replace('#', &format!("{:02}", index));
     // Clean leading/trailing hyphens and collapse double hyphens from empty variables
     let mut cleaned = result.trim_matches('-').to_string();
     while cleaned.contains("--") {
@@ -132,14 +137,15 @@ pub(super) async fn compute_three_tier_preview(
 
     // ── 4. Compute rack layout as named racks ───────────────────────────
     let mut racks: Vec<TopologyPreviewRack> = Vec::new();
-    let mut spine_rack_names: Vec<String> = Vec::new();
-    let mut leaf_rack_names: Vec<String> = Vec::new();
+    let mut spine_rack_names: Vec<(String, String)> = Vec::new(); // (rack_name, row_number)
+    let mut leaf_rack_names: Vec<(String, String)> = Vec::new(); // (rack_name, row_number)
     let mut rack_index: usize = 0;
 
     for h in 1..=hall_count {
         let hall_name = format!("Hall {}", h);
         for r in 1..=rows_per_hall {
             let row_name = format!("Hall {} Row {}", h, r);
+            let row_num = r.to_string();
             let mid = racks_per_row / 2;
             for k in 1..=racks_per_row {
                 // Insert spine rack at the midpoint
@@ -152,7 +158,7 @@ pub(super) async fn compute_three_tier_preview(
                         row_name: row_name.clone(),
                         rack_type: "spine".to_string(),
                     });
-                    spine_rack_names.push(spine_name);
+                    spine_rack_names.push((spine_name, row_num.clone()));
                     rack_index += 1;
                 }
 
@@ -164,7 +170,7 @@ pub(super) async fn compute_three_tier_preview(
                     row_name: row_name.clone(),
                     rack_type: "leaf".to_string(),
                 });
-                leaf_rack_names.push(leaf_name);
+                leaf_rack_names.push((leaf_name, row_num.clone()));
                 rack_index += 1;
             }
         }
@@ -177,7 +183,7 @@ pub(super) async fn compute_three_tier_preview(
     for i in 1..=core_count {
         devices.push(TopologyPreviewDevice {
             index: i,
-            hostname: resolve_hostname(hostname_pattern, dc, region, "", "core", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, "", "", "core", i),
             role: "core".to_string(),
             loopback: format!("10.254.0.{}", i),
             asn: 64999_u32.saturating_sub(i as u32 - 1),
@@ -192,21 +198,16 @@ pub(super) async fn compute_three_tier_preview(
 
     // 5b. Distribution devices — round-robin across spine racks
     for i in 1..=dist_count {
-        let (rack_name, r_idx, pos) = if !spine_rack_names.is_empty() {
+        let (rack_name, row_num, r_idx, pos) = if !spine_rack_names.is_empty() {
             let idx = (i - 1) % spine_rack_names.len();
             let pos_in_rack = ((i - 1) / spine_rack_names.len()) as i32 + 1;
-            (
-                Some(spine_rack_names[idx].clone()),
-                Some(idx),
-                Some(pos_in_rack),
-            )
+            let (rn, rw) = spine_rack_names[idx].clone();
+            (Some(rn), rw, Some(idx), Some(pos_in_rack))
         } else {
-            (None, None, None)
+            (None, String::new(), None, None)
         };
         let hall_name = if !spine_rack_names.is_empty() {
-            // Derive hall from the spine rack index
             let idx = (i - 1) % spine_rack_names.len();
-            // Each hall has rows_per_hall spine racks
             let hall_idx = idx / rows_per_hall;
             (hall_idx + 1).to_string()
         } else {
@@ -214,7 +215,7 @@ pub(super) async fn compute_three_tier_preview(
         };
         devices.push(TopologyPreviewDevice {
             index: i,
-            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "distribution", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, &row_num, "distribution", i),
             role: "distribution".to_string(),
             loopback: format!("10.254.1.{}", i),
             asn: 65100,
@@ -229,24 +230,20 @@ pub(super) async fn compute_three_tier_preview(
 
     // 5c. Access devices — distributed by devices_per_rack
     for i in 1..=access_count {
-        let (rack_name, r_idx, pos) = if !leaf_rack_names.is_empty() {
+        let (rack_name, row_num, r_idx, pos) = if !leaf_rack_names.is_empty() {
             let idx = (i - 1) / devices_per_rack;
             let pos_in_rack = (i - 1) % devices_per_rack;
             if idx < leaf_rack_names.len() {
-                (
-                    Some(leaf_rack_names[idx].clone()),
-                    Some(idx),
-                    Some(compute_rack_position(pos_in_rack, &req.tier3_placement, 42)),
-                )
+                let (rn, rw) = leaf_rack_names[idx].clone();
+                (Some(rn), rw, Some(idx), Some(compute_rack_position(pos_in_rack, &req.tier3_placement, 42)))
             } else {
-                (None, None, None)
+                (None, String::new(), None, None)
             }
         } else {
-            (None, None, None)
+            (None, String::new(), None, None)
         };
         let hall_name = if !leaf_rack_names.is_empty() {
             let idx = (i - 1) / devices_per_rack;
-            // Each hall has rows_per_hall * racks_per_row leaf racks
             let racks_per_hall = rows_per_hall * racks_per_row;
             let hall_idx = if racks_per_hall > 0 { idx / racks_per_hall } else { 0 };
             (hall_idx + 1).to_string()
@@ -255,7 +252,7 @@ pub(super) async fn compute_three_tier_preview(
         };
         devices.push(TopologyPreviewDevice {
             index: i,
-            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "access", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, &row_num, "access", i),
             role: "access".to_string(),
             loopback: format!("10.254.2.{}", i),
             asn: 65201_u32 + (i as u32 - 1),
@@ -402,8 +399,8 @@ pub(super) async fn compute_three_tier_preview(
                 leaf_assignments.push(access_hostname.clone());
 
                 gpu_counter += 1;
-                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, "", "gpu-node", gpu_counter);
-                let gpu_rack_name = access_rack_idx.and_then(|ri| leaf_rack_names.get(ri).cloned());
+                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, "", "", "gpu-node", gpu_counter);
+                let gpu_rack_name = access_rack_idx.and_then(|ri| leaf_rack_names.get(ri).map(|(n, _)| n.clone()));
                 let gpu_rack_pos = access_rack_pos.map(|p| p + 4 + (ni as i32 * 4));
 
                 devices.push(TopologyPreviewDevice {
@@ -523,7 +520,7 @@ pub(super) async fn compute_three_tier_preview(
             mgmt_counter += 1;
             devices.push(TopologyPreviewDevice {
                 index: dev_index,
-                hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter),
+                hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "", "mgmt-switch", mgmt_counter),
                 role: "mgmt-switch".to_string(),
                 loopback: String::new(),
                 asn: 0,
@@ -539,13 +536,14 @@ pub(super) async fn compute_three_tier_preview(
         }
         for r in 1..=rows_per_hall {
             let row_name = format!("Hall {} Row {}", h, r);
+            let row_str = r.to_string();
             if mgmt_dist == "per-rack" {
                 let row_racks: Vec<_> = racks.iter().filter(|rk| rk.row_name == row_name).collect();
                 for (_ri, rack) in row_racks.iter().enumerate() {
                     mgmt_counter += 1;
                     devices.push(TopologyPreviewDevice {
                         index: dev_index,
-                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter),
+                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter),
                         role: "mgmt-switch".to_string(),
                         loopback: String::new(),
                         asn: 0,
@@ -569,7 +567,7 @@ pub(super) async fn compute_three_tier_preview(
                     mgmt_counter += 1;
                     devices.push(TopologyPreviewDevice {
                         index: dev_index,
-                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter),
+                        hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter),
                         role: "mgmt-switch".to_string(),
                         loopback: String::new(),
                         asn: 0,
@@ -716,6 +714,8 @@ pub async fn build_three_tier(
     let mut mgmt_switches: Vec<(i64, i64, Option<i64>, i64)> = Vec::new();
     // Map row_id -> first rack ID (for patch panel placement)
     let mut row_first_rack: HashMap<i64, i64> = HashMap::new();
+    // Map DB IDs -> sequential numbers for hostname resolution
+    let mut row_id_to_num: HashMap<i64, String> = HashMap::new();
 
     if let Some(dc_id) = datacenter_id {
         for h in 1..=hall_count {
@@ -739,7 +739,7 @@ pub async fn build_three_tier(
                     hall_id,
                 };
                 let row_id = match state.store.create_ipam_row(&row_req).await {
-                    Ok(row) => row.id,
+                    Ok(row) => { row_id_to_num.insert(row.id, r.to_string()); row.id }
                     Err(e) => {
                         tracing::warn!("Failed to create row hall-{}-row-{}: {}", h, r, e);
                         continue;
@@ -853,7 +853,8 @@ pub async fn build_three_tier(
                 mgmt_counter += 1;
                 let rack_id = row_first_rack.get(&row_id).copied();
                 let hall_str = hall_id.to_string();
-                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter);
+                let row_str = row_id_to_num.get(&row_id).cloned().unwrap_or_default();
+                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter);
                 let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, rack_id, 41);
                 match state.store.create_device(&req).await {
                     Ok(dev) => { mgmt_switches.push((hall_id, row_id, None, dev.id)); }
@@ -864,7 +865,8 @@ pub async fn build_three_tier(
             for &(hall_id, row_id, rack_id) in &all_racks {
                 mgmt_counter += 1;
                 let hall_str = hall_id.to_string();
-                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter);
+                let row_str = row_id_to_num.get(&row_id).cloned().unwrap_or_default();
+                let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter);
                 let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, Some(rack_id), 41);
                 match state.store.create_device(&req).await {
                     Ok(dev) => { mgmt_switches.push((hall_id, row_id, Some(rack_id), dev.id)); }
@@ -881,7 +883,8 @@ pub async fn build_three_tier(
                 for m in 1..=count {
                     mgmt_counter += 1;
                     let hall_str = hall_id.to_string();
-                    let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "mgmt-switch", mgmt_counter);
+                    let row_str = row_id_to_num.get(&row_id).cloned().unwrap_or_default();
+                    let hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "mgmt-switch", mgmt_counter);
                     let req = create_mgmt(mgmt_counter, &hostname, hall_id, row_id, rack_id, 41 - m as i32 + 1);
                     match state.store.create_device(&req).await {
                         Ok(dev) => { mgmt_switches.push((hall_id, row_id, None, dev.id)); }
@@ -899,7 +902,7 @@ pub async fn build_three_tier(
     // Core nodes: not assigned to any rack (like externals in CLOS)
     for i in 1..=core_count {
         nodes.push(VNode {
-            hostname: resolve_hostname(hostname_pattern, dc, region, "", "core", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, "", "", "core", i),
             role: "core".to_string(),
             loopback: format!("10.254.0.{}", i),
             asn: 64999_u32.saturating_sub(i as u32 - 1),
@@ -925,8 +928,9 @@ pub async fn build_three_tier(
             (None, None, None, None)
         };
         let hall_name = h.map(|id| id.to_string()).unwrap_or_default();
+        let row_name = r.and_then(|id| row_id_to_num.get(&id).cloned()).unwrap_or_default();
         nodes.push(VNode {
-            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "distribution", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, &row_name, "distribution", i),
             role: "distribution".to_string(),
             loopback: format!("10.254.1.{}", i),
             asn: 65100,
@@ -958,8 +962,9 @@ pub async fn build_three_tier(
             (None, None, None, None)
         };
         let hall_name = h.map(|id| id.to_string()).unwrap_or_default();
+        let row_name = r.and_then(|id| row_id_to_num.get(&id).cloned()).unwrap_or_default();
         nodes.push(VNode {
-            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, "access", i),
+            hostname: resolve_hostname(hostname_pattern, dc, region, &hall_name, &row_name, "access", i),
             role: "access".to_string(),
             loopback: format!("10.254.2.{}", i),
             asn: 65201_u32 + (i as u32 - 1),
@@ -1836,7 +1841,8 @@ pub async fn build_three_tier(
                 let (_, access_node) = &access_created[access_idx];
                 gpu_counter += 1;
                 let hall_str = access_node.hall_id.map(|id| id.to_string()).unwrap_or_default();
-                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, "gpu-node", gpu_counter);
+                let row_str = access_node.row_id.and_then(|id| row_id_to_num.get(&id).cloned()).unwrap_or_default();
+                let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "gpu-node", gpu_counter);
                 let final_rack_pos = access_node.rack_position.map(|p| p + 4 + (ni as i32 * 4));
 
                 let dev_req = crate::models::CreateDeviceRequest {
@@ -1883,8 +1889,9 @@ pub async fn build_three_tier(
                     let access_idx = (ci * req.gpu_nodes_per_cluster + ni) % total_access;
                     let (access_dev_id, access_node) = &access_created[access_idx];
                     let hall_str = access_node.hall_id.map(|id| id.to_string()).unwrap_or_default();
+                    let row_str = access_node.row_id.and_then(|id| row_id_to_num.get(&id).cloned()).unwrap_or_default();
                     let gpu_node_idx = gpu_counter - req.gpu_nodes_per_cluster + ni + 1;
-                    let gpu_host = resolve_hostname(hostname_pattern, dc, region, &hall_str, "gpu-node", gpu_node_idx);
+                    let gpu_host = resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "gpu-node", gpu_node_idx);
 
                     for ul in 0..2usize {
                         let gpu_port = format!("Ethernet{}", ul + 1);
