@@ -32,7 +32,22 @@ fn map_group_variable_row(row: &SqliteRow) -> GroupVariable {
 const SELECT_GROUP: &str = r#"
     SELECT g.id, g.name, g.description, g.parent_id, g.precedence,
            g.created_at, g.updated_at,
-           COALESCE((SELECT COUNT(*) FROM device_group_members dgm WHERE dgm.group_id = g.id), 0) as device_count,
+           CASE WHEN g.id = 1 THEN (SELECT COUNT(*) FROM devices)
+           ELSE COALESCE((
+               SELECT COUNT(*) FROM (
+                   SELECT device_id FROM device_group_members dgm WHERE dgm.group_id = g.id
+                   UNION
+                   SELECT d.id FROM devices d
+                   INNER JOIN device_roles dr ON dr.name = d.topology_role
+                   WHERE d.topology_role != ''
+                     AND dr.group_names LIKE '%"' || g.name || '"%'
+                   UNION
+                   SELECT d2.id FROM devices d2
+                   INNER JOIN vendors v ON CAST(v.id AS TEXT) = d2.vendor
+                   WHERE d2.vendor != ''
+                     AND v.group_names LIKE '%"' || g.name || '"%'
+               )
+           ), 0) END as device_count,
            COALESCE((SELECT COUNT(*) FROM groups c WHERE c.parent_id = g.id), 0) as child_count
     FROM groups g
 "#;

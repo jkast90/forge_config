@@ -65,7 +65,16 @@ pub async fn create_device(
     // Validate topology_role if provided
     if let Some(ref role) = req.topology_role {
         if !crate::models::topology_role::is_valid(role) {
-            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf, core, distribution, access, gpu-node"));
+            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf, core, distribution, access, gpu-node, patch panel"));
+        }
+    }
+
+    // Resolve vendor name to ID if the value isn't already a numeric ID
+    if let Some(ref vendor_val) = req.vendor {
+        if !vendor_val.is_empty() && vendor_val.parse::<i64>().is_err() {
+            if let Ok(Some(v)) = state.store.get_vendor_by_name(vendor_val).await {
+                req.vendor = Some(v.id.to_string());
+            }
         }
     }
 
@@ -83,12 +92,21 @@ pub async fn update_device(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,
     Path(id): Path<i64>,
-    Json(req): Json<UpdateDeviceRequest>,
+    Json(mut req): Json<UpdateDeviceRequest>,
 ) -> Result<Json<Device>, ApiError> {
     // Validate topology_role if provided
     if let Some(ref role) = req.topology_role {
         if !crate::models::topology_role::is_valid(role) {
-            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf, core, distribution, access, gpu-node"));
+            return Err(ApiError::bad_request("topology_role must be one of: super-spine, spine, leaf, core, distribution, access, gpu-node, patch panel"));
+        }
+    }
+
+    // Resolve vendor name to ID if the value isn't already a numeric ID
+    if let Some(ref vendor_val) = req.vendor {
+        if !vendor_val.is_empty() && vendor_val.parse::<i64>().is_err() {
+            if let Ok(Some(v)) = state.store.get_vendor_by_name(vendor_val).await {
+                req.vendor = Some(v.id.to_string());
+            }
         }
     }
 
@@ -430,10 +448,12 @@ pub async fn preview_device_config(
         device.config_template.parse::<i64>()
             .map_err(|_| ApiError::bad_request(format!("Invalid template ID: {}", device.config_template)))?
     } else if let Some(ref vendor_str) = device.vendor {
-        let vendor_id = vendor_str.parse::<i64>()
-            .map_err(|_| ApiError::bad_request(format!("Invalid vendor ID: {}", vendor_str)))?;
-        let vendor = state.store.get_vendor(vendor_id).await?
-            .ok_or_else(|| ApiError::bad_request("Device has no template and vendor not found"))?;
+        let vendor = if let Ok(vid) = vendor_str.parse::<i64>() {
+            state.store.get_vendor(vid).await?
+        } else {
+            state.store.get_vendor_by_name(vendor_str).await?
+        };
+        let vendor = vendor.ok_or_else(|| ApiError::bad_request("Device has no template and vendor not found"))?;
         if vendor.default_template.is_empty() {
             return Err(ApiError::bad_request("Device has no template and vendor has no default template"));
         }
@@ -642,12 +662,13 @@ async fn resolve_job_template_name(state: &AppState, device: &Device) -> String 
             Err(_) => return String::new(),
         }
     } else if let Some(ref vendor_str) = device.vendor {
-        let vendor_id = match vendor_str.parse::<i64>() {
-            Ok(id) => id,
-            Err(_) => return String::new(),
+        let vendor = if let Ok(vid) = vendor_str.parse::<i64>() {
+            state.store.get_vendor(vid).await.ok().flatten()
+        } else {
+            state.store.get_vendor_by_name(vendor_str).await.ok().flatten()
         };
-        match state.store.get_vendor(vendor_id).await {
-            Ok(Some(v)) if !v.default_template.is_empty() => {
+        match vendor {
+            Some(v) if !v.default_template.is_empty() => {
                 match v.default_template.parse::<i64>() {
                     Ok(id) => id,
                     Err(_) => return String::new(),

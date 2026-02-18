@@ -41,7 +41,7 @@ pub struct CreateGpuClusterRequest {
     pub vrf_id: Option<i64>,
 }
 
-fn default_gpu_model() -> String { "MI300X".to_string() }
+fn default_gpu_model() -> String { "MI350X 8-GPU Node".to_string() }
 fn default_node_count() -> i32 { 1 }
 fn default_gpus_per_node() -> i32 { 8 }
 fn default_interconnect() -> String { "InfiniBand".to_string() }

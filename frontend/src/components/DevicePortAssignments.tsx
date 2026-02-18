@@ -198,9 +198,9 @@ export function DevicePortAssignments({ device, onClose }: Props) {
   }, [devices, editForm.remote_device_id]);
 
   const remoteDeviceModel = useMemo<DeviceModel | undefined>(() => {
-    if (!remoteDevice?.vendor || !remoteDevice?.model) return undefined;
+    if (!remoteDevice?.vendor_id || !remoteDevice?.model) return undefined;
     return deviceModels.find(
-      (dm) => String(dm.vendor_id) === remoteDevice.vendor && dm.model === remoteDevice.model
+      (dm) => String(dm.vendor_id) === remoteDevice.vendor_id && dm.model === remoteDevice.model
     );
   }, [remoteDevice, deviceModels]);
 

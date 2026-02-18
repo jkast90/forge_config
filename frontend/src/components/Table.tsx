@@ -948,7 +948,7 @@ export const Cell = {
   code: (value: ReactNode) => <code>{value ?? '—'}</code>,
 
   /** Render a status badge */
-  status: (status: string, variant?: 'online' | 'offline' | 'warning' | 'provisioning') => (
+  status: (status: string, variant?: 'online' | 'offline' | 'warning' | 'provisioning' | 'accent' | 'neutral') => (
     <span className={`status ${variant || status}`}>
       {status}
     </span>

@@ -42,6 +42,20 @@ pub async fn get_vendor(
     Ok(Json(vendor))
 }
 
+/// Get a vendor by name (case-insensitive)
+pub async fn get_vendor_by_name(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+    Path(name): Path<String>,
+) -> Result<Json<Vendor>, ApiError> {
+    let vendor = state
+        .store
+        .get_vendor_by_name(&name)
+        .await?
+        .ok_or_else(|| ApiError::not_found("vendor"))?;
+    Ok(Json(vendor))
+}
+
 /// Create a new vendor
 pub async fn create_vendor(
     _auth: crate::auth::AuthUser,

@@ -9,6 +9,8 @@
 #   5174 - Frontend (Vite dev server)
 #   8080 - Rust backend
 
+name: forge
+
 services:
   # ===========================================
   # Frontend - React + Vite dev server
@@ -19,7 +21,7 @@ services:
       dockerfile: frontend/Dockerfile.dev
     container_name: fc-frontend
     networks:
-      - ztp-net
+      - fc-net
     ports:
       - "5174:5173"
     volumes:
@@ -42,7 +44,7 @@ services:
     container_name: fc-backend-rust
     hostname: forge-config
     networks:
-      ztp-net:
+      fc-net:
         ipv4_address: 172.30.0.2
     ports:
       - "8080:8080"
@@ -64,7 +66,7 @@ services:
       - RUST_LOG=info
       - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
       # Docker configuration for spawning test containers
-      - DOCKER_NETWORK=forge-config_fc-net
+      - DOCKER_NETWORK=forge_fc-net
       - TEST_CLIENT_IMAGE=forge-config-test-client
     restart: unless-stopped
 
@@ -78,7 +80,7 @@ services:
     container_name: fc-test-client
     hostname: test-switch
     networks:
-      ztp-net:
+      fc-net:
         ipv4_address: 172.30.0.99
     mac_address: "02:42:ac:1e:00:99"
     cap_add:
@@ -89,7 +91,7 @@ services:
       - test
 
 networks:
-  ztp-net:
+  fc-net:
     driver: bridge
     ipam:
       config:

@@ -8,6 +8,7 @@ export interface Device {
   ip: string;
   hostname: string;
   vendor?: string;
+  vendor_id?: string;
   model?: string;
   serial_number?: string;
   config_template: string;
@@ -29,7 +30,7 @@ export interface Device {
 }
 
 export type DeviceStatus = 'online' | 'offline' | 'provisioning' | 'unknown';
-export type TopologyRole = 'super-spine' | 'spine' | 'leaf' | 'core' | 'distribution' | 'access' | 'patch-panel' | 'gpu-node' | 'mgmt-switch';
+export type TopologyRole = 'super-spine' | 'spine' | 'leaf' | 'core' | 'distribution' | 'access' | 'patch panel' | 'gpu-node' | 'mgmt-switch';
 
 export interface DeviceFormData {
   mac: string;
@@ -196,6 +197,7 @@ export interface Vendor {
   mac_prefixes: string[];
   vendor_class?: string; // DHCP Option 60 vendor class identifier
   default_template?: string; // Default template ID for this vendor
+  group_names: string[];
   device_count?: number;
   created_at?: string;
   updated_at?: string;
@@ -669,6 +671,9 @@ export interface IpamRack {
   description?: string;
   row_id: number;
   row_name?: string;
+  width_cm: number;
+  height_ru: number;
+  depth_cm: number;
   device_count?: number;
   created_at: string;
   updated_at: string;
@@ -678,6 +683,9 @@ export interface IpamRackFormData {
   name: string;
   description: string;
   row_id: string;
+  width_cm: number;
+  height_ru: number;
+  depth_cm: number;
 }
 
 export interface IpamRole {

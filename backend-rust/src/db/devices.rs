@@ -7,12 +7,16 @@ use crate::models::*;
 use super::row_helpers::map_device_row;
 
 const SELECT_DEVICE: &str = r#"
-    SELECT id, mac, ip, hostname, vendor, model, serial_number, config_template,
-           ssh_user, ssh_pass, topology_id, topology_role,
-           hall_id, row_id, rack_id, rack_position,
-           status, device_type, last_seen, last_backup, last_error,
-           created_at, updated_at
-    FROM devices
+    SELECT d.id, d.mac, d.ip, d.hostname,
+           COALESCE(v.name, d.vendor) as vendor,
+           d.vendor as vendor_id,
+           d.model, d.serial_number, d.config_template,
+           d.ssh_user, d.ssh_pass, d.topology_id, d.topology_role,
+           d.hall_id, d.row_id, d.rack_id, d.rack_position,
+           d.status, d.device_type, d.last_seen, d.last_backup, d.last_error,
+           d.created_at, d.updated_at
+    FROM devices d
+    LEFT JOIN vendors v ON CAST(v.id AS TEXT) = d.vendor
 "#;
 
 /// Device database operations
@@ -20,7 +24,7 @@ pub struct DeviceRepo;
 
 impl DeviceRepo {
     pub async fn list(pool: &Pool<Sqlite>) -> Result<Vec<Device>> {
-        let rows = sqlx::query(&format!("{} ORDER BY hostname", SELECT_DEVICE))
+        let rows = sqlx::query(&format!("{} ORDER BY d.hostname", SELECT_DEVICE))
             .fetch_all(pool)
             .await?;
 
@@ -28,7 +32,7 @@ impl DeviceRepo {
     }
 
     pub async fn list_paged(pool: &Pool<Sqlite>, limit: i32, offset: i32) -> Result<Vec<Device>> {
-        let rows = sqlx::query(&format!("{} ORDER BY hostname LIMIT ? OFFSET ?", SELECT_DEVICE))
+        let rows = sqlx::query(&format!("{} ORDER BY d.hostname LIMIT ? OFFSET ?", SELECT_DEVICE))
             .bind(limit)
             .bind(offset)
             .fetch_all(pool)
@@ -38,7 +42,7 @@ impl DeviceRepo {
     }
 
     pub async fn get(pool: &Pool<Sqlite>, id: i64) -> Result<Option<Device>> {
-        let row = sqlx::query(&format!("{} WHERE id = ?", SELECT_DEVICE))
+        let row = sqlx::query(&format!("{} WHERE d.id = ?", SELECT_DEVICE))
             .bind(id)
             .fetch_optional(pool)
             .await?;
@@ -47,7 +51,7 @@ impl DeviceRepo {
     }
 
     pub async fn get_by_mac(pool: &Pool<Sqlite>, mac: &str) -> Result<Option<Device>> {
-        let row = sqlx::query(&format!("{} WHERE mac = ?", SELECT_DEVICE))
+        let row = sqlx::query(&format!("{} WHERE d.mac = ?", SELECT_DEVICE))
             .bind(mac)
             .fetch_optional(pool)
             .await?;

@@ -35,12 +35,76 @@ impl VariableResolver {
             .collect();
 
         // 2. Load device's direct group memberships
-        let member_group_ids: Vec<i64> = sqlx::query_scalar(
+        let mut member_group_ids: Vec<i64> = sqlx::query_scalar(
             "SELECT group_id FROM device_group_members WHERE device_id = ?",
         )
         .bind(device_id)
         .fetch_all(pool)
         .await?;
+
+        // 2b. Add implicit group memberships via device role
+        //     device.topology_role → device_roles.name → device_roles.group_names → groups.name
+        let topology_role: Option<String> = sqlx::query_scalar(
+            "SELECT topology_role FROM devices WHERE id = ?",
+        )
+        .bind(device_id)
+        .fetch_optional(pool)
+        .await?
+        .flatten();
+
+        if let Some(ref role_name) = topology_role {
+            if !role_name.is_empty() {
+                let role_group_names_json: Option<String> = sqlx::query_scalar(
+                    "SELECT group_names FROM device_roles WHERE name = ?",
+                )
+                .bind(role_name)
+                .fetch_optional(pool)
+                .await?;
+
+                if let Some(json) = role_group_names_json {
+                    let group_names: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
+                    let groups_by_name: HashMap<&str, i64> = all_groups
+                        .iter()
+                        .map(|g| (g.name.as_str(), g.id))
+                        .collect();
+                    let existing: HashSet<i64> = member_group_ids.iter().copied().collect();
+                    for name in &group_names {
+                        if let Some(&gid) = groups_by_name.get(name.as_str()) {
+                            if !existing.contains(&gid) {
+                                member_group_ids.push(gid);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2c. Add implicit group memberships via vendor
+        //     device.vendor → vendors.name → vendors.group_names → groups.name
+        let vendor_group_names_json: Option<String> = sqlx::query_scalar(
+            "SELECT v.group_names FROM devices d INNER JOIN vendors v ON v.name = d.vendor WHERE d.id = ?",
+        )
+        .bind(device_id)
+        .fetch_optional(pool)
+        .await?;
+
+        if let Some(json) = vendor_group_names_json {
+            let vendor_groups: Vec<String> = serde_json::from_str(&json).unwrap_or_default();
+            if !vendor_groups.is_empty() {
+                let groups_by_name: HashMap<&str, i64> = all_groups
+                    .iter()
+                    .map(|g| (g.name.as_str(), g.id))
+                    .collect();
+                let existing: HashSet<i64> = member_group_ids.iter().copied().collect();
+                for name in &vendor_groups {
+                    if let Some(&gid) = groups_by_name.get(name.as_str()) {
+                        if !existing.contains(&gid) {
+                            member_group_ids.push(gid);
+                        }
+                    }
+                }
+            }
+        }
 
         // 3. For each direct group, build ancestor chain (walk parent_id up to root)
         let mut all_relevant_ids: HashSet<i64> = HashSet::new();

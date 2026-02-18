@@ -394,6 +394,16 @@ pub async fn spawn_container(
         }
     }
 
+    // Resolve vendor ID for device record
+    let arista_vendor_id = if ceos {
+        match state.store.get_vendor_by_name("arista").await {
+            Ok(Some(v)) => v.id.to_string(),
+            _ => "arista".to_string(),
+        }
+    } else {
+        String::new()
+    };
+
     // For cEOS containers, register directly in discovery since they don't do DHCP
     if ceos && !ip.is_empty() {
         let lease = crate::models::Lease {
@@ -425,7 +435,7 @@ pub async fn spawn_container(
             mac: mac.clone(),
             ip: ip.clone(),
             hostname: hostname.clone(),
-            vendor: if ceos { Some("arista".to_string()) } else { None },
+            vendor: if ceos { Some(arista_vendor_id.clone()) } else { None },
             model: if ceos { Some("cEOS-lab".to_string()) } else { None },
             serial_number: if ceos { Some(serial_number.clone()) } else { None },
             config_template: if ceos { "arista-eos".to_string() } else { String::new() },

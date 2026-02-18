@@ -270,11 +270,10 @@ impl JobService {
         let template_id = if !device.config_template.is_empty() {
             device.config_template.parse::<i64>()
                 .map_err(|_| anyhow::anyhow!("Invalid template ID: {}", device.config_template))?
-        } else if let Some(ref vendor_str) = device.vendor {
-            let vendor_id = vendor_str.parse::<i64>()
-                .map_err(|_| anyhow::anyhow!("Invalid vendor ID: {}", vendor_str))?;
-            let vendor = self.store.get_vendor(vendor_id).await?
-                .ok_or_else(|| anyhow::anyhow!("Device has no template and vendor not found"))?;
+        } else if let Some(vendor) = match device.vendor.as_deref() {
+            Some(v) if !v.is_empty() => self.store.resolve_vendor(v).await.ok().flatten(),
+            _ => None,
+        } {
             if vendor.default_template.is_empty() {
                 return Err(anyhow::anyhow!("Device has no template and vendor has no default template"));
             }
@@ -334,13 +333,7 @@ impl JobService {
 
         // Resolve vendor deploy_command wrapper
         let vendor = match device.vendor.as_deref() {
-            Some(v) if !v.is_empty() => {
-                if let Ok(vid) = v.parse::<i64>() {
-                    self.store.get_vendor(vid).await.ok().flatten()
-                } else {
-                    None
-                }
-            }
+            Some(v) if !v.is_empty() => self.store.resolve_vendor(v).await.ok().flatten(),
             _ => None,
         };
 
@@ -381,11 +374,10 @@ impl JobService {
         let template_id = if !device.config_template.is_empty() {
             device.config_template.parse::<i64>()
                 .map_err(|_| anyhow::anyhow!("Invalid template ID: {}", device.config_template))?
-        } else if let Some(ref vendor_str) = device.vendor {
-            let vendor_id = vendor_str.parse::<i64>()
-                .map_err(|_| anyhow::anyhow!("Invalid vendor ID: {}", vendor_str))?;
-            let vendor = self.store.get_vendor(vendor_id).await?
-                .ok_or_else(|| anyhow::anyhow!("Device has no template and vendor not found"))?;
+        } else if let Some(vendor) = match device.vendor.as_deref() {
+            Some(v) if !v.is_empty() => self.store.resolve_vendor(v).await.ok().flatten(),
+            _ => None,
+        } {
             if vendor.default_template.is_empty() {
                 return Err(anyhow::anyhow!("Device has no template and vendor has no default template"));
             }
@@ -445,13 +437,7 @@ impl JobService {
 
         // Resolve vendor diff_command wrapper
         let vendor = match device.vendor.as_deref() {
-            Some(v) if !v.is_empty() => {
-                if let Ok(vid) = v.parse::<i64>() {
-                    self.store.get_vendor(vid).await.ok().flatten()
-                } else {
-                    None
-                }
-            }
+            Some(v) if !v.is_empty() => self.store.resolve_vendor(v).await.ok().flatten(),
             _ => None,
         };
 
@@ -535,13 +521,7 @@ impl JobService {
         }
 
         let vendor = match device.vendor.as_deref() {
-            Some(v) if !v.is_empty() => {
-                if let Ok(vid) = v.parse::<i64>() {
-                    self.store.get_vendor(vid).await.ok().flatten()
-                } else {
-                    None
-                }
-            }
+            Some(v) if !v.is_empty() => self.store.resolve_vendor(v).await.ok().flatten(),
             _ => None,
         };
 

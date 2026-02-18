@@ -18,6 +18,8 @@ pub struct Device {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vendor: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub vendor_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serial_number: Option<String>,

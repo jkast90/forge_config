@@ -17,6 +17,8 @@ pub struct Vendor {
     pub mac_prefixes: Vec<String>,
     pub vendor_class: String,
     pub default_template: String,
+    #[serde(default)]
+    pub group_names: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_count: Option<i32>,
     pub created_at: DateTime<Utc>,
@@ -45,6 +47,8 @@ pub struct CreateVendorRequest {
     pub vendor_class: String,
     #[serde(default)]
     pub default_template: String,
+    #[serde(default)]
+    pub group_names: Vec<String>,
 }
 
 fn default_backup_command() -> String {

@@ -15,6 +15,7 @@ pub fn map_device_row(row: &SqliteRow) -> Device {
         ip: row.get("ip"),
         hostname: row.get("hostname"),
         vendor: none_if_empty(row.get("vendor")),
+        vendor_id: none_if_empty(row.try_get::<Option<String>, _>("vendor_id").ok().flatten()),
         model: none_if_empty(row.get("model")),
         serial_number: none_if_empty(row.get("serial_number")),
         config_template: row.get("config_template"),
@@ -43,6 +44,8 @@ pub fn map_device_row(row: &SqliteRow) -> Device {
 pub fn map_vendor_row(row: &SqliteRow) -> Vendor {
     let mac_prefixes_json: String = row.get("mac_prefixes");
     let mac_prefixes: Vec<String> = serde_json::from_str(&mac_prefixes_json).unwrap_or_default();
+    let group_names_json: String = row.try_get("group_names").unwrap_or_else(|_| "[]".to_string());
+    let group_names: Vec<String> = serde_json::from_str(&group_names_json).unwrap_or_default();
     Vendor {
         id: row.get("id"),
         name: row.get("name"),
@@ -55,6 +58,7 @@ pub fn map_vendor_row(row: &SqliteRow) -> Vendor {
         mac_prefixes,
         vendor_class: row.get("vendor_class"),
         default_template: row.get("default_template"),
+        group_names,
         device_count: Some(row.get("device_count")),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),

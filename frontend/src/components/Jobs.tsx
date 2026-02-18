@@ -171,7 +171,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
   const initialAction = initialActionId ? vendorActions.find((a) => String(a.id) === initialActionId) : undefined;
   const filteredDevices = useMemo(() => {
     if (!initialAction) return devices;
-    return devices.filter((d) => d.vendor === String(initialAction.vendor_id));
+    return devices.filter((d) => d.vendor_id === String(initialAction.vendor_id));
   }, [devices, initialAction]);
 
   // Resolve command from action or custom

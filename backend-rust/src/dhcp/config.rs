@@ -132,12 +132,24 @@ tftp-root={}
         }
         config.push('\n');
 
+        // Build a reverse lookup: vendor name -> vendor ID string
+        let mut vendor_name_to_id: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        for vid_str in vendor_options.keys() {
+            if let Ok(vid) = vid_str.parse::<i64>() {
+                if let Ok(Some(v)) = self.store.get_vendor(vid).await {
+                    vendor_name_to_id.insert(v.name.to_lowercase(), vid_str.clone());
+                }
+            }
+        }
+
         // Per-Device DHCP Options (vendor-specific, with per-device bootfile override)
         config.push_str("# Per-Device DHCP Options (vendor-specific)\n");
         config.push_str("# Option 67 (bootfile) is overridden per-device to point to the device's config file\n");
         for device in devices {
             if let Some(vendor) = &device.vendor {
-                if let Some(opts) = vendor_options.get(vendor) {
+                // Look up vendor options by vendor ID (try direct match first, then name-based)
+                let opts_key = vendor_name_to_id.get(&vendor.to_lowercase()).unwrap_or(vendor);
+                if let Some(opts) = vendor_options.get(opts_key) {
                     let mac_str = device.mac.as_deref().unwrap_or("");
                     let cfg_file = crate::utils::mac_to_config_filename(mac_str);
                     for opt in opts {
@@ -250,13 +262,12 @@ log-queries
         // Resolve template ID: explicit config_template, or vendor's default_template
         let resolved_template_id = if !device.config_template.is_empty() {
             Some(device.config_template.clone())
-        } else if let Some(vendor_id) = device.vendor.as_deref().and_then(|v| v.parse::<i64>().ok()) {
-            if let Ok(Some(vendor)) = self.store.get_vendor(vendor_id).await {
-                if !vendor.default_template.is_empty() {
-                    Some(vendor.default_template)
-                } else {
-                    None
-                }
+        } else if let Some(vendor) = match device.vendor.as_deref() {
+            Some(v) if !v.is_empty() => self.store.resolve_vendor(v).await.ok().flatten(),
+            _ => None,
+        } {
+            if !vendor.default_template.is_empty() {
+                Some(vendor.default_template)
             } else {
                 None
             }

@@ -99,7 +99,10 @@ export interface UseIpamReturn {
   tags: IpamTag[];
   tagsLoading: boolean;
   tagKeys: string[];
+  allTags: IpamTag[];
+  allTagsLoading: boolean;
   fetchTags: (resourceType: string, resourceId: string) => Promise<void>;
+  fetchAllTags: () => Promise<void>;
   fetchTagKeys: () => Promise<void>;
   setTag: (resourceType: string, resourceId: string, key: string, value: string) => Promise<boolean>;
   deleteTag: (resourceType: string, resourceId: string, key: string) => Promise<boolean>;
@@ -113,6 +116,8 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
   const [tags, setTags] = useState<IpamTag[]>([]);
   const [tagsLoading, setTagsLoading] = useState(false);
   const [tagKeys, setTagKeys] = useState<string[]>([]);
+  const [allTags, setAllTags] = useState<IpamTag[]>([]);
+  const [allTagsLoading, setAllTagsLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     await Promise.all([
@@ -558,6 +563,18 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, []);
 
+  const fetchAllTags = useCallback(async () => {
+    setAllTagsLoading(true);
+    try {
+      const result = await getServices().ipam.listAllTags();
+      setAllTags(result);
+    } catch (err) {
+      addNotification('error', `Failed to load tags: ${getErrorMessage(err)}`);
+    } finally {
+      setAllTagsLoading(false);
+    }
+  }, []);
+
   const setTag = useCallback(async (resourceType: string, resourceId: string, key: string, value: string): Promise<boolean> => {
     try {
       await getServices().ipam.setTag(resourceType, resourceId, key, value);
@@ -596,6 +613,6 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     createVrf, deleteVrf,
     createPrefix, updatePrefix, deletePrefix, nextAvailablePrefix, nextAvailableIp,
     createIpAddress, updateIpAddress, deleteIpAddress,
-    tags, tagsLoading, tagKeys, fetchTags, fetchTagKeys, setTag, deleteTag,
+    tags, tagsLoading, tagKeys, allTags, allTagsLoading, fetchTags, fetchAllTags, fetchTagKeys, setTag, deleteTag,
   };
 }

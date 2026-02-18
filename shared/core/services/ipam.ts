@@ -227,6 +227,10 @@ export class IpamService extends BaseService {
   }
 
   // ========== Tags ==========
+  async listAllTags(): Promise<IpamTag[]> {
+    return this.get<IpamTag[]>('/ipam/tags');
+  }
+
   async listTagKeys(): Promise<string[]> {
     return this.get<string[]>('/ipam/tags/keys');
   }

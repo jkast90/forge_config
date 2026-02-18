@@ -121,6 +121,13 @@ impl IpamTagRepo {
         Ok(())
     }
 
+    pub async fn list_all(pool: &Pool<Sqlite>) -> Result<Vec<IpamTag>> {
+        let rows = sqlx::query(
+            "SELECT * FROM ipam_tags ORDER BY key, resource_type, resource_id"
+        ).fetch_all(pool).await?;
+        Ok(rows.iter().map(map_tag_row).collect())
+    }
+
     pub async fn list_distinct_keys(pool: &Pool<Sqlite>) -> Result<Vec<String>> {
         let rows = sqlx::query("SELECT DISTINCT key FROM ipam_tags ORDER BY key")
             .fetch_all(pool).await?;

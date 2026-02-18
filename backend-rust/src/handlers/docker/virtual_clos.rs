@@ -688,6 +688,8 @@ pub(super) async fn compute_clos_preview(
         fabric_links,
         racks,
         tier3_placement: placement.to_string(),
+        tier1_placement: req.tier1_placement.clone(),
+        tier2_placement: req.tier2_placement.clone(),
         gpu_clusters,
     })
 }
@@ -802,6 +804,14 @@ pub async fn build_virtual_clos(
         Some(v) => v.id.to_string(),
         None => vendor_name.to_string(),
     };
+    let patch_panel_vendor_id = match state.store.get_vendor_by_name("patch panel").await? {
+        Some(v) => v.id.to_string(),
+        None => "patch panel".to_string(),
+    };
+    let amd_vendor_id = match state.store.get_vendor_by_name("amd").await? {
+        Some(v) => v.id.to_string(),
+        None => "amd".to_string(),
+    };
 
     // Resolve the vendor's base template ID for config_template on devices
     let vendor_base_template_id: String = match state.store.get_vendor_by_name(vendor_name).await? {
@@ -904,6 +914,9 @@ pub async fn build_virtual_clos(
                             name: format!("Hall {} Row {} Spine Rack", h, r),
                             description: Some("Auto-created by Virtual CLOS — spine switches".to_string()),
                             row_id,
+                            width_cm: req.rack_width_cm,
+                            height_ru: req.rack_height_ru,
+                            depth_cm: req.rack_depth_cm,
                         };
                         match state.store.create_ipam_rack(&spine_rack_req).await {
                             Ok(rack) => {
@@ -921,6 +934,9 @@ pub async fn build_virtual_clos(
                         name: format!("Hall {} Row {} Rack {}", h, r, k),
                         description: Some("Auto-created by Virtual CLOS".to_string()),
                         row_id,
+                        width_cm: req.rack_width_cm,
+                        height_ru: req.rack_height_ru,
+                        depth_cm: req.rack_depth_cm,
                     };
                     match state.store.create_ipam_rack(&rack_req).await {
                         Ok(rack) => {
@@ -941,14 +957,14 @@ pub async fn build_virtual_clos(
                     mac: String::new(),
                     ip: String::new(),
                     hostname: pp_hostname.clone(),
-                    vendor: Some("patch-panel".to_string()),
+                    vendor: Some(patch_panel_vendor_id.clone()),
                     model: Some("PP-192-RJ45".to_string()),
                     serial_number: Some(format!("SN-VCLOS-{}", pp_hostname)),
                     config_template: String::new(),
                     ssh_user: None,
                     ssh_pass: None,
                     topology_id: Some(topo_id),
-                    topology_role: Some("patch-panel".to_string()),
+                    topology_role: Some("patch panel".to_string()),
                     device_type: Some("external".to_string()),
                     hall_id: Some(hall_id),
                     row_id: Some(row_id),
@@ -2357,7 +2373,7 @@ pub async fn build_virtual_clos(
                     mac: generate_mac(),
                     ip: format!("172.20.5.{}", 10 + ci * req.gpu_nodes_per_cluster + ni + 1),
                     hostname: final_hostname,
-                    vendor: Some("amd".to_string()),
+                    vendor: Some(amd_vendor_id.clone()),
                     model: Some(gpu_model_name.clone()),
                     serial_number: Some(format!("SN-GPU-{}", gpu_hostname)),
                     config_template: String::new(),
@@ -2509,7 +2525,7 @@ pub async fn build_virtual_clos(
     {
         let mut mgmt_port_counters: HashMap<i64, usize> = HashMap::new(); // mgmt_device_id -> next port number
         for (dev_id, node) in &created_ids {
-            if node.role == "patch-panel" || node.device_type.as_deref() == Some("external") || node.role == "mgmt-switch" {
+            if node.role == "patch panel" || node.device_type.as_deref() == Some("external") || node.role == "mgmt-switch" {
                 continue;
             }
             let row_id = match node.row_id { Some(r) => r, None => continue };

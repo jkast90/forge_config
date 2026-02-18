@@ -37,7 +37,7 @@ interface ToastProviderProps {
 export function ToastProvider({ children }: ToastProviderProps) {
   const addToast = useCallback((toast: Omit<Toast, 'id'>) => {
     const id = generateId();
-    addNotification(toast.type, toast.message);
+    addNotification(toast.type, toast.message, toast.action);
     return id;
   }, []);
 

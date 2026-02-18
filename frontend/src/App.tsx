@@ -31,7 +31,7 @@ import {
   IpamManagement,
   Locations,
   TopologyManagement,
-  UserManagement,
+  SystemSettings,
 } from './components';
 import type { DropdownOption } from './components';
 import type { Device, DeviceFormData } from '@core';
@@ -353,7 +353,7 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
         )}
 
         {activePage === 'system' && (
-          <UserManagement />
+          <SystemSettings />
         )}
 
         {activePage === 'vendors-models' && (
@@ -479,7 +479,13 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
         onNavigate={handlePageChange}
       />
 
-      <NotificationPopup />
+      <NotificationPopup
+        onViewApiError={(timestamp) => {
+          setApiHistoryHighlight(timestamp);
+          setShowApiHistory(true);
+          modalRoute.openModal('api-history');
+        }}
+      />
     </>
   );
 }

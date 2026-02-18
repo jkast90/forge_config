@@ -119,6 +119,11 @@ impl Store {
 
         // Ensure "all" group invariants
         self.ensure_all_group().await?;
+        self.seed_default_groups().await?;
+
+        // Fix any devices that have vendor name strings instead of numeric IDs
+        self.normalize_device_vendor_ids().await?;
+        self.normalize_topology_roles().await?;
 
         Ok(())
     }
@@ -127,7 +132,7 @@ impl Store {
     /// Uses the seed data to get old_id → name mapping, then looks up by name.
     async fn build_vendor_id_map(&self) -> Result<HashMap<String, i64>> {
         let mut map = HashMap::new();
-        for (old_id, name, _, _, _, _, _, _, _) in seeds::seed_vendor_params() {
+        for (old_id, name, _, _, _, _, _, _, _, _) in seeds::seed_vendor_params() {
             let row: Option<(i64,)> = sqlx::query_as("SELECT id FROM vendors WHERE name = ?")
                 .bind(&name)
                 .fetch_optional(&self.pool)
@@ -140,11 +145,11 @@ impl Store {
     }
 
     async fn seed_default_vendors(&self) -> Result<()> {
-        for (_id, name, backup_command, deploy_command, diff_command, ssh_port, mac_json, vendor_class, default_template) in seeds::seed_vendor_params() {
+        for (_id, name, backup_command, deploy_command, diff_command, ssh_port, mac_json, vendor_class, default_template, group_names_json) in seeds::seed_vendor_params() {
             sqlx::query(
                 r#"
-                INSERT OR IGNORE INTO vendors (name, backup_command, deploy_command, diff_command, ssh_port, mac_prefixes, vendor_class, default_template, created_at, updated_at)
-                SELECT ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                INSERT OR IGNORE INTO vendors (name, backup_command, deploy_command, diff_command, ssh_port, mac_prefixes, vendor_class, default_template, group_names, created_at, updated_at)
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                 WHERE NOT EXISTS (SELECT 1 FROM vendors WHERE name = ?)
                 "#,
             )
@@ -156,9 +161,19 @@ impl Store {
             .bind(&mac_json)
             .bind(&vendor_class)
             .bind(&default_template)
+            .bind(&group_names_json)
             .bind(&name)
             .execute(&self.pool)
             .await?;
+
+            // Update group_names on existing vendors if still empty
+            if group_names_json != "[]" {
+                sqlx::query("UPDATE vendors SET group_names = ? WHERE name = ? AND (group_names IS NULL OR group_names = '[]')")
+                    .bind(&group_names_json)
+                    .bind(&name)
+                    .execute(&self.pool)
+                    .await?;
+            }
         }
         Ok(())
     }
@@ -232,7 +247,7 @@ impl Store {
             .map(|(id, name, _, _, _)| (id, name))
             .collect();
 
-        for (_id, _name, _, _, _, _, _, _, default_template) in seeds::seed_vendor_params() {
+        for (_id, _name, _, _, _, _, _, _, default_template, _) in seeds::seed_vendor_params() {
             if default_template.is_empty() {
                 continue;
             }
@@ -448,31 +463,41 @@ impl Store {
     }
 
     async fn seed_default_device_roles(&self) -> Result<()> {
-        // Device roles: spine and leaf, each linked to their vendor-specific templates
-        let roles: Vec<(&str, &str, Vec<&str>)> = vec![
+        // Device roles: (name, description, template_names, group_names)
+        let roles: Vec<(&str, &str, Vec<&str>, Vec<&str>)> = vec![
             // CLOS roles
-            ("spine", "Spine role for CLOS fabric", vec!["Arista EOS Spine", "FRR BGP Spine"]),
-            ("leaf", "Leaf role for CLOS fabric", vec!["Arista EOS Leaf", "FRR BGP Leaf"]),
+            ("super-spine", "Super-spine role for multi-stage CLOS fabric", vec![], vec!["super-spine"]),
+            ("spine", "Spine role for CLOS fabric", vec!["Arista EOS Spine", "FRR BGP Spine"], vec!["spine"]),
+            ("leaf", "Leaf role for CLOS fabric", vec!["Arista EOS Leaf", "FRR BGP Leaf"], vec!["leaf"]),
             // Hierarchical (3-tier) roles
-            ("core", "Core router role for hierarchical fabric", vec!["Arista EOS Core", "FRR BGP Core"]),
-            ("distribution", "Distribution switch role for hierarchical fabric", vec!["Arista EOS Distribution", "FRR BGP Distribution"]),
-            ("access", "Access switch role for hierarchical fabric", vec!["Arista EOS Access", "FRR BGP Access"]),
+            ("core", "Core router role for hierarchical fabric", vec!["Arista EOS Core", "FRR BGP Core"], vec!["core"]),
+            ("distribution", "Distribution switch role for hierarchical fabric", vec!["Arista EOS Distribution", "FRR BGP Distribution"], vec!["distribution"]),
+            ("access", "Access switch role for hierarchical fabric", vec!["Arista EOS Access", "FRR BGP Access"], vec!["access"]),
         ];
 
-        for (name, description, template_names) in &roles {
+        for (name, description, template_names, group_names) in &roles {
+            let group_names_json = serde_json::to_string(group_names).unwrap_or_else(|_| "[]".to_string());
+
             let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM device_roles WHERE name = ?")
                 .bind(name)
                 .fetch_one(&self.pool)
                 .await?;
             if count.0 > 0 {
+                // Update group_names on existing roles to ensure they stay in sync
+                sqlx::query("UPDATE device_roles SET group_names = ? WHERE name = ? AND group_names = '[]'")
+                    .bind(&group_names_json)
+                    .bind(name)
+                    .execute(&self.pool)
+                    .await?;
                 continue;
             }
 
             let result = sqlx::query(
-                "INSERT INTO device_roles (name, description, group_names, created_at, updated_at) VALUES (?, ?, '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                "INSERT INTO device_roles (name, description, group_names, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
             )
             .bind(name)
             .bind(description)
+            .bind(&group_names_json)
             .execute(&self.pool)
             .await?;
 
@@ -690,6 +715,15 @@ impl Store {
 
     pub async fn get_vendor_by_name(&self, name: &str) -> Result<Option<Vendor>> {
         vendors::VendorRepo::get_by_name(&self.pool, name).await
+    }
+
+    /// Resolve a vendor from either an integer ID string or a name (case-insensitive)
+    pub async fn resolve_vendor(&self, vendor_str: &str) -> Result<Option<Vendor>> {
+        if let Ok(id) = vendor_str.parse::<i64>() {
+            self.get_vendor(id).await
+        } else {
+            self.get_vendor_by_name(vendor_str).await
+        }
     }
 
     pub async fn create_vendor(&self, req: &CreateVendorRequest) -> Result<Vendor> {
@@ -1173,6 +1207,87 @@ impl Store {
                 precedence: 0,
             };
             groups::GroupRepo::create(&self.pool, &req).await?;
+        }
+        Ok(())
+    }
+
+    async fn seed_default_groups(&self) -> Result<()> {
+        let default_groups: Vec<(&str, &str, i32)> = vec![
+            ("super-spine", "Super-spine switches", 5),
+            ("spine", "Spine switches", 10),
+            ("leaf", "Leaf switches", 20),
+            ("core", "Core routers", 25),
+            ("distribution", "Distribution switches", 26),
+            ("access", "Access switches", 27),
+            ("arista", "Arista devices", 30),
+            ("amd", "AMD devices", 40),
+        ];
+
+        for (name, description, precedence) in default_groups {
+            let existing = groups::GroupRepo::get_by_name(&self.pool, name).await?;
+            if existing.is_none() {
+                tracing::info!("Creating default group: {}", name);
+                let req = CreateGroupRequest {
+                    name: name.to_string(),
+                    description: Some(description.to_string()),
+                    parent_id: None,
+                    precedence,
+                };
+                groups::GroupRepo::create(&self.pool, &req).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Convert any devices that store a vendor name string (e.g. "amd", "patch-panel")
+    /// in the vendor column to the numeric vendor ID instead.
+    async fn normalize_device_vendor_ids(&self) -> Result<()> {
+        let rows: Vec<(i64, String)> = sqlx::query_as(
+            "SELECT id, vendor FROM devices WHERE vendor != '' AND vendor IS NOT NULL"
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        for (device_id, vendor_val) in &rows {
+            // Skip if already a numeric ID
+            if vendor_val.parse::<i64>().is_ok() {
+                continue;
+            }
+            // Look up vendor by name (case-insensitive), also try replacing hyphens with spaces
+            let candidates = vec![
+                vendor_val.clone(),
+                vendor_val.replace('-', " "),
+            ];
+            let mut found = false;
+            for candidate in &candidates {
+                if let Ok(Some(vendor)) = self.get_vendor_by_name(candidate).await {
+                    sqlx::query("UPDATE devices SET vendor = ? WHERE id = ?")
+                        .bind(vendor.id.to_string())
+                        .bind(device_id)
+                        .execute(&self.pool)
+                        .await?;
+                    tracing::info!("Normalized device {} vendor '{}' -> '{}'", device_id, vendor_val, vendor.id);
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                tracing::warn!("Could not resolve vendor '{}' for device {}", vendor_val, device_id);
+            }
+        }
+        Ok(())
+    }
+
+    /// Normalize topology_role values: convert hyphenated forms to space-separated
+    async fn normalize_topology_roles(&self) -> Result<()> {
+        let result = sqlx::query(
+            "UPDATE devices SET topology_role = REPLACE(topology_role, '-', ' ') WHERE topology_role LIKE '%-%'"
+        )
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() > 0 {
+            tracing::info!("Normalized {} device topology_role values (removed hyphens)", result.rows_affected());
         }
         Ok(())
     }

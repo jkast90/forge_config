@@ -12,7 +12,7 @@ export interface SelectOption {
  * Detect if a device is a patch panel (by vendor convention)
  */
 export function isPatchPanel(device: Device): boolean {
-  return device.vendor === 'patch-panel';
+  return device.vendor === 'Patch Panel';
 }
 
 /**
@@ -81,12 +81,12 @@ export function buildPortOptionsFromModel(
 }
 
 /**
- * Build patch panel device options (only devices with vendor='patch-panel').
+ * Build patch panel device options (only devices with vendor='Patch Panel').
  */
 export function buildPatchPanelOptions(devices: Device[]): SelectOption[] {
   const opts: SelectOption[] = [{ value: '', label: '— None —' }];
   devices.forEach((d) => {
-    if (d.vendor === 'patch-panel') {
+    if (d.vendor === 'Patch Panel') {
       opts.push({ value: String(d.id), label: d.hostname || String(d.id) });
     }
   });
@@ -100,9 +100,9 @@ export function findDeviceModel(
   device: Device,
   deviceModels: DeviceModel[]
 ): DeviceModel | undefined {
-  if (!device.vendor || !device.model) return undefined;
+  if (!device.vendor_id || !device.model) return undefined;
   return deviceModels.find(
-    (dm) => String(dm.vendor_id) === String(device.vendor) && dm.model === device.model
+    (dm) => String(dm.vendor_id) === String(device.vendor_id) && dm.model === device.model
   );
 }
 

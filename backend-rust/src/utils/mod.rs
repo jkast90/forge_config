@@ -32,7 +32,8 @@ pub async fn resolve_ssh_credentials(
             if let Ok(id) = v.parse::<i64>() {
                 store.get_vendor(id).await.ok().flatten()
             } else {
-                None
+                // Try name-based lookup (device.vendor may be resolved to name by SELECT JOIN)
+                store.get_vendor_by_name(v).await.ok().flatten()
             }
         }
         _ => None,
@@ -390,9 +391,10 @@ pub async fn ssh_probe_device(
     let result = tokio::task::spawn_blocking(move || -> Result<DeviceProbeResult, String> {
         let session = ssh_connect(&host, &user, &pass, 15)?;
 
+        let vendor_lower = vendor_hint.as_deref().unwrap_or("").to_lowercase();
         let is_linux = matches!(
-            vendor_hint.as_deref(),
-            Some("opengear") | Some("raspberry-pi") | Some("linux") | Some("frr") | Some("gobgp")
+            vendor_lower.as_str(),
+            "opengear" | "raspberry pi" | "linux" | "frr" | "gobgp"
         );
 
         let (uptime, hostname, version, interfaces) = if is_linux {

@@ -147,6 +147,9 @@ pub struct IpamRack {
     pub row_id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub row_name: Option<String>,
+    pub width_cm: i32,
+    pub height_ru: i32,
+    pub depth_cm: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_count: Option<i32>,
     pub created_at: DateTime<Utc>,
@@ -159,7 +162,17 @@ pub struct CreateIpamRackRequest {
     #[serde(default)]
     pub description: Option<String>,
     pub row_id: i64,
+    #[serde(default = "default_rack_width")]
+    pub width_cm: i32,
+    #[serde(default = "default_rack_height")]
+    pub height_ru: i32,
+    #[serde(default = "default_rack_depth")]
+    pub depth_cm: i32,
 }
+
+fn default_rack_width() -> i32 { 60 }
+fn default_rack_height() -> i32 { 42 }
+fn default_rack_depth() -> i32 { 100 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpamRole {

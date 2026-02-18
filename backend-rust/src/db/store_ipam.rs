@@ -225,6 +225,10 @@ impl Store {
         ipam::IpamTagRepo::list_for_resource(&self.pool, resource_type, resource_id).await
     }
 
+    pub async fn list_all_ipam_tags(&self) -> Result<Vec<IpamTag>> {
+        ipam::IpamTagRepo::list_all(&self.pool).await
+    }
+
     pub async fn set_ipam_tag(&self, resource_type: &str, resource_id: &str, key: &str, value: &str) -> Result<()> {
         ipam::IpamTagRepo::set(&self.pool, resource_type, resource_id, key, value).await
     }

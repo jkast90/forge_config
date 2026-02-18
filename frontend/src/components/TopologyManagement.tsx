@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import type { Topology, TopologyFormData, Device, ConfigPreviewResult, Job, TopologyRole, PortAssignment, TopologyPreviewDevice, TopologyPreviewResponse } from '@core';
+import type { Topology, TopologyFormData, Device, DeviceModel, ConfigPreviewResult, Job, TopologyRole, PortAssignment, TopologyPreviewDevice, TopologyPreviewResponse } from '@core';
 import {
   useTopologies,
   useDevices,
@@ -46,6 +46,29 @@ import { TopologyDiagramViewer } from './TopologyDiagram';
 import type { TopologyDiagramViewerHandle } from './TopologyDiagram';
 import { useConfirm } from './ConfirmDialog';
 
+function getRoleVariant(d: Device): 'online' | 'provisioning' | 'accent' | 'neutral' | 'offline' {
+  if (isPatchPanel(d) || d.topology_role === 'patch panel') return 'neutral';
+  switch (d.topology_role) {
+    case 'spine': case 'super-spine': case 'core': case 'distribution': return 'online';
+    case 'leaf': case 'access': return 'provisioning';
+    case 'gpu-node': return 'accent';
+    default: return 'offline';
+  }
+}
+
+function formatPlacement(value: string): string {
+  if (!value) return 'Default';
+  if (value.match(/^\d+$/)) return `Rack #${value}`;
+  switch (value) {
+    case 'end': return 'End of Row';
+    case 'middle': return 'Middle of Row';
+    case 'beginning': return 'Beginning of Row';
+    case 'top': return 'Top of Rack';
+    case 'bottom': return 'Bottom of Rack';
+    default: return value;
+  }
+}
+
 export function TopologyManagement() {
   const [showInfo, setShowInfo] = useState(false);
   const {
@@ -81,13 +104,19 @@ export function TopologyManagement() {
     tier2_count: 16, tier2_to_tier3_ratio: 2, tier2_model: '',
     tier3_count: 0, tier3_model: '',
     spawn_containers: false, ceos_image: '',
-    tier3_placement: 'bottom' as 'top' | 'middle' | 'bottom',
+    tier1_placement: '' as string,
+    tier2_placement: '' as string,
+    tier3_placement: 'bottom' as string,
     region_id: '', campus_id: '', datacenter_id: '',
     halls: 1, rows_per_hall: 4, racks_per_row: 8, devices_per_rack: 1,
     // Super-spine (5-stage CLOS)
     super_spine_enabled: false, super_spine_count: 4, super_spine_model: '', spine_to_super_spine_ratio: 2, pods: 2,
     // Physical spacing
     row_spacing_cm: 120,
+    // Rack dimensions
+    rack_width_cm: 60,
+    rack_height_ru: 42,
+    rack_depth_cm: 100,
     // Topology name
     topology_name: '',
     // GPU clusters
@@ -99,6 +128,9 @@ export function TopologyManagement() {
     mgmt_switch_distribution: 'per-row' as 'per-row' | 'per-rack' | 'per-hall' | 'count-per-row',
     mgmt_switches_per_row: 1,
   });
+
+  // Filter out patch panels from model dropdowns in topology builder
+  const noPatchPanels = useCallback((m: DeviceModel) => !m.model.startsWith('PP-'), []);
 
   // Apply settings defaults when topology dialog opens
   useEffect(() => {
@@ -300,7 +332,7 @@ export function TopologyManagement() {
         const ifIndex: Record<number, number> = {};
         const nextIf = (d: Device) => {
           ifIndex[d.id] = (ifIndex[d.id] || 0) + 1;
-          const prefix = d.vendor === 'frr' ? 'eth' : 'Ethernet';
+          const prefix = d.vendor === 'FRR' ? 'eth' : 'Ethernet';
           return `${prefix}${ifIndex[d.id]}`;
         };
 
@@ -359,7 +391,7 @@ export function TopologyManagement() {
       );
 
       const csvRows: string[] = ['Category,Item,Specification,Quantity,Unit Length,Notes'];
-      const excludedRoles = new Set(['patch-panel']);
+      const excludedRoles = new Set(['patch panel']);
 
       // Device BOM: group by model + role
       const deviceGroups = new Map<string, { model: string; role: string; count: number }>();
@@ -498,11 +530,11 @@ export function TopologyManagement() {
           rDevices.length,
           rDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine').length,
           rDevices.filter(d => d.topology_role === 'leaf').length,
-          rDevices.filter(d => d.vendor === 'patch-panel').length,
+          rDevices.filter(d => d.vendor === 'Patch Panel').length,
         ]);
       }
       if (unrackedDevices.length > 0) {
-        summaryData.push(['Unracked', '—', '—', unrackedDevices.length, 0, 0, unrackedDevices.filter(d => d.vendor === 'patch-panel').length]);
+        summaryData.push(['Unracked', '—', '—', unrackedDevices.length, 0, 0, unrackedDevices.filter(d => d.vendor === 'Patch Panel').length]);
       }
       const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
       summaryWs['!cols'] = [{ wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }];
@@ -532,7 +564,7 @@ export function TopologyManagement() {
         for (let ru = maxRU; ru >= 1; ru--) {
           const dev = ruMap.get(ru);
           if (dev) {
-            const role = dev.vendor === 'patch-panel' ? 'patch-panel' : dev.topology_role || dev.device_type || '';
+            const role = dev.vendor === 'Patch Panel' ? 'patch panel' : dev.topology_role || dev.device_type || '';
             data.push([ru, '│', dev.hostname || String(dev.id), role, dev.model || '', '│']);
           } else {
             data.push([ru, '│', '', '', '', '│']);
@@ -628,7 +660,7 @@ export function TopologyManagement() {
           for (const d of devs) {
             const hall = d.hall_id ? hallMap.get(d.hall_id) : undefined;
             const row = d.row_id ? rowMap.get(d.row_id) : undefined;
-            const role = d.vendor === 'patch-panel' ? 'patch-panel' : d.topology_role || d.device_type || '';
+            const role = d.vendor === 'Patch Panel' ? 'patch panel' : d.topology_role || d.device_type || '';
             data.push([d.hostname || String(d.id), role, d.model || '', hall?.name || '—', row?.name || '—']);
           }
           data.push([]);
@@ -775,7 +807,9 @@ export function TopologyManagement() {
       tier3_model: cfg.architecture === 'hierarchical' && cfg.tier3_model ? cfg.tier3_model : undefined,
       spawn_containers: cfg.spawn_containers,
       ceos_image: cfg.ceos_image || undefined,
-      tier3_placement: cfg.tier3_placement,
+      tier1_placement: cfg.tier1_placement || undefined,
+      tier2_placement: cfg.tier2_placement || undefined,
+      tier3_placement: cfg.tier3_placement || undefined,
       region_id: cfg.region_id ? Number(cfg.region_id) : undefined,
       campus_id: cfg.campus_id ? Number(cfg.campus_id) : undefined,
       datacenter_id: cfg.datacenter_id ? Number(cfg.datacenter_id) : undefined,
@@ -791,6 +825,9 @@ export function TopologyManagement() {
       pods: cfg.architecture === 'clos' && cfg.super_spine_enabled ? cfg.pods : undefined,
       // Physical spacing
       row_spacing_cm: cfg.datacenter_id ? cfg.row_spacing_cm : undefined,
+      rack_width_cm: cfg.datacenter_id ? cfg.rack_width_cm : undefined,
+      rack_height_ru: cfg.datacenter_id ? cfg.rack_height_ru : undefined,
+      rack_depth_cm: cfg.datacenter_id ? cfg.rack_depth_cm : undefined,
       // Topology name
       topology_name: cfg.topology_name || undefined,
       // GPU clusters
@@ -863,7 +900,7 @@ export function TopologyManagement() {
     const csvRows: string[] = ['Category,Item,Specification,Quantity,Unit Length,Notes'];
 
     // Device BOM: group by model + role (exclude externals and patch panels)
-    const excludedRoles = new Set(['patch-panel']);
+    const excludedRoles = new Set(['patch panel']);
     const deviceGroups = new Map<string, { model: string; role: string; count: number }>();
     for (const dev of previewData.devices) {
       if (excludedRoles.has(dev.role) || dev.device_type === 'external') continue;
@@ -1064,7 +1101,9 @@ export function TopologyManagement() {
         tier3_model: isHier && cfg.tier3_model ? cfg.tier3_model : undefined,
         spawn_containers: cfg.spawn_containers,
         ceos_image: cfg.ceos_image || undefined,
-        tier3_placement: cfg.tier3_placement,
+        tier1_placement: cfg.tier1_placement || undefined,
+        tier2_placement: cfg.tier2_placement || undefined,
+        tier3_placement: cfg.tier3_placement || undefined,
         region_id: cfg.region_id ? Number(cfg.region_id) : undefined,
         campus_id: cfg.campus_id ? Number(cfg.campus_id) : undefined,
         datacenter_id: cfg.datacenter_id ? Number(cfg.datacenter_id) : undefined,
@@ -1397,11 +1436,11 @@ export function TopologyManagement() {
               mac: ppMac,
               ip: '',
               hostname: ppHostname,
-              vendor: 'patch-panel',
+              vendor: 'patch panel',
               model: 'PP-192-RJ45',
               device_type: 'external',
               topology_id: numericTopoId,
-              topology_role: 'patch-panel',
+              topology_role: 'patch panel',
               hall_id: hallNumericId,
               row_id: rowNumericId,
               rack_id: undefined,
@@ -1662,7 +1701,7 @@ export function TopologyManagement() {
                 <Table<Device>
                   data={sorted}
                   columns={[
-                    { header: 'Role', accessor: (d) => Cell.status(d.topology_role || 'unassigned', d.topology_role === 'spine' || d.topology_role === 'super-spine' || d.topology_role === 'core' || d.topology_role === 'distribution' ? 'online' : d.topology_role === 'leaf' || d.topology_role === 'access' ? 'provisioning' : 'offline'), searchValue: (d) => d.topology_role || '' },
+                    { header: 'Role', accessor: (d) => Cell.status(isPatchPanel(d) ? 'patch panel' : d.topology_role || 'unassigned', getRoleVariant(d)), searchValue: (d) => d.topology_role || '' },
                     { header: 'Hostname', accessor: (d) => <strong>{d.hostname || '—'}</strong>, searchValue: (d) => d.hostname || '' },
                     { header: 'Vendor', accessor: (d) => d.vendor ? <VendorBadge vendor={d.vendor} /> : Cell.dash(''), searchValue: (d) => d.vendor || '' },
                     { header: 'IP Address', accessor: (d) => Cell.dash(d.ip), searchValue: (d) => d.ip || '' },
@@ -2239,6 +2278,7 @@ export function TopologyManagement() {
                 value={topologyConfig.tier1_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_model: e.target.value }))}
                 placeholder="Default"
+                filter={noPatchPanels}
               />
               <FormField
                 label="Links / Tier 2"
@@ -2247,6 +2287,32 @@ export function TopologyManagement() {
                 value={String(topologyConfig.tier1_to_tier2_ratio)}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_to_tier2_ratio: Math.max(1, parseInt(e.target.value) || 1) }))}
               />
+              {topologyConfig.datacenter_id && (
+                <>
+                  <SelectField
+                    label="Row Placement"
+                    name="tier1_placement_hier"
+                    value={topologyConfig.tier1_placement.match(/^\d+$/) ? 'rack' : topologyConfig.tier1_placement}
+                    onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_placement: e.target.value === 'rack' ? '1' : e.target.value }))}
+                    options={[
+                      { value: '', label: '(Default)' },
+                      { value: 'end', label: 'End of Row' },
+                      { value: 'middle', label: 'Middle of Row' },
+                      { value: 'beginning', label: 'Beginning of Row' },
+                      { value: 'rack', label: 'Specific Rack #' },
+                    ]}
+                  />
+                  {topologyConfig.tier1_placement.match(/^\d+$/) && (
+                    <FormField
+                      label="Rack #"
+                      name="tier1_rack_number_hier"
+                      type="number"
+                      value={topologyConfig.tier1_placement}
+                      onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_placement: e.target.value || '1' }))}
+                    />
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -2269,6 +2335,7 @@ export function TopologyManagement() {
                 value={topologyConfig.super_spine_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, super_spine_model: e.target.value }))}
                 placeholder="Default"
+                filter={noPatchPanels}
               />
               <FormField
                 label="Links / Spine"
@@ -2306,6 +2373,7 @@ export function TopologyManagement() {
                 value={topologyConfig.tier1_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_model: e.target.value }))}
                 placeholder="Default"
+                filter={noPatchPanels}
               />
               <FormField
                 label="Links / Tier 2"
@@ -2314,6 +2382,32 @@ export function TopologyManagement() {
                 value={String(topologyConfig.tier1_to_tier2_ratio)}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_to_tier2_ratio: Math.max(1, parseInt(e.target.value) || 1) }))}
               />
+              {topologyConfig.datacenter_id && (
+                <>
+                  <SelectField
+                    label="Row Placement"
+                    name="tier1_placement"
+                    value={topologyConfig.tier1_placement.match(/^\d+$/) ? 'rack' : topologyConfig.tier1_placement}
+                    onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_placement: e.target.value === 'rack' ? '1' : e.target.value }))}
+                    options={[
+                      { value: '', label: '(Default)' },
+                      { value: 'end', label: 'End of Row' },
+                      { value: 'middle', label: 'Middle of Row' },
+                      { value: 'beginning', label: 'Beginning of Row' },
+                      { value: 'rack', label: 'Specific Rack #' },
+                    ]}
+                  />
+                  {topologyConfig.tier1_placement.match(/^\d+$/) && (
+                    <FormField
+                      label="Rack #"
+                      name="tier1_rack_number"
+                      type="number"
+                      value={topologyConfig.tier1_placement}
+                      onChange={(e) => setTopologyConfig(c => ({ ...c, tier1_placement: e.target.value || '1' }))}
+                    />
+                  )}
+                </>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -2333,6 +2427,7 @@ export function TopologyManagement() {
                 value={topologyConfig.tier2_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_model: e.target.value }))}
                 placeholder="Default"
+                filter={noPatchPanels}
               />
               <FormField
                 label="Links / Tier 3"
@@ -2341,6 +2436,32 @@ export function TopologyManagement() {
                 value={String(topologyConfig.tier2_to_tier3_ratio)}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_to_tier3_ratio: Math.max(1, parseInt(e.target.value) || 1) }))}
               />
+              {topologyConfig.datacenter_id && (
+                <>
+                  <SelectField
+                    label="Row Placement"
+                    name="tier2_placement_hier"
+                    value={topologyConfig.tier2_placement.match(/^\d+$/) ? 'rack' : topologyConfig.tier2_placement}
+                    onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_placement: e.target.value === 'rack' ? '1' : e.target.value }))}
+                    options={[
+                      { value: '', label: '(Default)' },
+                      { value: 'end', label: 'End of Row' },
+                      { value: 'middle', label: 'Middle of Row' },
+                      { value: 'beginning', label: 'Beginning of Row' },
+                      { value: 'rack', label: 'Specific Rack #' },
+                    ]}
+                  />
+                  {topologyConfig.tier2_placement.match(/^\d+$/) && (
+                    <FormField
+                      label="Rack #"
+                      name="tier2_rack_number_hier"
+                      type="number"
+                      value={topologyConfig.tier2_placement}
+                      onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_placement: e.target.value || '1' }))}
+                    />
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -2363,19 +2484,33 @@ export function TopologyManagement() {
                 value={topologyConfig.tier2_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_model: e.target.value }))}
                 placeholder="Default"
+                filter={noPatchPanels}
               />
               {topologyConfig.datacenter_id && (
-                <SelectField
-                  label="Rack Placement"
-                  name="tier3_placement"
-                  value={topologyConfig.tier3_placement}
-                  onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_placement: e.target.value as 'top' | 'middle' | 'bottom' }))}
-                  options={[
-                    { value: 'top', label: 'Top of Rack (ToR)' },
-                    { value: 'middle', label: 'Middle of Rack (MoR)' },
-                    { value: 'bottom', label: 'Bottom of Rack (BoR)' },
-                  ]}
-                />
+                <>
+                  <SelectField
+                    label="Row Placement"
+                    name="tier2_placement"
+                    value={topologyConfig.tier2_placement.match(/^\d+$/) ? 'rack' : topologyConfig.tier2_placement}
+                    onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_placement: e.target.value === 'rack' ? '1' : e.target.value }))}
+                    options={[
+                      { value: '', label: '(Default)' },
+                      { value: 'end', label: 'End of Row' },
+                      { value: 'middle', label: 'Middle of Row' },
+                      { value: 'beginning', label: 'Beginning of Row' },
+                      { value: 'rack', label: 'Specific Rack #' },
+                    ]}
+                  />
+                  {topologyConfig.tier2_placement.match(/^\d+$/) && (
+                    <FormField
+                      label="Rack #"
+                      name="tier2_rack_number"
+                      type="number"
+                      value={topologyConfig.tier2_placement}
+                      onChange={(e) => setTopologyConfig(c => ({ ...c, tier2_placement: e.target.value || '1' }))}
+                    />
+                  )}
+                </>
               )}
             </div>
           ) : (
@@ -2396,19 +2531,33 @@ export function TopologyManagement() {
                 value={topologyConfig.tier3_model}
                 onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_model: e.target.value }))}
                 placeholder="Default"
+                filter={noPatchPanels}
               />
               {topologyConfig.datacenter_id && (
-                <SelectField
-                  label="Rack Placement"
-                  name="tier3_placement"
-                  value={topologyConfig.tier3_placement}
-                  onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_placement: e.target.value as 'top' | 'middle' | 'bottom' }))}
-                  options={[
-                    { value: 'top', label: 'Top of Rack (ToR)' },
-                    { value: 'middle', label: 'Middle of Rack (MoR)' },
-                    { value: 'bottom', label: 'Bottom of Rack (BoR)' },
-                  ]}
-                />
+                <>
+                  <SelectField
+                    label="Row Placement"
+                    name="tier3_placement"
+                    value={topologyConfig.tier3_placement.match(/^\d+$/) ? 'rack' : topologyConfig.tier3_placement}
+                    onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_placement: e.target.value === 'rack' ? '1' : e.target.value }))}
+                    options={[
+                      { value: '', label: '(Default)' },
+                      { value: 'end', label: 'End of Row' },
+                      { value: 'middle', label: 'Middle of Row' },
+                      { value: 'beginning', label: 'Beginning of Row' },
+                      { value: 'rack', label: 'Specific Rack #' },
+                    ]}
+                  />
+                  {topologyConfig.tier3_placement.match(/^\d+$/) && (
+                    <FormField
+                      label="Rack #"
+                      name="tier3_rack_number"
+                      type="number"
+                      value={topologyConfig.tier3_placement}
+                      onChange={(e) => setTopologyConfig(c => ({ ...c, tier3_placement: e.target.value || '1' }))}
+                    />
+                  )}
+                </>
               )}
             </div>
           )}
@@ -2482,6 +2631,27 @@ export function TopologyManagement() {
               value={String(topologyConfig.row_spacing_cm)}
               onChange={(e) => setTopologyConfig(c => ({ ...c, row_spacing_cm: Math.max(30, parseInt(e.target.value) || 120) }))}
             />
+            <FormField
+              label="Rack Width (cm)"
+              name="rack_width_cm"
+              type="number"
+              value={String(topologyConfig.rack_width_cm)}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, rack_width_cm: Math.max(1, parseInt(e.target.value) || 60) }))}
+            />
+            <FormField
+              label="Rack Height (RU)"
+              name="rack_height_ru"
+              type="number"
+              value={String(topologyConfig.rack_height_ru)}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, rack_height_ru: Math.max(1, parseInt(e.target.value) || 42) }))}
+            />
+            <FormField
+              label="Rack Depth (cm)"
+              name="rack_depth_cm"
+              type="number"
+              value={String(topologyConfig.rack_depth_cm)}
+              onChange={(e) => setTopologyConfig(c => ({ ...c, rack_depth_cm: Math.max(1, parseInt(e.target.value) || 100) }))}
+            />
           </div>
         )}
 
@@ -2516,6 +2686,7 @@ export function TopologyManagement() {
               value={topologyConfig.mgmt_switch_model}
               onChange={(e) => setTopologyConfig(c => ({ ...c, mgmt_switch_model: e.target.value }))}
               placeholder="CCS-720XP-48ZC2 (default)"
+              filter={noPatchPanels}
             />
           </div>
         </div>
@@ -2644,7 +2815,13 @@ export function TopologyManagement() {
             <div><strong>Devices:</strong> {previewData.devices.length}</div>
             <div><strong>Fabric Links:</strong> {previewData.fabric_links.length}</div>
             {previewData.racks.length > 0 && <div><strong>Racks:</strong> {previewData.racks.length}</div>}
-            <div><strong>Placement:</strong> {previewData.tier3_placement === 'top' ? 'Top of Rack' : previewData.tier3_placement === 'middle' ? 'Middle of Rack' : 'Bottom of Rack'}</div>
+            {(previewData.tier1_placement || previewData.tier2_placement || previewData.tier3_placement) && (
+              <div><strong>Placement:</strong> {[
+                previewData.tier1_placement && `Tier 1: ${formatPlacement(previewData.tier1_placement)}`,
+                previewData.tier2_placement && `Tier 2: ${formatPlacement(previewData.tier2_placement)}`,
+                previewData.tier3_placement && `Tier 3: ${formatPlacement(previewData.tier3_placement)}`,
+              ].filter(Boolean).join(' | ')}</div>
+            )}
             {previewData.gpu_clusters && previewData.gpu_clusters.length > 0 && (
               <div><strong>GPU Clusters:</strong> {previewData.gpu_clusters.length} ({previewData.gpu_clusters.reduce((sum, c) => sum + c.node_count * c.gpus_per_node, 0)} GPUs)</div>
             )}
@@ -2736,7 +2913,7 @@ export function TopologyManagement() {
                 {previewEdits.map((device) => (
                   <tr key={device.index}>
                     <td>
-                      <span className={`status-badge status-badge-${device.role === 'spine' || device.role === 'distribution' ? 'online' : device.role === 'leaf' || device.role === 'access' ? 'provisioning' : device.role === 'gpu-node' ? 'unknown' : 'offline'}`}>
+                      <span className={`status ${device.role === 'spine' || device.role === 'distribution' || device.role === 'super-spine' || device.role === 'core' ? 'online' : device.role === 'leaf' || device.role === 'access' ? 'provisioning' : device.role === 'gpu-node' ? 'accent' : device.role === 'patch panel' ? 'neutral' : 'offline'}`}>
                         {device.role}
                       </span>
                     </td>

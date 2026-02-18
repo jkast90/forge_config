@@ -294,6 +294,7 @@ pub async fn sync_vendors_pull(store: &Store, nb: &NetBoxClient) -> Result<SyncR
                     mac_prefixes: Vec::new(),
                     vendor_class: String::new(),
                     default_template: String::new(),
+                    group_names: Vec::new(),
                 };
 
                 match store.create_vendor(&req).await {

@@ -32,7 +32,7 @@ const EMPTY_CAMPUS_FORM: IpamCampusFormData = { name: '', description: '', regio
 const EMPTY_DATACENTER_FORM: IpamDatacenterFormData = { name: '', description: '', campus_id: '' };
 const EMPTY_HALL_FORM: IpamHallFormData = { name: '', description: '', datacenter_id: '' };
 const EMPTY_ROW_FORM: IpamRowFormData = { name: '', description: '', hall_id: '' };
-const EMPTY_RACK_FORM: IpamRackFormData = { name: '', description: '', row_id: '' };
+const EMPTY_RACK_FORM: IpamRackFormData = { name: '', description: '', row_id: '', width_cm: 60, height_ru: 42, depth_cm: 100 };
 
 export function Locations() {
   const [activeTab, setActiveTab] = usePersistedTab<OrgTab>('regions', ['regions', 'campuses', 'datacenters', 'halls', 'rows', 'racks'], 'tab_locations');
@@ -617,7 +617,7 @@ function RacksTab({ racks, rows, devices, ipam }: {
 
   const handleOpenEdit = useCallback((rk: IpamRack) => {
     setEditing(rk);
-    setForm({ name: rk.name, description: rk.description || '', row_id: String(rk.row_id) });
+    setForm({ name: rk.name, description: rk.description || '', row_id: String(rk.row_id), width_cm: rk.width_cm ?? 60, height_ru: rk.height_ru ?? 42, depth_cm: rk.depth_cm ?? 100 });
     setShowForm(true);
   }, []);
 
@@ -645,6 +645,7 @@ function RacksTab({ racks, rows, devices, ipam }: {
     { header: 'Name', accessor: (row: IpamRack) => row.name, searchValue: (row: IpamRack) => row.name },
     { header: 'Row', accessor: (row: IpamRack) => row.row_name || String(row.row_id), searchValue: (row: IpamRack) => `${row.row_name || ''} ${row.row_id}` },
     { header: 'Description', accessor: (row: IpamRack) => row.description || '', searchValue: (row: IpamRack) => row.description || '' },
+    { header: 'W×H×D', accessor: (row: IpamRack) => `${row.width_cm}cm × ${row.height_ru}U × ${row.depth_cm}cm` },
     { header: 'Devices', accessor: (row: IpamRack) => String(row.device_count ?? 0) },
   ], []);
 
@@ -685,6 +686,11 @@ function RacksTab({ racks, rows, devices, ipam }: {
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Rack 01" />
           <FormField label="Description" name="desc" value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Optional" />
           <SelectField label="Row" name="row_id" value={form.row_id} onChange={(e) => setForm(f => ({ ...f, row_id: e.target.value }))} options={rowOptions} />
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <FormField label="Width (cm)" name="width_cm" type="number" min={1} value={form.width_cm} onChange={(e) => setForm(f => ({ ...f, width_cm: Number(e.target.value) || 60 }))} />
+            <FormField label="Height (RU)" name="height_ru" type="number" min={1} value={form.height_ru} onChange={(e) => setForm(f => ({ ...f, height_ru: Number(e.target.value) || 42 }))} />
+            <FormField label="Depth (cm)" name="depth_cm" type="number" min={1} value={form.depth_cm} onChange={(e) => setForm(f => ({ ...f, depth_cm: Number(e.target.value) || 100 }))} />
+          </div>
         </div>
       </FormDialog>
 
@@ -693,10 +699,11 @@ function RacksTab({ racks, rows, devices, ipam }: {
           <span><strong>ID:</strong> {viewingRack?.id}</span>
           <span><strong>Row:</strong> {viewingRack?.row_name || viewingRack?.row_id}</span>
           {viewingRack?.description && <span><strong>Description:</strong> {viewingRack.description}</span>}
+          <span><strong>Size:</strong> {viewingRack?.width_cm}cm × {viewingRack?.height_ru}U × {viewingRack?.depth_cm}cm</span>
           <span><strong>Devices:</strong> {rackDevices.length}</span>
         </div>
         <div className="rack-view-layout">
-          <RackElevation devices={rackDevices} />
+          <RackElevation devices={rackDevices} heightRu={viewingRack?.height_ru} />
           <div className="rack-view-table">
             <Table
               data={rackDevices}
@@ -733,7 +740,7 @@ const STATUS_INDICATOR: Record<string, string> = {
   unknown: 'var(--color-text-muted)',
 };
 
-function RackElevation({ devices }: { devices: Device[] }) {
+function RackElevation({ devices, heightRu = 42 }: { devices: Device[]; heightRu?: number }) {
   // Build a map of position -> device
   const positionMap = useMemo(() => {
     const map = new Map<number, Device>();
@@ -745,11 +752,11 @@ function RackElevation({ devices }: { devices: Device[] }) {
     return map;
   }, [devices]);
 
-  // Determine rack height: max position or default 42U
+  // Determine rack height: max position or configured RU height
   const maxPos = useMemo(() => {
-    if (positionMap.size === 0) return 42;
-    return Math.max(42, ...positionMap.keys());
-  }, [positionMap]);
+    if (positionMap.size === 0) return heightRu;
+    return Math.max(heightRu, ...positionMap.keys());
+  }, [positionMap, heightRu]);
 
   // Devices without a position
   const unpositioned = useMemo(() => devices.filter(d => d.rack_position == null), [devices]);

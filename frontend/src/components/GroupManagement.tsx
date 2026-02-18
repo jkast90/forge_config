@@ -3,6 +3,7 @@ import {
   useGroups,
   useDevices,
   useDeviceRoles,
+  useVendors,
   addNotification,
 } from '@core';
 import type { Group, GroupFormData, GroupVariable } from '@core';
@@ -34,7 +35,7 @@ export function GroupManagement() {
   const [showGroupForm, setShowGroupForm] = useState(false);
   const [editingGroup, setEditingGroup] = useState<Group | null>(null);
   const [groupForm, setGroupForm] = useState<GroupFormData>(EMPTY_GROUP_FORM);
-  const [activeTab, setActiveTab] = useState<'variables' | 'members'>('variables');
+  const [activeTab, setActiveTab] = useState<'variables' | 'members' | 'role-members'>('variables');
 
   // Variable editing
   const [showAddVar, setShowAddVar] = useState(false);
@@ -69,6 +70,7 @@ export function GroupManagement() {
 
   const { devices } = useDevices();
   const { deviceRoles } = useDeviceRoles();
+  const { vendors } = useVendors();
 
   const selectedGroup = useMemo(() => {
     return groups.find(g => g.id === selectedGroupId) || null;
@@ -299,10 +301,13 @@ export function GroupManagement() {
 
   // Member table columns
   interface MemberRow { id: number; hostname: string }
-  const memberData: MemberRow[] = useMemo(() =>
-    members.map(id => ({ id, hostname: deviceMap[id] || String(id) })),
-    [members, deviceMap]
-  );
+  const memberData: MemberRow[] = useMemo(() => {
+    // "all" group (id=1): all devices are implicit members
+    if (selectedGroupId === 1) {
+      return devices.map(d => ({ id: d.id, hostname: d.hostname || d.mac || String(d.id) }));
+    }
+    return members.map(id => ({ id, hostname: deviceMap[id] || String(id) }));
+  }, [members, deviceMap, selectedGroupId, devices]);
 
   const memberColumns: TableColumn<MemberRow>[] = useMemo(() => [
     { header: 'Hostname', accessor: 'hostname' as keyof MemberRow },
@@ -323,6 +328,54 @@ export function GroupManagement() {
     if (!selectedGroup) return [];
     return deviceRoles.filter(r => r.group_names.includes(selectedGroup.name));
   }, [selectedGroup, deviceRoles]);
+
+  // Find vendors that auto-assign to the selected group
+  const vendorsForGroup = useMemo(() => {
+    if (!selectedGroup) return [];
+    return vendors.filter(v => v.group_names?.includes(selectedGroup.name));
+  }, [selectedGroup, vendors]);
+
+  // Devices that are implicit members via role or vendor
+  interface ImplicitMemberRow { id: number; hostname: string; source: string }
+  const implicitMemberData: ImplicitMemberRow[] = useMemo(() => {
+    if (!selectedGroup) return [];
+    const seen = new Set<number>();
+    const result: ImplicitMemberRow[] = [];
+
+    // Role-based
+    const roleNames = new Set(rolesForGroup.map(r => r.name));
+    for (const d of devices) {
+      if (d.topology_role && roleNames.has(d.topology_role) && !seen.has(d.id)) {
+        seen.add(d.id);
+        result.push({
+          id: d.id,
+          hostname: d.hostname || d.mac || String(d.id),
+          source: `role: ${d.topology_role}`,
+        });
+      }
+    }
+
+    // Vendor-based
+    const vendorNames = new Set(vendorsForGroup.map(v => v.name));
+    for (const d of devices) {
+      if (d.vendor && vendorNames.has(d.vendor) && !seen.has(d.id)) {
+        seen.add(d.id);
+        result.push({
+          id: d.id,
+          hostname: d.hostname || d.mac || String(d.id),
+          source: `vendor: ${d.vendor}`,
+        });
+      }
+    }
+
+    return result;
+  }, [selectedGroup, rolesForGroup, vendorsForGroup, devices]);
+
+  const implicitMemberColumns: TableColumn<ImplicitMemberRow>[] = useMemo(() => [
+    { header: 'Hostname', accessor: 'hostname' as keyof ImplicitMemberRow },
+    { header: 'Source', accessor: 'source' as keyof ImplicitMemberRow },
+    { header: 'ID', accessor: 'id' as keyof ImplicitMemberRow },
+  ], []);
 
   // Find the parent group name for display
   const parentGroupName = useMemo(() => {
@@ -466,25 +519,31 @@ export function GroupManagement() {
                   display: 'flex',
                   borderBottom: '1px solid var(--border-color)',
                 }}>
-                  {(['variables', 'members'] as const).map(tab => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      style={{
-                        padding: '8px 20px',
-                        background: 'none',
-                        border: 'none',
-                        borderBottom: activeTab === tab ? '2px solid var(--accent-color, #6495ed)' : '2px solid transparent',
-                        color: 'inherit',
-                        cursor: 'pointer',
-                        fontWeight: activeTab === tab ? 600 : 400,
-                        fontSize: '13px',
-                        textTransform: 'capitalize',
-                      }}
-                    >
-                      {tab} ({tab === 'variables' ? groupVariables.length : members.length})
-                    </button>
-                  ))}
+                  {(['variables', 'members', 'role-members'] as const).map(tab => {
+                    const label = tab === 'role-members' ? 'Role Members' : tab;
+                    const count = tab === 'variables' ? groupVariables.length
+                      : tab === 'members' ? memberData.length
+                      : implicitMemberData.length;
+                    return (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        style={{
+                          padding: '8px 20px',
+                          background: 'none',
+                          border: 'none',
+                          borderBottom: activeTab === tab ? '2px solid var(--accent-color, #6495ed)' : '2px solid transparent',
+                          color: 'inherit',
+                          cursor: 'pointer',
+                          fontWeight: activeTab === tab ? 600 : 400,
+                          fontSize: '13px',
+                          textTransform: 'capitalize',
+                        }}
+                      >
+                        {label} ({count})
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {/* Tab content */}
@@ -514,25 +573,29 @@ export function GroupManagement() {
 
                 {activeTab === 'members' && (
                   <div>
-                    <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-                      <Button size="sm" onClick={() => setShowAddMember(true)}>
-                        <PlusIcon size={14} />
-                        Add Device
-                      </Button>
-                    </div>
+                    {selectedGroup.id !== 1 && (
+                      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
+                        <Button size="sm" onClick={() => setShowAddMember(true)}>
+                          <PlusIcon size={14} />
+                          Add Device
+                        </Button>
+                      </div>
+                    )}
+                    {selectedGroup.id === 1 && (
+                      <div style={{ padding: '8px 16px', fontSize: '12px', opacity: 0.6 }}>
+                        All devices are implicitly members of the &ldquo;all&rdquo; group.
+                      </div>
+                    )}
                     <LoadingState loading={membersLoading} loadingMessage="Loading members...">
                       <Table
                         data={memberData}
                         columns={memberColumns}
-                        actions={memberActions}
+                        actions={selectedGroup.id === 1 ? [] : memberActions}
                         getRowKey={(row) => row.id}
                         tableId="group-members"
-                        emptyMessage={selectedGroup.id === 1 ?
-                          'All devices implicitly belong to the "all" group.' :
-                          'No devices in this group.'
-                        }
+                        emptyMessage="No devices in this group."
                         emptyDescription={selectedGroup.id === 1 ?
-                          'No explicit membership needed for the "all" group.' :
+                          'All devices are implicitly members of the "all" group.' :
                           'Add devices using the button above.'
                         }
                         searchable
@@ -568,6 +631,59 @@ export function GroupManagement() {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {activeTab === 'role-members' && (
+                  <div>
+                    {(rolesForGroup.length > 0 || vendorsForGroup.length > 0) && (
+                      <div style={{ padding: '8px 16px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {rolesForGroup.length > 0 && (
+                          <>
+                            <span style={{ fontSize: '12px', opacity: 0.6 }}>Roles:</span>
+                            {rolesForGroup.map(role => (
+                              <span key={`role-${role.id}`} style={{
+                                fontSize: '12px',
+                                padding: '2px 8px',
+                                borderRadius: '8px',
+                                background: 'var(--bg-secondary, rgba(100, 149, 237, 0.08))',
+                                fontWeight: 500,
+                              }}>
+                                {role.name}
+                              </span>
+                            ))}
+                          </>
+                        )}
+                        {vendorsForGroup.length > 0 && (
+                          <>
+                            <span style={{ fontSize: '12px', opacity: 0.6 }}>Vendors:</span>
+                            {vendorsForGroup.map(v => (
+                              <span key={`vendor-${v.id}`} style={{
+                                fontSize: '12px',
+                                padding: '2px 8px',
+                                borderRadius: '8px',
+                                background: 'var(--bg-secondary, rgba(100, 149, 237, 0.08))',
+                                fontWeight: 500,
+                              }}>
+                                {v.name}
+                              </span>
+                            ))}
+                          </>
+                        )}
+                      </div>
+                    )}
+                    <Table
+                      data={implicitMemberData}
+                      columns={implicitMemberColumns}
+                      getRowKey={(row) => row.id}
+                      tableId="group-implicit-members"
+                      emptyMessage="No implicit members."
+                      emptyDescription={rolesForGroup.length === 0 && vendorsForGroup.length === 0
+                        ? 'No roles or vendors are configured to auto-assign devices to this group.'
+                        : 'No devices currently match.'}
+                      searchable
+                      searchPlaceholder="Filter implicit members..."
+                    />
                   </div>
                 )}
               </>

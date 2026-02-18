@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type { User, UserFormData, Settings } from '@core';
-import { useUsers, useAuth, useSettings, usePersistedTab, formatRelativeTime, createChangeHandler, getServices, addNotification } from '@core';
+import { useUsers, useAuth, useSettings, useDhcpOptions, usePersistedTab, formatRelativeTime, createChangeHandler, getServices, addNotification, validators } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
 import { FormDialog } from './FormDialog';
@@ -13,8 +13,10 @@ import type { TableColumn, TableAction } from './Table';
 import { Icon, PlusIcon, RefreshIcon, SpinnerIcon } from './Icon';
 import { ModelSelector } from './ModelSelector';
 import { Toggle } from './Toggle';
+import { DhcpOptions } from './DhcpOptions';
+import { ValidatedInput } from './ValidatedInput';
 
-type SystemTab = 'users' | 'branding' | 'naming' | 'topology';
+type SystemTab = 'users' | 'branding' | 'naming' | 'topology' | 'dhcp' | 'ssh' | 'opengear';
 
 const EMPTY_FORM: UserFormData = {
   username: '',
@@ -507,16 +509,276 @@ function TopologyDefaultsPanel() {
   );
 }
 
-export function UserManagement() {
+function SshDefaultsPanel() {
+  const { settings, loading, load, save } = useSettings();
+  const [formData, setFormData] = useState<Settings | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (settings) {
+      setFormData({ ...settings });
+    }
+  }, [settings]);
+
+  const handleChange = useMemo(() => createChangeHandler<Settings>(
+    (name, value) => setFormData(prev => prev ? { ...prev, [name]: value } : prev)
+  ), []);
+
+  const handleSave = async () => {
+    if (!formData) return;
+    setSaving(true);
+    try {
+      await save(formData);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card
+      title="SSH Defaults"
+      headerAction={
+        <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
+          {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      }
+    >
+      {loading ? (
+        <p>Loading settings...</p>
+      ) : !formData ? (
+        <p>Failed to load settings</p>
+      ) : (
+        <div className="settings-section">
+          <div className="form-row">
+            <FormField
+              label="Default Username"
+              name="default_ssh_user"
+              type="text"
+              value={formData.default_ssh_user}
+              onChange={handleChange}
+            />
+            <FormField
+              label="Default Password"
+              name="default_ssh_pass"
+              type="password"
+              value={formData.default_ssh_pass}
+              onChange={handleChange}
+            />
+          </div>
+          <div className="form-row">
+            <FormField
+              label="Backup Command"
+              name="backup_command"
+              type="text"
+              value={formData.backup_command}
+              onChange={handleChange}
+            />
+            <FormField
+              label="Backup Delay (seconds)"
+              name="backup_delay"
+              type="number"
+              value={formData.backup_delay}
+              onChange={handleChange}
+              min={0}
+            />
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DhcpSettingsPanel() {
+  const { settings, loading, load, save } = useSettings();
+  const [formData, setFormData] = useState<Settings | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (settings) {
+      setFormData({ ...settings });
+    }
+  }, [settings]);
+
+  const handleChange = useMemo(() => createChangeHandler<Settings>(
+    (name, value) => setFormData(prev => prev ? { ...prev, [name]: value } : prev)
+  ), []);
+
+  const handleSave = async () => {
+    if (!formData) return;
+    setSaving(true);
+    try {
+      await save(formData);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card
+      title="DHCP Settings"
+      headerAction={
+        <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
+          {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      }
+    >
+      {loading ? (
+        <p>Loading settings...</p>
+      ) : !formData ? (
+        <p>Failed to load settings</p>
+      ) : (
+        <div className="settings-section">
+          <div className="form-row">
+            <ValidatedInput
+              label="Range Start"
+              name="dhcp_range_start"
+              type="text"
+              value={formData.dhcp_range_start}
+              onChange={handleChange}
+              validate={validators.ipv4}
+            />
+            <ValidatedInput
+              label="Range End"
+              name="dhcp_range_end"
+              type="text"
+              value={formData.dhcp_range_end}
+              onChange={handleChange}
+              validate={validators.ipv4}
+            />
+            <ValidatedInput
+              label="Subnet Mask"
+              name="dhcp_subnet"
+              type="text"
+              value={formData.dhcp_subnet}
+              onChange={handleChange}
+              validate={validators.ipv4}
+            />
+          </div>
+          <div className="form-row">
+            <ValidatedInput
+              label="Gateway"
+              name="dhcp_gateway"
+              type="text"
+              value={formData.dhcp_gateway}
+              onChange={handleChange}
+              validate={validators.ipv4}
+            />
+            <ValidatedInput
+              label="TFTP Server IP"
+              name="tftp_server_ip"
+              type="text"
+              value={formData.tftp_server_ip}
+              onChange={handleChange}
+              validate={validators.ipv4}
+            />
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function OpenGearPanel() {
+  const { settings, loading, load, save } = useSettings();
+  const [formData, setFormData] = useState<Settings | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    if (settings) {
+      setFormData({ ...settings });
+    }
+  }, [settings]);
+
+  const handleChange = useMemo(() => createChangeHandler<Settings>(
+    (name, value) => setFormData(prev => prev ? { ...prev, [name]: value } : prev)
+  ), []);
+
+  const handleSave = async () => {
+    if (!formData) return;
+    setSaving(true);
+    try {
+      await save(formData);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card
+      title="OpenGear ZTP Enrollment"
+      headerAction={
+        <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
+          {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
+          {saving ? 'Saving...' : 'Save'}
+        </Button>
+      }
+    >
+      {loading ? (
+        <p>Loading settings...</p>
+      ) : !formData ? (
+        <p>Failed to load settings</p>
+      ) : (
+        <div className="settings-section">
+          <div className="form-row">
+            <FormField
+              label="Enrollment URL"
+              name="opengear_enroll_url"
+              type="text"
+              value={formData.opengear_enroll_url || ''}
+              onChange={handleChange}
+              placeholder="e.g., 192.168.1.100 or lighthouse.example.com"
+            />
+            <FormField
+              label="Bundle Name"
+              name="opengear_enroll_bundle"
+              type="text"
+              value={formData.opengear_enroll_bundle || ''}
+              onChange={handleChange}
+              placeholder="Optional bundle name"
+            />
+            <FormField
+              label="Enrollment Password"
+              name="opengear_enroll_password"
+              type="password"
+              value={formData.opengear_enroll_password || ''}
+              onChange={handleChange}
+              placeholder="Enrollment password"
+            />
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+export function SystemSettings() {
   const { users } = useUsers();
+  const { options } = useDhcpOptions();
   const [activeTab, setActiveTab] = usePersistedTab<SystemTab>(
     'users',
-    ['users', 'branding', 'naming', 'topology'],
+    ['users', 'branding', 'naming', 'topology', 'dhcp', 'ssh', 'opengear'],
     'tab_system',
   );
 
   const tabs = useMemo(() => [
     { id: 'users', label: 'Users', icon: 'people', count: users.length },
+    { id: 'ssh', label: 'SSH Defaults', icon: 'terminal' },
+    { id: 'dhcp', label: 'DHCP Settings', icon: 'lan' },
+    { id: 'opengear', label: 'OpenGear', icon: 'router' },
     { id: 'branding', label: 'Branding', icon: 'palette' },
     { id: 'naming', label: 'Device Naming', icon: 'badge' },
     { id: 'topology', label: 'Topology Defaults', icon: 'hub' },
@@ -526,6 +788,9 @@ export function UserManagement() {
     <Card title="System">
       <SideTabs tabs={tabs} activeTab={activeTab} onTabChange={(id) => setActiveTab(id as SystemTab)}>
         {activeTab === 'users' && <UsersPanel />}
+        {activeTab === 'ssh' && <SshDefaultsPanel />}
+        {activeTab === 'dhcp' && <DhcpSettingsPanel />}
+        {activeTab === 'opengear' && <OpenGearPanel />}
         {activeTab === 'branding' && <BrandingPanel />}
         {activeTab === 'naming' && <DeviceNamingPanel />}
         {activeTab === 'topology' && <TopologyDefaultsPanel />}

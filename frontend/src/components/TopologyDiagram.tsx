@@ -219,7 +219,7 @@ export const TopologyDiagram = forwardRef<SVGSVGElement, DiagramProps>(function 
   const statusColor = (d: Device) =>
     d.status === 'online' ? 'var(--color-success, #22c55e)' : d.status === 'provisioning' ? 'var(--color-warning, #f59e0b)' : 'var(--color-text-muted, #888)';
 
-  const ifPrefix = (d: Device) => d.vendor === 'frr' ? 'eth' : 'Eth';
+  const ifPrefix = (d: Device) => d.vendor === 'FRR' ? 'eth' : 'Eth';
   const ifIndex: Record<number, number> = {};
   const nextIf = (d: Device) => {
     ifIndex[d.id] = (ifIndex[d.id] || 0) + 1;

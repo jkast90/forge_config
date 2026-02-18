@@ -8,7 +8,7 @@ use super::row_helpers::map_vendor_row;
 
 const SELECT_VENDOR: &str = r#"
     SELECT v.id, v.name, v.backup_command, v.deploy_command, v.diff_command, v.ssh_port, v.ssh_user, v.ssh_pass,
-           v.mac_prefixes, v.vendor_class, v.default_template,
+           v.mac_prefixes, v.vendor_class, v.default_template, v.group_names,
            v.created_at, v.updated_at,
            COALESCE(COUNT(d.mac), 0) as device_count
     FROM vendors v
@@ -48,12 +48,13 @@ impl VendorRepo {
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateVendorRequest) -> Result<Vendor> {
         let now = Utc::now();
         let mac_prefixes_json = serde_json::to_string(&req.mac_prefixes)?;
+        let group_names_json = serde_json::to_string(&req.group_names)?;
 
         let result = sqlx::query(
             r#"
             INSERT INTO vendors (name, backup_command, deploy_command, diff_command, ssh_port, ssh_user, ssh_pass,
-                                 mac_prefixes, vendor_class, default_template, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 mac_prefixes, vendor_class, default_template, group_names, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&req.name)
@@ -66,6 +67,7 @@ impl VendorRepo {
         .bind(&mac_prefixes_json)
         .bind(&req.vendor_class)
         .bind(&req.default_template)
+        .bind(&group_names_json)
         .bind(now)
         .bind(now)
         .execute(pool)
@@ -80,11 +82,12 @@ impl VendorRepo {
     pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateVendorRequest) -> Result<Vendor> {
         let now = Utc::now();
         let mac_prefixes_json = serde_json::to_string(&req.mac_prefixes)?;
+        let group_names_json = serde_json::to_string(&req.group_names)?;
 
         let result = sqlx::query(
             r#"
             UPDATE vendors SET name = ?, backup_command = ?, deploy_command = ?, diff_command = ?, ssh_port = ?, ssh_user = ?, ssh_pass = ?,
-                              mac_prefixes = ?, vendor_class = ?, default_template = ?, updated_at = ?
+                              mac_prefixes = ?, vendor_class = ?, default_template = ?, group_names = ?, updated_at = ?
             WHERE id = ?
             "#,
         )
@@ -98,6 +101,7 @@ impl VendorRepo {
         .bind(&mac_prefixes_json)
         .bind(&req.vendor_class)
         .bind(&req.default_template)
+        .bind(&group_names_json)
         .bind(now)
         .bind(id)
         .execute(pool)

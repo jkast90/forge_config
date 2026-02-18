@@ -527,6 +527,14 @@ pub async fn delete_tag(
     Ok(Json(serde_json::json!({"message": "tag deleted"})))
 }
 
+pub async fn list_all_tags(
+    _auth: crate::auth::AuthUser,
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<IpamTag>>, ApiError> {
+    let tags = state.store.list_all_ipam_tags().await?;
+    Ok(Json(tags))
+}
+
 pub async fn list_tag_keys(
     _auth: crate::auth::AuthUser,
     State(state): State<Arc<AppState>>,

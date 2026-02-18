@@ -49,7 +49,7 @@ export type { Theme } from './ThemeSelector';
 export { VendorManagement } from './VendorManagement';
 export { VendorsAndModels } from './VendorsAndModels';
 export { TopologyManagement } from './TopologyManagement';
-export { UserManagement } from './UserManagement';
+export { SystemSettings } from './SystemSettings';
 export { VariableManager } from './VariableManager';
 export { GroupManagement } from './GroupManagement';
 export { Resources } from './Resources';

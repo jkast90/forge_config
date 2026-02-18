@@ -32,10 +32,10 @@ import { SideTabs } from './SideTabs';
 import type { SideTab } from './SideTabs';
 import { useConfirm } from './ConfirmDialog';
 
-type IpamTab = 'prefixes' | 'ips' | 'roles';
+type IpamTab = 'prefixes' | 'ips' | 'roles' | 'tags';
 
 export function IpamManagement() {
-  const [activeTab, setActiveTab] = usePersistedTab<IpamTab>('prefixes', ['prefixes', 'ips', 'roles'], 'tab_ipam');
+  const [activeTab, setActiveTab] = usePersistedTab<IpamTab>('prefixes', ['prefixes', 'ips', 'roles', 'tags'], 'tab_ipam');
   const [showInfo, setShowInfo] = useState(false);
 
   const ipam = useIpam();
@@ -71,6 +71,7 @@ export function IpamManagement() {
             { id: 'prefixes', label: 'Prefixes', icon: 'lan', count: prefixes.length },
             { id: 'ips', label: 'IP Addresses', icon: 'pin', count: ipAddresses.length },
             { id: 'roles', label: 'Roles', icon: 'label', count: roles.length },
+            { id: 'tags', label: 'Tags', icon: 'sell', count: ipam.allTags.length },
           ] as SideTab[]}
           activeTab={activeTab}
           onTabChange={(id) => setActiveTab(id as IpamTab)}
@@ -98,6 +99,10 @@ export function IpamManagement() {
 
           {activeTab === 'roles' && (
             <RolesTab roles={roles} ipam={ipam} />
+          )}
+
+          {activeTab === 'tags' && (
+            <TagsTab ipam={ipam} prefixes={prefixes} />
           )}
         </SideTabs>
       </Card>
@@ -865,6 +870,131 @@ function RolesTab({ roles, ipam }: {
           <FormField label="ID" name="roleId" value={roleId} onChange={(e) => setRoleId(e.target.value)} placeholder="e.g., transit_link" />
           <FormField label="Name" name="roleName" value={roleName} onChange={(e) => setRoleName(e.target.value)} placeholder="e.g., Transit Link" />
           <FormField label="Description" name="roleDesc" value={roleDesc} onChange={(e) => setRoleDesc(e.target.value)} placeholder="Optional description" />
+        </div>
+      </FormDialog>
+
+      <ConfirmDialogRenderer />
+    </>
+  );
+}
+
+// ============================================================
+// Tags Tab
+// ============================================================
+
+function TagsTab({ ipam, prefixes }: {
+  ipam: ReturnType<typeof useIpam>;
+  prefixes: IpamPrefix[];
+}) {
+  const { confirm, ConfirmDialogRenderer } = useConfirm();
+  const [showForm, setShowForm] = useState(false);
+  const [tagResourceType, setTagResourceType] = useState('prefix');
+  const [tagResourceId, setTagResourceId] = useState('');
+  const [tagKey, setTagKey] = useState('');
+  const [tagValue, setTagValue] = useState('');
+
+  useEffect(() => {
+    ipam.fetchAllTags();
+  }, [ipam.fetchAllTags]);
+
+  const handleCreate = useCallback(async () => {
+    if (!tagKey.trim()) {
+      addNotification('error', 'Tag key is required');
+      return;
+    }
+    if (!tagResourceId.trim()) {
+      addNotification('error', 'Resource ID is required');
+      return;
+    }
+    const success = await ipam.setTag(tagResourceType, tagResourceId, tagKey.trim(), tagValue);
+    if (success) {
+      setShowForm(false);
+      setTagKey('');
+      setTagValue('');
+      setTagResourceId('');
+      ipam.fetchAllTags();
+    }
+  }, [tagKey, tagValue, tagResourceType, tagResourceId, ipam]);
+
+  const handleDelete = useCallback(async (tag: IpamTag) => {
+    if (!(await confirm({ title: 'Delete Tag', message: `Delete tag "${tag.key}" from ${tag.resource_type} ${tag.resource_id}?`, confirmText: 'Delete', destructive: true }))) return;
+    const success = await ipam.deleteTag(tag.resource_type, tag.resource_id, tag.key);
+    if (success) ipam.fetchAllTags();
+  }, [ipam, confirm]);
+
+  const prefixOptions = useMemo(() =>
+    prefixes.map(p => ({ value: String(p.id), label: `${p.prefix} ${p.description ? '- ' + p.description : ''}` })),
+  [prefixes]);
+
+  const columns: TableColumn<IpamTag>[] = useMemo(() => [
+    { header: 'Key', accessor: 'key' as keyof IpamTag, searchValue: (row: IpamTag) => row.key },
+    { header: 'Value', accessor: 'value' as keyof IpamTag, searchValue: (row: IpamTag) => row.value },
+    { header: 'Resource Type', accessor: 'resource_type' as keyof IpamTag, searchValue: (row: IpamTag) => row.resource_type },
+    { header: 'Resource ID', accessor: (row: IpamTag) => {
+      if (row.resource_type === 'prefix') {
+        const p = prefixes.find(px => String(px.id) === row.resource_id);
+        return p ? p.prefix : row.resource_id;
+      }
+      return row.resource_id;
+    }, searchValue: (row: IpamTag) => {
+      if (row.resource_type === 'prefix') {
+        const p = prefixes.find(px => String(px.id) === row.resource_id);
+        return `${row.resource_id} ${p?.prefix || ''}`;
+      }
+      return row.resource_id;
+    }},
+  ], [prefixes]);
+
+  const actions: TableAction<IpamTag>[] = useMemo(() => [
+    { icon: <TrashIcon size={14} />, label: 'Delete', onClick: handleDelete, variant: 'danger' as const },
+  ], [handleDelete]);
+
+  return (
+    <>
+      <Card
+        title="Tags"
+        headerAction={
+          <Button variant="primary" onClick={() => { ipam.fetchTagKeys(); setShowForm(true); }}>
+            <PlusIcon size={14} />
+            Add Tag
+          </Button>
+        }
+      >
+        <LoadingState loading={ipam.allTagsLoading} loadingMessage="Loading tags...">
+          <Table
+            data={ipam.allTags}
+            columns={columns}
+            actions={actions}
+            getRowKey={(row) => `${row.resource_type}-${row.resource_id}-${row.key}`}
+            tableId="ipam-all-tags"
+            emptyMessage="No tags defined."
+            emptyDescription="Add tags to prefixes and other IPAM resources for flexible querying."
+            searchable
+            searchPlaceholder="Search tags..."
+          />
+        </LoadingState>
+      </Card>
+
+      <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title="Add Tag" onSubmit={(e) => { e.preventDefault(); handleCreate(); }} submitText="Add Tag">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <SelectField label="Resource Type" name="resourceType" value={tagResourceType} onChange={(e) => { setTagResourceType(e.target.value); setTagResourceId(''); }} options={[{ value: 'prefix', label: 'Prefix' }]} />
+          {tagResourceType === 'prefix' && (
+            <SelectField label="Prefix" name="resourceId" value={tagResourceId} onChange={(e) => setTagResourceId(e.target.value)} options={[{ value: '', label: 'Select a prefix...' }, ...prefixOptions]} />
+          )}
+          <div>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Key</label>
+            <input
+              list="ipam-all-tag-keys"
+              value={tagKey}
+              onChange={(e) => setTagKey(e.target.value)}
+              placeholder="e.g., env, team"
+              style={{ width: '100%', padding: '6px 8px', fontSize: '13px', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--input-bg, inherit)', color: 'inherit' }}
+            />
+            <datalist id="ipam-all-tag-keys">
+              {ipam.tagKeys.map(k => <option key={k} value={k} />)}
+            </datalist>
+          </div>
+          <FormField label="Value" name="tagValue" value={tagValue} onChange={(e) => setTagValue(e.target.value)} placeholder="e.g., production" />
         </div>
       </FormDialog>
 

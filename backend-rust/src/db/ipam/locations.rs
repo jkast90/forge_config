@@ -321,9 +321,10 @@ impl IpamRackRepo {
 
     pub async fn create(pool: &Pool<Sqlite>, req: &CreateIpamRackRequest) -> Result<IpamRack> {
         let now = Utc::now();
-        let result = sqlx::query("INSERT INTO ipam_racks (name, description, row_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+        let result = sqlx::query("INSERT INTO ipam_racks (name, description, row_id, width_cm, height_ru, depth_cm, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
             .bind(&req.name).bind(req.description.as_deref().unwrap_or(""))
-            .bind(req.row_id).bind(now).bind(now)
+            .bind(req.row_id).bind(req.width_cm).bind(req.height_ru).bind(req.depth_cm)
+            .bind(now).bind(now)
             .execute(pool).await?;
         let new_id = result.last_insert_rowid();
         Self::get(pool, new_id).await?.context("Rack not found after creation")
@@ -331,9 +332,10 @@ impl IpamRackRepo {
 
     pub async fn update(pool: &Pool<Sqlite>, id: i64, req: &CreateIpamRackRequest) -> Result<IpamRack> {
         let now = Utc::now();
-        let result = sqlx::query("UPDATE ipam_racks SET name = ?, description = ?, row_id = ?, updated_at = ? WHERE id = ?")
+        let result = sqlx::query("UPDATE ipam_racks SET name = ?, description = ?, row_id = ?, width_cm = ?, height_ru = ?, depth_cm = ?, updated_at = ? WHERE id = ?")
             .bind(&req.name).bind(req.description.as_deref().unwrap_or(""))
-            .bind(req.row_id).bind(now).bind(id)
+            .bind(req.row_id).bind(req.width_cm).bind(req.height_ru).bind(req.depth_cm)
+            .bind(now).bind(id)
             .execute(pool).await?;
         if result.rows_affected() == 0 {
             return Err(crate::db::NotFoundError::new("Rack", &id.to_string()).into());

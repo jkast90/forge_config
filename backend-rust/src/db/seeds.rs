@@ -12,6 +12,7 @@ pub(super) struct DefaultVendor {
     mac_prefixes: Vec<String>,
     vendor_class: String,
     default_template: String,
+    group_names: Vec<String>,
 }
 
 pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
@@ -26,6 +27,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             mac_prefixes: vec!["00:13:C6".to_string()],
             vendor_class: "OpenGear".to_string(),
             default_template: "opengear-lighthouse".to_string(),
+            group_names: vec![],
         },
         DefaultVendor {
             id: "cisco".to_string(),
@@ -42,6 +44,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             ],
             vendor_class: "Cisco Systems, Inc.".to_string(),
             default_template: "cisco-ios".to_string(),
+            group_names: vec![],
         },
         DefaultVendor {
             id: "arista".to_string(),
@@ -56,6 +59,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             ],
             vendor_class: "Arista Networks".to_string(),
             default_template: "arista-eos".to_string(),
+            group_names: vec!["arista".to_string()],
         },
         DefaultVendor {
             id: "juniper".to_string(),
@@ -74,6 +78,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             ],
             vendor_class: "Juniper Networks".to_string(),
             default_template: "juniper-junos".to_string(),
+            group_names: vec![],
         },
         DefaultVendor {
             id: "raspberry-pi".to_string(),
@@ -88,10 +93,11 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             ],
             vendor_class: "Raspberry Pi".to_string(),
             default_template: "raspberry-pi".to_string(),
+            group_names: vec![],
         },
         DefaultVendor {
             id: "frr".to_string(),
-            name: "FRRouting".to_string(),
+            name: "FRR".to_string(),
             backup_command: "vtysh -c 'show running-config'".to_string(),
             deploy_command: "vtysh\nconfigure terminal\n{CONFIG}\nend\nwrite memory".to_string(),
             diff_command: String::new(),
@@ -99,6 +105,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             mac_prefixes: vec![],
             vendor_class: "FRRouting".to_string(),
             default_template: "frr-bgp".to_string(),
+            group_names: vec![],
         },
         DefaultVendor {
             id: "gobgp".to_string(),
@@ -110,6 +117,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             mac_prefixes: vec![],
             vendor_class: "GoBGP".to_string(),
             default_template: "gobgp-bgp".to_string(),
+            group_names: vec![],
         },
         DefaultVendor {
             id: "amd".to_string(),
@@ -121,6 +129,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             mac_prefixes: vec![],
             vendor_class: "AMD".to_string(),
             default_template: String::new(),
+            group_names: vec!["amd".to_string()],
         },
         DefaultVendor {
             id: "patch-panel".to_string(),
@@ -132,6 +141,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             mac_prefixes: vec![],
             vendor_class: String::new(),
             default_template: String::new(),
+            group_names: vec![],
         },
     ]
 }
@@ -2378,12 +2388,13 @@ fn get_default_dhcp_options_internal() -> Vec<DefaultDhcpOption> {
 
 /// Seed data helpers used by the Store during migration
 
-pub(super) fn seed_vendor_params() -> Vec<(String, String, String, String, String, i32, String, String, String)> {
+pub(super) fn seed_vendor_params() -> Vec<(String, String, String, String, String, i32, String, String, String, String)> {
     get_default_vendors_internal()
         .into_iter()
         .map(|v| {
             let mac_json = serde_json::to_string(&v.mac_prefixes).unwrap_or_else(|_| "[]".to_string());
-            (v.id, v.name, v.backup_command, v.deploy_command, v.diff_command, v.ssh_port, mac_json, v.vendor_class, v.default_template)
+            let group_names_json = serde_json::to_string(&v.group_names).unwrap_or_else(|_| "[]".to_string());
+            (v.id, v.name, v.backup_command, v.deploy_command, v.diff_command, v.ssh_port, mac_json, v.vendor_class, v.default_template, group_names_json)
         })
         .collect()
 }
@@ -2441,6 +2452,7 @@ pub fn get_default_vendors_models() -> Vec<Vendor> {
             mac_prefixes: v.mac_prefixes,
             vendor_class: v.vendor_class,
             default_template: v.default_template,
+            group_names: v.group_names,
             device_count: None,
             created_at: now,
             updated_at: now,
@@ -2714,7 +2726,8 @@ pub(super) fn seed_device_model_params() -> Vec<(String, String, String, String,
         ("arista-7020tr-48".into(), "arista".into(), "7020TR-48".into(), "Arista 7020TR-48".into(), 1, tr_layout),
         // AMD GPU node models
         ("amd-mi300x".into(), "amd".into(), "MI300X 8-GPU Node".into(), "AMD Instinct MI300X 8-GPU Node".into(), 4, gpu_layout.clone()),
-        ("amd-mi325x".into(), "amd".into(), "MI325X 8-GPU Node".into(), "AMD Instinct MI325X 8-GPU Node".into(), 4, gpu_layout),
+        ("amd-mi325x".into(), "amd".into(), "MI325X 8-GPU Node".into(), "AMD Instinct MI325X 8-GPU Node".into(), 4, gpu_layout.clone()),
+        ("amd-mi350x".into(), "amd".into(), "MI350X 8-GPU Node".into(), "AMD Instinct MI350X (Helios) 8-GPU Node".into(), 4, gpu_layout),
         // Patch panel models
         ("pp-24-rj45".into(), "patch-panel".into(), "PP-24-RJ45".into(), "24-Port RJ45 Patch Panel".into(), 1, pp_24_rj45_layout),
         ("pp-48-rj45".into(), "patch-panel".into(), "PP-48-RJ45".into(), "48-Port RJ45 Patch Panel".into(), 2, pp_48_rj45_layout),

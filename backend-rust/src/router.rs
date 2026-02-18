@@ -78,6 +78,7 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/vendors", get(handlers::vendors::list_vendors))
         .route("/api/vendors", post(handlers::vendors::create_vendor))
         .route("/api/vendors/defaults", get(handlers::vendors::get_default_vendors))
+        .route("/api/vendors/by-name/:name", get(handlers::vendors::get_vendor_by_name))
         .route("/api/vendors/:id", get(handlers::vendors::get_vendor))
         .route("/api/vendors/:id", put(handlers::vendors::update_vendor))
         .route("/api/vendors/:id", delete(handlers::vendors::delete_vendor))
@@ -223,6 +224,7 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/ipam/vrfs", post(handlers::ipam::create_vrf))
         .route("/api/ipam/vrfs/:id", delete(handlers::ipam::delete_vrf))
         // IPAM Tag routes
+        .route("/api/ipam/tags", get(handlers::ipam::list_all_tags))
         .route("/api/ipam/tags/keys", get(handlers::ipam::list_tag_keys))
         .route("/api/ipam/tags/:resource_type/:resource_id", get(handlers::ipam::list_tags))
         .route("/api/ipam/tags/:resource_type/:resource_id", post(handlers::ipam::set_tag))

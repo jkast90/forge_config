@@ -23,7 +23,9 @@ export interface UnifiedTopologyRequest {
   devices_per_rack?: number;
   spawn_containers?: boolean;
   ceos_image?: string;
-  tier3_placement?: 'top' | 'middle' | 'bottom';
+  tier3_placement?: string;
+  tier1_placement?: string;
+  tier2_placement?: string;
   // Super-spine (5-stage CLOS)
   super_spine_enabled?: boolean;
   super_spine_count?: number;
@@ -32,6 +34,10 @@ export interface UnifiedTopologyRequest {
   pods?: number;
   // Physical spacing for cable length estimation
   row_spacing_cm?: number;
+  // Rack dimensions
+  rack_width_cm?: number;
+  rack_height_ru?: number;
+  rack_depth_cm?: number;
   // User-provided topology name
   topology_name?: string;
   // GPU cluster configuration

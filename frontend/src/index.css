@@ -1469,6 +1469,26 @@ th:hover .column-filter-toggle,
   background: var(--color-warning);
 }
 
+.status.accent {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-accent-blue);
+}
+
+.status.accent::before {
+  background: var(--color-accent-blue);
+  animation: none;
+}
+
+.status.neutral {
+  background: var(--color-bg-hover);
+  color: var(--color-text-muted);
+}
+
+.status.neutral::before {
+  background: var(--color-text-muted);
+  animation: none;
+}
+
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
@@ -3789,6 +3809,14 @@ th:hover .column-filter-toggle,
   border: 1px solid rgba(212, 160, 60, 0.3);
 }
 
+[data-theme="nautical-dark"] .status.accent {
+  border: 1px solid rgba(74, 144, 217, 0.3);
+}
+
+[data-theme="nautical-dark"] .status.neutral {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
 /* Form inputs: recessed instrument panels */
 [data-theme="nautical-dark"] .form-group input,
 [data-theme="nautical-dark"] .form-group textarea,
@@ -3955,6 +3983,14 @@ th:hover .column-filter-toggle,
 
 [data-theme="nautical-light"] .status.provisioning {
   border: 1px solid rgba(184, 138, 42, 0.3);
+}
+
+[data-theme="nautical-light"] .status.accent {
+  border: 1px solid rgba(37, 99, 235, 0.25);
+}
+
+[data-theme="nautical-light"] .status.neutral {
+  border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 /* Form inputs: etched into driftwood */
@@ -4194,6 +4230,16 @@ th:hover .column-filter-toggle,
   color: #ffea00;
 }
 
+[data-theme="contrast-dark"] .status.accent {
+  border: 2px solid #448aff;
+  color: #448aff;
+}
+
+[data-theme="contrast-dark"] .status.neutral {
+  border: 2px solid #90a4ae;
+  color: #90a4ae;
+}
+
 [data-theme="contrast-light"] .status.online {
   border: 2px solid #006b2d;
 }
@@ -4204,6 +4250,16 @@ th:hover .column-filter-toggle,
 
 [data-theme="contrast-light"] .status.provisioning {
   border: 2px solid #7a5c00;
+}
+
+[data-theme="contrast-light"] .status.accent {
+  border: 2px solid #1565c0;
+  color: #1565c0;
+}
+
+[data-theme="contrast-light"] .status.neutral {
+  border: 2px solid #607d8b;
+  color: #607d8b;
 }
 
 [data-theme="contrast-dark"] .badge,

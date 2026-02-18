@@ -108,7 +108,11 @@ export function Notifications({ isOpen, onClose, onViewApiError }: Notifications
 }
 
 // Small pop-up that briefly appears when a new notification is added
-export function NotificationPopup() {
+interface NotificationPopupProps {
+  onViewApiError?: (timestamp: number) => void;
+}
+
+export function NotificationPopup({ onViewApiError }: NotificationPopupProps) {
   const [popup, setPopup] = useState<Notification | null>(null);
   const [exiting, setExiting] = useState(false);
   const prevCountRef = useRef(0);
@@ -134,15 +138,28 @@ export function NotificationPopup() {
 
   if (!popup) return null;
 
+  const hasAction = !!popup.action;
+  const hasErrorAction = popup.level === 'error' && !!onViewApiError;
+  const isClickable = hasAction || hasErrorAction;
+
+  const handleClick = isClickable ? () => {
+    if (hasAction) {
+      popup.action!.onClick();
+    } else if (hasErrorAction) {
+      onViewApiError!(popup.timestamp);
+    }
+    setPopup(null);
+  } : undefined;
+
   return (
     <div
-      className={`notification-popup${popup.action ? ' notification-popup-clickable' : ''}`}
+      className={`notification-popup${isClickable ? ' notification-popup-clickable' : ''}`}
       style={{
         opacity: exiting ? 0 : 1,
         transform: exiting ? 'translateY(-12px) scale(0.95)' : 'translateY(0) scale(1)',
-        cursor: popup.action ? 'pointer' : undefined,
+        cursor: isClickable ? 'pointer' : undefined,
       }}
-      onClick={popup.action ? () => { popup.action!.onClick(); setPopup(null); } : undefined}
+      onClick={handleClick}
     >
       <Icon
         name={LEVEL_ICONS[popup.level]}
@@ -152,6 +169,9 @@ export function NotificationPopup() {
       <span className="notification-popup-text">{popup.message}</span>
       {popup.action && (
         <span className="notification-action-link">{popup.action.label}</span>
+      )}
+      {!popup.action && hasErrorAction && (
+        <Icon name="open_in_new" size={12} style={{ marginLeft: 4, opacity: 0.5 }} />
       )}
     </div>
   );

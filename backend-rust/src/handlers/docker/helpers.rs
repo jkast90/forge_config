@@ -93,9 +93,15 @@ pub struct UnifiedTopologyRequest {
     #[serde(default)]
     pub ceos_image: String,
 
-    // Rack placement strategy for the lowest-tier devices
+    // Rack/row placement strategies per tier
+    // Values: "end", "middle", "beginning", or a specific rack number (e.g. "3")
+    // Legacy tier3_placement kept for backward compat: "top", "middle", "bottom"
     #[serde(default)]
-    pub tier3_placement: String,  // "top", "middle", "bottom"; default "bottom"
+    pub tier3_placement: String,
+    #[serde(default)]
+    pub tier1_placement: String,   // Spine row placement
+    #[serde(default)]
+    pub tier2_placement: String,   // Leaf row placement
 
     // Super-spine tier (5-stage CLOS extension)
     #[serde(default)]
@@ -112,6 +118,14 @@ pub struct UnifiedTopologyRequest {
     // Physical spacing for cable length estimation
     #[serde(default = "default_row_spacing")]
     pub row_spacing_cm: usize,
+
+    // Rack dimensions
+    #[serde(default = "default_rack_width")]
+    pub rack_width_cm: i32,
+    #[serde(default = "default_rack_height_ru")]
+    pub rack_height_ru: i32,
+    #[serde(default = "default_rack_depth")]
+    pub rack_depth_cm: i32,
 
     // User-provided topology name (falls back to architecture default if empty)
     #[serde(default)]
@@ -153,7 +167,7 @@ pub struct UnifiedTopologyRequest {
 fn default_mgmt_distribution() -> String { "per-row".to_string() }
 fn default_true() -> bool { true }
 
-fn default_gpu_model() -> String { "MI300X".to_string() }
+fn default_gpu_model() -> String { "MI350X 8-GPU Node".to_string() }
 fn default_gpus_per_node() -> usize { 8 }
 fn default_gpu_nodes_per_cluster() -> usize { 8 }
 fn default_interconnect() -> String { "InfiniBand".to_string() }
@@ -168,6 +182,9 @@ fn default_racks_per_row() -> usize { 2 }
 fn default_devices_per_rack() -> usize { 2 }
 fn default_one() -> usize { 1 }
 fn default_row_spacing() -> usize { 120 } // 120cm (~4 feet) between rows
+fn default_rack_width() -> i32 { 60 }
+fn default_rack_height_ru() -> i32 { 42 }
+fn default_rack_depth() -> i32 { 100 }
 
 /// Response from the topology builder endpoint
 #[derive(Serialize)]
@@ -188,7 +205,7 @@ pub struct TopologyBuildDevice {
 }
 
 pub(super) fn get_network_name() -> String {
-    std::env::var("DOCKER_NETWORK").unwrap_or_else(|_| "forge-config_fc-net".to_string())
+    std::env::var("DOCKER_NETWORK").unwrap_or_else(|_| "forge_fc-net".to_string())
 }
 
 pub(super) fn get_image_name() -> String {
@@ -453,6 +470,10 @@ pub struct TopologyPreviewResponse {
     pub fabric_links: Vec<TopologyPreviewLink>,
     pub racks: Vec<TopologyPreviewRack>,
     pub tier3_placement: String,
+    #[serde(default)]
+    pub tier1_placement: String,
+    #[serde(default)]
+    pub tier2_placement: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gpu_clusters: Vec<TopologyPreviewGpuCluster>,
 }
