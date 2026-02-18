@@ -210,6 +210,7 @@ export const EMPTY_GPU_CLUSTER_FORM: import('../types').GpuClusterFormData = {
 export const GPU_MODEL_OPTIONS = [
   { value: 'MI300X', label: 'AMD MI300X' },
   { value: 'MI325X', label: 'AMD MI325X' },
+  { value: 'MI350X', label: 'AMD MI350X (Helios)' },
 ];
 
 export const INTERCONNECT_OPTIONS = [

@@ -98,8 +98,8 @@ pub(super) async fn compute_clos_preview(
 
     // ── 4. Compute rack layout as named racks ───────────────────────────
     let mut racks: Vec<TopologyPreviewRack> = Vec::new();
-    let mut leaf_rack_names: Vec<(String, String)> = Vec::new(); // (rack_name, row_number)
-    let mut spine_rack_names: Vec<(String, String)> = Vec::new(); // (rack_name, row_number)
+    let mut leaf_rack_names: Vec<(String, String, usize)> = Vec::new(); // (rack_name, row_number, racks_index)
+    let mut spine_rack_names: Vec<(String, String, usize)> = Vec::new(); // (rack_name, row_number, racks_index)
     let mut rack_index: usize = 0;
 
     for h in 1..=hall_count {
@@ -118,7 +118,7 @@ pub(super) async fn compute_clos_preview(
                         row_name: row_name.clone(),
                         rack_type: "spine".to_string(),
                     });
-                    spine_rack_names.push((spine_rack_name, row_num.clone()));
+                    spine_rack_names.push((spine_rack_name, row_num.clone(), rack_index));
                     rack_index += 1;
                 }
 
@@ -130,10 +130,28 @@ pub(super) async fn compute_clos_preview(
                     row_name: row_name.clone(),
                     rack_type: "leaf".to_string(),
                 });
-                leaf_rack_names.push((leaf_rack_name, row_num.clone()));
+                leaf_rack_names.push((leaf_rack_name, row_num.clone(), rack_index));
                 rack_index += 1;
             }
         }
+    }
+
+    // ── 4b. Validate rack capacity ─────────────────────────────────────
+    let leaf_rack_capacity = leaf_rack_names.len() * leaves_per_rack;
+    if total_leaves > leaf_rack_capacity && !leaf_rack_names.is_empty() {
+        return Err(ApiError::bad_request(format!(
+            "Not enough racks for {} leaves: {} leaf racks × {} devices/rack = {} capacity. \
+             Increase racks per row (currently {}), rows per hall (currently {}), \
+             halls (currently {}), or devices per rack (currently {})",
+            total_leaves, leaf_rack_names.len(), leaves_per_rack, leaf_rack_capacity,
+            racks_per_row, rows_per_hall, hall_count, leaves_per_rack
+        )));
+    }
+    if total_spines > spine_rack_names.len() * 42 && !spine_rack_names.is_empty() {
+        return Err(ApiError::bad_request(format!(
+            "Not enough spine racks for {} spines: only {} spine racks available",
+            total_spines, spine_rack_names.len()
+        )));
     }
 
     // ── 5. Compute all devices ──────────────────────────────────────────
@@ -145,8 +163,8 @@ pub(super) async fn compute_clos_preview(
         let (rack_name, row_num, rack_idx, pos) = if !spine_rack_names.is_empty() {
             let ridx = (i - 1) % spine_rack_names.len();
             let pos_in_rack = ((i - 1) / spine_rack_names.len()) as i32 + 1;
-            let (rn, rw) = spine_rack_names[ridx].clone();
-            (Some(rn), rw, Some(ridx), Some(pos_in_rack))
+            let (ref rn, ref rw, ri) = spine_rack_names[ridx];
+            (Some(rn.clone()), rw.clone(), Some(ri), Some(pos_in_rack))
         } else {
             (None, String::new(), None, None)
         };
@@ -181,8 +199,8 @@ pub(super) async fn compute_clos_preview(
             let device_in_rack = (i - 1) % leaves_per_rack;
             if ridx < leaf_rack_names.len() {
                 let pos = compute_rack_position(device_in_rack, placement, 42);
-                let (rn, rw) = leaf_rack_names[ridx].clone();
-                (Some(rn), rw, Some(ridx), Some(pos))
+                let (ref rn, ref rw, ri) = leaf_rack_names[ridx];
+                (Some(rn.clone()), rw.clone(), Some(ri), Some(pos))
             } else {
                 (None, String::new(), None, None)
             }
@@ -214,7 +232,7 @@ pub(super) async fn compute_clos_preview(
             let ridx = (i - 1) % spine_rack_names.len();
             let spines_in_this_rack = (total_spines + spine_rack_names.len() - 1) / spine_rack_names.len().max(1);
             let pos_in_rack = spines_in_this_rack as i32 + ((i - 1) / spine_rack_names.len()) as i32 + 1;
-            (Some(spine_rack_names[ridx].0.clone()), Some(ridx), Some(pos_in_rack))
+            (Some(spine_rack_names[ridx].0.clone()), Some(spine_rack_names[ridx].2), Some(pos_in_rack))
         } else {
             (None, None, None)
         };
@@ -491,7 +509,7 @@ pub(super) async fn compute_clos_preview(
                 let gpu_hostname = resolve_hostname(hostname_pattern, dc, region, "", "", "gpu-node", gpu_counter);
 
                 // Place GPU node in same rack as its assigned leaf, 4U below leaf
-                let gpu_rack_name = leaf_rack_idx.and_then(|ri| leaf_rack_names.get(ri).map(|(n, _)| n.clone()));
+                let gpu_rack_name = leaf_rack_idx.and_then(|ri| racks.get(ri).map(|r| r.name.clone()));
                 let gpu_rack_pos = leaf_rack_pos.map(|p| p + 4 + (ni as i32 * 4));
 
                 devices.push(TopologyPreviewDevice {
@@ -596,7 +614,38 @@ pub(super) async fn compute_clos_preview(
         Vec::new()
     };
 
-    // ── 9. Add management switches based on distribution setting ────────
+    // ── 9a. Add patch panels — one per row, in first leaf rack ─────────
+    let pp_model = "PP-192-RJ45".to_string();
+    let mut pp_counter: usize = 0;
+    for h in 1..=hall_count {
+        let hall_str = h.to_string();
+        for r in 1..=rows_per_hall {
+            let row_name = format!("Hall {} Row {}", h, r);
+            let row_str = r.to_string();
+            let first_rack = racks.iter().find(|rk| rk.row_name == row_name && rk.rack_type == "leaf");
+            let (rack_name, rack_idx) = match first_rack {
+                Some(rk) => (Some(rk.name.clone()), Some(rk.index)),
+                None => (None, None),
+            };
+            pp_counter += 1;
+            devices.push(TopologyPreviewDevice {
+                index: dev_index,
+                hostname: resolve_hostname(hostname_pattern, dc, region, &hall_str, &row_str, "patch panel", pp_counter),
+                role: "patch panel".to_string(),
+                loopback: String::new(),
+                asn: 0,
+                model: pp_model.clone(),
+                mgmt_ip: String::new(),
+                rack_name,
+                rack_index: rack_idx,
+                rack_position: Some(42),
+                device_type: Some("external".to_string()),
+            });
+            dev_index += 1;
+        }
+    }
+
+    // ── 9b. Add management switches based on distribution setting ────────
     let mgmt_model = if req.mgmt_switch_model.is_empty() { "CCS-720XP-48ZC2".to_string() } else { req.mgmt_switch_model.clone() };
     let mgmt_dist = if req.mgmt_switch_distribution.is_empty() { "per-row" } else { &req.mgmt_switch_distribution };
     let mgmt_count_per_row = req.mgmt_switches_per_row.max(1);
@@ -868,6 +917,7 @@ pub async fn build_virtual_clos(
     let mut all_racks: Vec<(i64, i64, i64)> = Vec::new();
     // Map row_id -> patch panel device ID for port assignment wiring
     let mut patch_panels: HashMap<i64, i64> = HashMap::new();
+    let mut pp_counter: usize = 0;
     // Management switch entries: (hall_id, row_id, rack_id or None, device_id)
     let mut mgmt_switches: Vec<(i64, i64, Option<i64>, i64)> = Vec::new();
     // Map row_id -> first rack ID (for patch panel placement)
@@ -952,31 +1002,44 @@ pub async fn build_virtual_clos(
 
                 // Create a patch panel device for this row, placed in rack 1
                 let pp_rack_id = row_first_rack.get(&row_id).copied();
-                let pp_hostname = format!("vclos-hall-{}-row-{}-pp", h, r);
+                let row_str = row_id_to_num.get(&row_id).cloned().unwrap_or_default();
+                pp_counter += 1;
+                let pp_hostname = resolve_hostname(hostname_pattern, dc, region, &h.to_string(), &row_str, "patch panel", pp_counter);
+
+                // Apply overrides if present (user may have renamed/moved in preview)
+                let ov_dev = overrides.as_ref().and_then(|ov| {
+                    ov.devices.iter().find(|d| d.role == "patch panel" && d.hostname == pp_hostname)
+                });
+                let final_hostname = ov_dev.map(|d| d.hostname.clone()).unwrap_or(pp_hostname.clone());
+                let final_rack_id = ov_dev.and_then(|d| d.rack_index).and_then(|ri| all_racks.get(ri).map(|&(_, _, rk)| rk)).or(pp_rack_id);
+                let final_rack_pos = ov_dev.and_then(|d| d.rack_position).or(Some(42));
+                let final_hall_id = ov_dev.and_then(|d| d.rack_index).and_then(|ri| all_racks.get(ri).map(|&(h, _, _)| h)).or(Some(hall_id));
+                let final_row_id = ov_dev.and_then(|d| d.rack_index).and_then(|ri| all_racks.get(ri).map(|&(_, r, _)| r)).or(Some(row_id));
+
                 let pp_req = crate::models::CreateDeviceRequest {
                     mac: String::new(),
                     ip: String::new(),
-                    hostname: pp_hostname.clone(),
+                    hostname: final_hostname.clone(),
                     vendor: Some(patch_panel_vendor_id.clone()),
                     model: Some("PP-192-RJ45".to_string()),
-                    serial_number: Some(format!("SN-VCLOS-{}", pp_hostname)),
+                    serial_number: Some(format!("SN-VCLOS-{}", final_hostname)),
                     config_template: String::new(),
                     ssh_user: None,
                     ssh_pass: None,
                     topology_id: Some(topo_id),
                     topology_role: Some("patch panel".to_string()),
                     device_type: Some("external".to_string()),
-                    hall_id: Some(hall_id),
-                    row_id: Some(row_id),
-                    rack_id: pp_rack_id,
-                    rack_position: Some(42),
+                    hall_id: final_hall_id,
+                    row_id: final_row_id,
+                    rack_id: final_rack_id,
+                    rack_position: final_rack_pos,
                 };
                 match state.store.create_device(&pp_req).await {
                     Ok(pp_dev) => {
                         patch_panels.insert(row_id, pp_dev.id);
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to create patch panel {}: {}", pp_hostname, e);
+                        tracing::warn!("Failed to create patch panel {}: {}", final_hostname, e);
                     }
                 }
 

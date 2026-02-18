@@ -150,6 +150,7 @@ export function TopologyManagement() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [showLinks, setShowLinks] = useState(false);
+  const [previewRoleFilter, setPreviewRoleFilter] = useState<string | null>(null);
   const [showGpuLinks, setShowGpuLinks] = useState(false);
 
   const hasBuiltTopology = useMemo(
@@ -858,6 +859,7 @@ export function TopologyManagement() {
       setPreviewEdits([...preview.devices]);
       setShowPreview(true);
       setShowLinks(false);
+      setPreviewRoleFilter(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       addNotification('error', `Preview failed: ${msg}`);
@@ -1021,6 +1023,21 @@ export function TopologyManagement() {
       return Object.keys(updates).length > 0 ? { ...c, ...updates } : c;
     });
   }, [showTopologyDialog, regions, campuses, datacenters]);
+
+  // Validate rack capacity before allowing preview
+  const capacityError = useMemo(() => {
+    const c = topologyConfig;
+    if (c.halls === 0 || c.rows_per_hall === 0 || c.racks_per_row === 0) return null;
+    const totalLeafRacks = c.halls * c.rows_per_hall * c.racks_per_row;
+    const leafCapacity = totalLeafRacks * c.devices_per_rack;
+    const isClos = c.architecture === 'clos';
+    const deviceCount = isClos ? c.tier2_count * (c.super_spine_enabled ? c.pods : 1) : c.tier3_count;
+    const deviceLabel = isClos ? 'leaves' : 'access switches';
+    if (deviceCount > leafCapacity) {
+      return `Not enough racks for ${deviceCount} ${deviceLabel}: ${totalLeafRacks} racks × ${c.devices_per_rack} devices/rack = ${leafCapacity} capacity`;
+    }
+    return null;
+  }, [topologyConfig]);
 
   const [deployingTopology, setDeployingTopology] = useState<number | null>(null);
 
@@ -2141,6 +2158,7 @@ export function TopologyManagement() {
         title={`${topologyConfig.spawn_containers ? 'Container' : 'Template'} Build — ${topologyConfig.architecture === 'clos' ? 'CLOS' : 'Hierarchical'}`}
         onSubmit={handlePreviewTopology}
         submitText={previewLoading ? 'Loading Preview...' : 'Preview Build'}
+        submitDisabled={!!capacityError || previewLoading}
         variant="wide"
       >
         {/* Topology Name */}
@@ -2780,6 +2798,12 @@ export function TopologyManagement() {
             </>
           )}
         </div>
+
+        {capacityError && (
+          <div style={{ marginTop: '12px', padding: '10px 14px', background: 'var(--color-error-bg)', color: 'var(--color-error)', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>
+            {capacityError}
+          </div>
+        )}
       </FormDialog>
 
       {/* Build Preview Modal */}
@@ -2895,6 +2919,28 @@ export function TopologyManagement() {
           })()}
 
           {/* Editable devices table */}
+          {(() => {
+            const roles = [...new Set(previewEdits.map(d => d.role))];
+            const filtered = previewRoleFilter ? previewEdits.filter(d => d.role === previewRoleFilter) : previewEdits;
+            return (<>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                <button
+                  className={`btn btn-sm ${!previewRoleFilter ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setPreviewRoleFilter(null)}
+                  style={{ padding: '2px 10px', fontSize: '0.7rem' }}
+                >All ({previewEdits.length})</button>
+                {roles.map(role => {
+                  const count = previewEdits.filter(d => d.role === role).length;
+                  return (
+                    <button
+                      key={role}
+                      className={`btn btn-sm ${previewRoleFilter === role ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setPreviewRoleFilter(previewRoleFilter === role ? null : role)}
+                      style={{ padding: '2px 10px', fontSize: '0.7rem' }}
+                    >{role} ({count})</button>
+                  );
+                })}
+              </div>
           <div style={{ overflowX: 'auto', marginBottom: '16px' }}>
             <table className="table" style={{ width: '100%', fontSize: '12px' }}>
               <thead>
@@ -2910,7 +2956,7 @@ export function TopologyManagement() {
                 </tr>
               </thead>
               <tbody>
-                {previewEdits.map((device) => (
+                {filtered.map((device) => (
                   <tr key={device.index}>
                     <td>
                       <span className={`status ${device.role === 'spine' || device.role === 'distribution' || device.role === 'super-spine' || device.role === 'core' ? 'online' : device.role === 'leaf' || device.role === 'access' ? 'provisioning' : device.role === 'gpu-node' ? 'accent' : device.role === 'patch panel' ? 'neutral' : 'offline'}`}>
@@ -2926,7 +2972,7 @@ export function TopologyManagement() {
                       />
                     </td>
                     <td>
-                      {device.role === 'external' || device.role === 'gpu-node' ? (
+                      {device.role === 'external' || device.role === 'gpu-node' || device.role === 'patch panel' ? (
                         <span style={{ opacity: 0.4 }}>—</span>
                       ) : (
                         <input
@@ -2938,7 +2984,7 @@ export function TopologyManagement() {
                       )}
                     </td>
                     <td>
-                      {device.role === 'gpu-node' ? (
+                      {device.role === 'gpu-node' || device.role === 'patch panel' ? (
                         <span style={{ opacity: 0.4 }}>—</span>
                       ) : (
                         <NumberInput
@@ -2952,7 +2998,7 @@ export function TopologyManagement() {
                     </td>
                     <td style={{ fontSize: '11px', opacity: 0.7 }}>{device.model}</td>
                     <td>
-                      {device.role === 'external' || device.role === 'gpu-node' ? (
+                      {device.role === 'external' || device.role === 'gpu-node' || device.role === 'patch panel' ? (
                         <span style={{ opacity: 0.4 }}>—</span>
                       ) : (
                         <input
@@ -3008,6 +3054,8 @@ export function TopologyManagement() {
               </tbody>
             </table>
           </div>
+            </>);
+          })()}
 
           {/* Fabric links (collapsible) */}
           {previewData.fabric_links.length > 0 && (

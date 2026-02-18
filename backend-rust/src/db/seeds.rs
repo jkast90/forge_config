@@ -132,7 +132,7 @@ pub(super) fn get_default_vendors_internal() -> Vec<DefaultVendor> {
             group_names: vec!["amd".to_string()],
         },
         DefaultVendor {
-            id: "patch-panel".to_string(),
+            id: "patch panel".to_string(),
             name: "Patch Panel".to_string(),
             backup_command: String::new(),
             deploy_command: String::new(),
