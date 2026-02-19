@@ -21,9 +21,9 @@ function cleanPrefixData(data: IpamPrefixFormData): Record<string, unknown> {
     status: data.status,
     is_supernet: data.is_supernet,
     role_ids: data.role_ids.filter(Boolean),
-    parent_id: data.parent_id ? parseInt(data.parent_id, 10) || undefined : undefined,
+    parent_id: data.parent_id ? Number(data.parent_id) || undefined : undefined,
     datacenter_id: data.datacenter_id || undefined,
-    vlan_id: data.vlan_id ? parseInt(data.vlan_id, 10) || undefined : undefined,
+    vlan_id: data.vlan_id ? Number(data.vlan_id) || undefined : undefined,
     vrf_id: data.vrf_id || undefined,
   };
 }
@@ -32,12 +32,12 @@ function cleanIpData(data: IpamIpAddressFormData & { id?: number }): Record<stri
   return {
     ...(data.id != null ? { id: data.id } : {}),
     address: data.address,
-    prefix_id: data.prefix_id ? parseInt(data.prefix_id, 10) : undefined,
+    prefix_id: data.prefix_id ? Number(data.prefix_id) : undefined,
     description: data.description || undefined,
     status: data.status,
     role_ids: data.role_ids.filter(Boolean),
     dns_name: data.dns_name || undefined,
-    device_id: data.device_id ? parseInt(data.device_id, 10) || undefined : undefined,
+    device_id: data.device_id ? Number(data.device_id) || undefined : undefined,
     interface_name: data.interface_name || undefined,
     vrf_id: data.vrf_id || undefined,
   };

@@ -42,7 +42,7 @@ export interface DeviceFormData {
   config_template: string;
   ssh_user: string;
   ssh_pass: string;
-  topology_id: string;
+  topology_id: number | string;
   topology_role: string;
   device_type: string;
 }
@@ -79,12 +79,12 @@ export interface Topology {
 }
 
 export interface TopologyFormData {
-  id?: string;
+  id?: number | string;
   name: string;
   description: string;
-  region_id: string;
-  campus_id: string;
-  datacenter_id: string;
+  region_id: number | string;
+  campus_id: number | string;
+  datacenter_id: number | string;
 }
 
 // GPU Cluster types
@@ -115,8 +115,8 @@ export interface GpuClusterFormData {
   gpus_per_node: string;
   interconnect_type: string;
   status: string;
-  topology_id: string;
-  vrf_id: string;
+  topology_id: number | string;
+  vrf_id: number | string;
 }
 
 // Tenant types
@@ -205,7 +205,7 @@ export interface Vendor {
 }
 
 export interface VendorFormData {
-  id?: string;
+  id?: number | string;
   name: string;
   backup_command: string;
   deploy_command: string;
@@ -233,12 +233,12 @@ export interface DhcpOption {
 }
 
 export interface DhcpOptionFormData {
-  id?: string;
+  id?: number | string;
   option_number: number;
   name: string;
   value: string;
   type: DhcpOptionType;
-  vendor_id: string;
+  vendor_id: number | string;
   description: string;
   enabled: boolean;
 }
@@ -266,10 +266,10 @@ export interface Template {
 }
 
 export interface TemplateFormData {
-  id?: string;
+  id?: number | string;
   name: string;
   description: string;
-  vendor_id: string;
+  vendor_id: number | string;
   content: string;
 }
 
@@ -401,8 +401,8 @@ export interface VendorAction {
 }
 
 export interface VendorActionFormData {
-  id?: string;
-  vendor_id: string;
+  id?: number | string;
+  vendor_id: number | string;
   label: string;
   command: string;
   sort_order: number;
@@ -411,7 +411,7 @@ export interface VendorActionFormData {
   webhook_method: WebhookMethod;
   webhook_headers: string;
   webhook_body: string;
-  output_parser_id: string;
+  output_parser_id: number | string;
 }
 
 export interface ExecCommandResult {
@@ -598,7 +598,7 @@ export interface IpamRegion {
 }
 
 export interface IpamRegionFormData {
-  id?: string;
+  id?: number | string;
   name: string;
   description: string;
 }
@@ -615,10 +615,10 @@ export interface IpamCampus {
 }
 
 export interface IpamCampusFormData {
-  id?: string;
+  id?: number | string;
   name: string;
   description: string;
-  region_id: string;
+  region_id: number | string;
 }
 
 export interface IpamDatacenter {
@@ -635,10 +635,10 @@ export interface IpamDatacenter {
 }
 
 export interface IpamDatacenterFormData {
-  id?: string;
+  id?: number | string;
   name: string;
   description: string;
-  campus_id: string;
+  campus_id: number | string;
 }
 
 export interface IpamHall {
@@ -653,10 +653,10 @@ export interface IpamHall {
 }
 
 export interface IpamHallFormData {
-  id?: string;
+  id?: number | string;
   name: string;
   description: string;
-  datacenter_id: string;
+  datacenter_id: number | string;
 }
 
 export interface IpamRow {
@@ -671,10 +671,10 @@ export interface IpamRow {
 }
 
 export interface IpamRowFormData {
-  id?: string;
+  id?: number | string;
   name: string;
   description: string;
-  hall_id: string;
+  hall_id: number | string;
 }
 
 export interface IpamRack {
@@ -692,10 +692,10 @@ export interface IpamRack {
 }
 
 export interface IpamRackFormData {
-  id?: string;
+  id?: number | string;
   name: string;
   description: string;
-  row_id: string;
+  row_id: number | string;
   width_cm: number;
   height_ru: number;
   depth_cm: number;
@@ -750,10 +750,10 @@ export interface IpamPrefixFormData {
   status: IpamStatus;
   is_supernet: boolean;
   role_ids: number[];
-  parent_id: string;
-  datacenter_id: string;
-  vlan_id: string;
-  vrf_id: string;
+  parent_id: number | string;
+  datacenter_id: number | string;
+  vlan_id: number | string;
+  vrf_id: number | string;
 }
 
 export interface IpamIpAddress {
@@ -779,14 +779,14 @@ export interface IpamIpAddress {
 export interface IpamIpAddressFormData {
   id?: number;
   address: string;
-  prefix_id: string;
+  prefix_id: number | string;
   description: string;
   status: IpamStatus;
   role_ids: number[];
   dns_name: string;
-  device_id: string; // kept as string for form input handling
+  device_id: number | string;
   interface_name: string;
-  vrf_id: string;
+  vrf_id: number | string;
 }
 
 export interface IpamTag {
@@ -886,8 +886,8 @@ export interface DeviceModel {
 }
 
 export interface DeviceModelFormData {
-  id?: string;
-  vendor_id: string;
+  id?: number | string;
+  vendor_id: number | string;
   model: string;
   display_name: string;
   rack_units: number;

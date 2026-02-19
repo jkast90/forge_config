@@ -53,16 +53,22 @@ export function DhcpOptions() {
       description: option.description || '',
       enabled: option.enabled,
     }),
-    onCreate: (data) => createOption({
-      ...data,
-      vendor_id: Number(data.vendor_id) || undefined,
-      description: data.description || undefined,
-    }),
-    onUpdate: (id, data) => updateOption(id, {
-      ...data,
-      vendor_id: Number(data.vendor_id) || undefined,
-      description: data.description || undefined,
-    }),
+    onCreate: (data) => {
+      const { id: _id, ...rest } = data;
+      return createOption({
+        ...rest,
+        vendor_id: Number(data.vendor_id) || undefined,
+        description: data.description || undefined,
+      });
+    },
+    onUpdate: (id, data) => {
+      const { id: _id, ...rest } = data;
+      return updateOption(id, {
+        ...rest,
+        vendor_id: Number(data.vendor_id) || undefined,
+        description: data.description || undefined,
+      });
+    },
     getItemId: (o) => String(o.id),
     modalName: 'dhcp-form',
   });

@@ -22,8 +22,8 @@ export interface UseDeviceModelsReturn {
   error: string | null;
   refresh: () => Promise<void>;
   createDeviceModel: (data: Partial<DeviceModel>) => Promise<boolean>;
-  updateDeviceModel: (id: string, data: Partial<DeviceModel>) => Promise<boolean>;
-  deleteDeviceModel: (id: string) => Promise<boolean>;
+  updateDeviceModel: (id: number, data: Partial<DeviceModel>) => Promise<boolean>;
+  deleteDeviceModel: (id: number) => Promise<boolean>;
 }
 
 export function useDeviceModels(options: UseDeviceModelsOptions = {}): UseDeviceModelsReturn {
@@ -57,7 +57,7 @@ export function useDeviceModels(options: UseDeviceModelsOptions = {}): UseDevice
     }
   }, [dispatch]);
 
-  const updateDeviceModel = useCallback(async (id: string, data: Partial<DeviceModel>): Promise<boolean> => {
+  const updateDeviceModel = useCallback(async (id: number, data: Partial<DeviceModel>): Promise<boolean> => {
     try {
       await dispatch(updateThunk({ id, data })).unwrap();
       addNotification('success', 'Device model updated', navigateAction('View Models', 'vendors-models', 'models'));
@@ -69,7 +69,7 @@ export function useDeviceModels(options: UseDeviceModelsOptions = {}): UseDevice
     }
   }, [dispatch]);
 
-  const deleteDeviceModel = useCallback(async (id: string): Promise<boolean> => {
+  const deleteDeviceModel = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(deleteThunk(id)).unwrap();
       addNotification('success', 'Device model deleted', navigateAction('View Models', 'vendors-models', 'models'));

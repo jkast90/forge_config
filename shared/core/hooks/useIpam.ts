@@ -81,10 +81,10 @@ export interface UseIpamReturn {
   deleteRack: (id: number | string) => Promise<boolean>;
   // Roles
   createRole: (data: { id: string; name: string; description?: string }) => Promise<boolean>;
-  deleteRole: (id: string) => Promise<boolean>;
+  deleteRole: (id: number) => Promise<boolean>;
   // VRFs
   createVrf: (data: { name: string; rd?: string; description?: string; tenant_id?: number }) => Promise<boolean>;
-  deleteVrf: (id: string) => Promise<boolean>;
+  deleteVrf: (id: number) => Promise<boolean>;
   // Prefixes
   createPrefix: (data: IpamPrefixFormData) => Promise<boolean>;
   updatePrefix: (id: number, data: IpamPrefixFormData) => Promise<boolean>;
@@ -93,8 +93,8 @@ export interface UseIpamReturn {
   nextAvailableIp: (prefixId: number, opts?: { description?: string; status?: string; role_ids?: string[]; dns_name?: string; device_id?: number; interface_name?: string }) => Promise<IpamIpAddress | null>;
   // IP Addresses
   createIpAddress: (data: IpamIpAddressFormData) => Promise<boolean>;
-  updateIpAddress: (id: string, data: IpamIpAddressFormData) => Promise<boolean>;
-  deleteIpAddress: (id: string) => Promise<boolean>;
+  updateIpAddress: (id: number, data: IpamIpAddressFormData) => Promise<boolean>;
+  deleteIpAddress: (id: number) => Promise<boolean>;
   // Tags
   tags: IpamTag[];
   tagsLoading: boolean;
@@ -401,7 +401,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const deleteRole = useCallback(async (id: string): Promise<boolean> => {
+  const deleteRole = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(deleteRoleThunk(id)).unwrap();
       addNotification('success', 'Role deleted', navigateAction('View Roles', 'ipam', 'roles'));
@@ -426,7 +426,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const deleteVrf = useCallback(async (id: string): Promise<boolean> => {
+  const deleteVrf = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(deleteVrfThunk(id)).unwrap();
       addNotification('success', 'VRF deleted', navigateAction('View VRFs', 'tenants', 'vrfs'));
@@ -516,7 +516,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const updateIpAddress = useCallback(async (id: string, data: IpamIpAddressFormData): Promise<boolean> => {
+  const updateIpAddress = useCallback(async (id: number, data: IpamIpAddressFormData): Promise<boolean> => {
     try {
       await dispatch(updateIpAddressThunk({ id, data })).unwrap();
       addNotification('success', 'IP address updated', navigateAction('View IPs', 'ipam', 'ips'));
@@ -528,7 +528,7 @@ export function useIpam(options: UseIpamOptions = {}): UseIpamReturn {
     }
   }, [dispatch]);
 
-  const deleteIpAddress = useCallback(async (id: string): Promise<boolean> => {
+  const deleteIpAddress = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(deleteIpAddressThunk(id)).unwrap();
       addNotification('success', 'IP address deleted', navigateAction('View IPs', 'ipam', 'ips'));

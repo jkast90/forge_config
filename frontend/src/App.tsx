@@ -387,7 +387,10 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
             }}
             onAddDiscoveredDevice={(device) => {
               setEditingDevice(null);
-              setInitialDeviceData(device);
+              setInitialDeviceData({
+                ...device,
+                topology_id: device.topology_id != null ? String(device.topology_id) : undefined,
+              });
               setShowDeviceForm(true);
               modalRoute.openModal('device-form');
             }}
@@ -497,7 +500,7 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
       <DeviceForm
         isOpen={showDeviceForm}
         device={editingDevice}
-        initialData={initialDeviceData}
+        initialData={initialDeviceData as Record<string, string> | null}
         onSubmit={handleSubmitDevice}
         onClose={handleCloseForm}
       />

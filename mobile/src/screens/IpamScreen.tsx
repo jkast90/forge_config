@@ -97,26 +97,26 @@ export function IpamScreen() {
 
   const parentPrefixOptions = useMemo(() => [
     { value: '', label: 'None (top-level)' },
-    ...prefixes.filter(p => p.is_supernet).map(p => ({ value: p.id.toString(), label: p.prefix })),
+    ...prefixes.filter(p => p.is_supernet).map(p => ({ value: p.id, label: p.prefix })),
   ], [prefixes]);
 
   const dcOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...datacenters.map(d => ({ value: String(d.id), label: d.name })),
+    ...datacenters.map(d => ({ value: d.id, label: d.name })),
   ], [datacenters]);
 
   const vrfOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...vrfs.map(v => ({ value: String(v.id), label: v.name })),
+    ...vrfs.map(v => ({ value: v.id, label: v.name })),
   ], [vrfs]);
 
   const roleOptions = useMemo(() =>
-    roles.map(r => ({ value: String(r.id), label: r.name })),
+    roles.map(r => ({ value: r.id, label: r.name })),
   [roles]);
 
   const prefixOptions = useMemo(() => [
     { value: '', label: 'Select prefix...' },
-    ...prefixes.map(p => ({ value: p.id.toString(), label: p.prefix })),
+    ...prefixes.map(p => ({ value: p.id, label: p.prefix })),
   ], [prefixes]);
 
   // Prefix CRUD
@@ -134,10 +134,10 @@ export function IpamScreen() {
       status: p.status,
       is_supernet: p.is_supernet,
       role_ids: p.role_ids || [],
-      parent_id: p.parent_id?.toString() || '',
-      datacenter_id: p.datacenter_id ? String(p.datacenter_id) : '',
-      vlan_id: p.vlan_id?.toString() || '',
-      vrf_id: p.vrf_id ? String(p.vrf_id) : '',
+      parent_id: p.parent_id ?? '',
+      datacenter_id: p.datacenter_id ?? '',
+      vlan_id: p.vlan_id ?? '',
+      vrf_id: p.vrf_id ?? '',
     });
     setShowPrefixForm(true);
   };
@@ -199,14 +199,14 @@ export function IpamScreen() {
     setIpForm({
       id: ip.id,
       address: ip.address,
-      prefix_id: ip.prefix_id.toString(),
+      prefix_id: ip.prefix_id,
       description: ip.description || '',
       status: ip.status,
       role_ids: ip.role_ids || [],
       dns_name: ip.dns_name || '',
-      device_id: ip.device_id != null ? String(ip.device_id) : '',
+      device_id: ip.device_id ?? '',
       interface_name: ip.interface_name || '',
-      vrf_id: ip.vrf_id ? String(ip.vrf_id) : '',
+      vrf_id: ip.vrf_id ?? '',
     });
     setShowIpForm(true);
   };
@@ -447,7 +447,7 @@ export function IpamScreen() {
         <FormSelect label="Parent Prefix" value={prefixForm.parent_id} options={parentPrefixOptions} onChange={v => setPrefixForm(p => ({ ...p, parent_id: v }))} />
         <FormSelect label="Datacenter" value={prefixForm.datacenter_id} options={dcOptions} onChange={v => setPrefixForm(p => ({ ...p, datacenter_id: v }))} />
         <FormSelect label="VRF" value={prefixForm.vrf_id} options={vrfOptions} onChange={v => setPrefixForm(p => ({ ...p, vrf_id: v }))} />
-        <FormInput label="VLAN ID" value={prefixForm.vlan_id} onChangeText={t => setPrefixForm(p => ({ ...p, vlan_id: t }))} placeholder="100" keyboardType="number-pad" />
+        <FormInput label="VLAN ID" value={String(prefixForm.vlan_id)} onChangeText={t => setPrefixForm(p => ({ ...p, vlan_id: t }))} placeholder="100" keyboardType="number-pad" />
       </FormModal>
 
       {/* IP Address Form */}
@@ -464,7 +464,7 @@ export function IpamScreen() {
         <FormSelect label="Status" value={ipForm.status} options={IPAM_IP_STATUS_OPTIONS as any} onChange={v => setIpForm(p => ({ ...p, status: v as IpamStatus }))} />
         <FormInput label="Description" value={ipForm.description} onChangeText={t => setIpForm(p => ({ ...p, description: t }))} placeholder="Loopback" />
         <FormInput label="DNS Name" value={ipForm.dns_name} onChangeText={t => setIpForm(p => ({ ...p, dns_name: t }))} placeholder="host.example.com" />
-        <FormInput label="Device ID" value={ipForm.device_id} onChangeText={t => setIpForm(p => ({ ...p, device_id: t }))} placeholder="Device MAC" />
+        <FormInput label="Device ID" value={String(ipForm.device_id)} onChangeText={t => setIpForm(p => ({ ...p, device_id: t }))} placeholder="Device MAC" />
         <FormInput label="Interface" value={ipForm.interface_name} onChangeText={t => setIpForm(p => ({ ...p, interface_name: t }))} placeholder="eth0" />
         <FormSelect label="VRF" value={ipForm.vrf_id} options={vrfOptions} onChange={v => setIpForm(p => ({ ...p, vrf_id: v }))} />
       </FormModal>

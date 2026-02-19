@@ -31,11 +31,11 @@ export function DeviceModelsScreen() {
   const [showForm, setShowForm] = useState(false);
   const [editingModel, setEditingModel] = useState<DeviceModel | null>(null);
   const [formData, setFormData] = useState<DeviceModelFormData>(EMPTY_DEVICE_MODEL_FORM);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const vendorOptions = useMemo(() => [
     { value: '', label: 'Select vendor...' },
-    ...vendors.map(v => ({ value: String(v.id), label: v.name })),
+    ...vendors.map(v => ({ value: v.id, label: v.name })),
   ], [vendors]);
 
   const handleAdd = () => {
@@ -47,8 +47,8 @@ export function DeviceModelsScreen() {
   const handleEdit = (model: DeviceModel) => {
     setEditingModel(model);
     setFormData({
-      id: String(model.id),
-      vendor_id: String(model.vendor_id),
+      id: model.id,
+      vendor_id: model.vendor_id,
       model: model.model,
       display_name: model.display_name,
       rack_units: model.rack_units,
@@ -60,12 +60,14 @@ export function DeviceModelsScreen() {
   const handleSubmit = async () => {
     if (!formData.model.trim()) { showError('Model name is required'); return; }
     if (!formData.vendor_id) { showError('Vendor is required'); return; }
+    const { id, vendor_id, ...rest } = formData;
+    const payload = { ...rest, vendor_id: Number(vendor_id) };
     const success = editingModel
-      ? await updateDeviceModel(editingModel.id, formData)
+      ? await updateDeviceModel(editingModel.id, payload)
       : await createDeviceModel({
-          ...formData,
-          id: formData.id || `${formData.vendor_id}-${formData.model}`.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-        });
+          ...payload,
+          id: id || `${vendor_id}-${formData.model}`.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        } as Partial<DeviceModel>);
     if (success) { setShowForm(false); setEditingModel(null); }
   };
 
@@ -179,7 +181,7 @@ export function DeviceModelsScreen() {
         <FormSelect label="Vendor *" value={formData.vendor_id} options={vendorOptions} onChange={v => setFormData(p => ({ ...p, vendor_id: v }))} />
         <FormInput label="Model *" value={formData.model} onChangeText={t => setFormData(p => ({ ...p, model: t }))} placeholder="CCS-720XP-48ZC2" />
         <FormInput label="Display Name" value={formData.display_name} onChangeText={t => setFormData(p => ({ ...p, display_name: t }))} placeholder="Arista 720XP-48ZC2" />
-        <FormInput label="ID" value={formData.id} onChangeText={t => setFormData(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingModel} />
+        <FormInput label="ID" value={formData.id != null ? String(formData.id) : ''} onChangeText={t => setFormData(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingModel} />
         <FormInput label="Rack Units" value={formData.rack_units.toString()} onChangeText={t => setFormData(p => ({ ...p, rack_units: parseInt(t, 10) || 1 }))} placeholder="1" keyboardType="number-pad" />
       </FormModal>
     </View>

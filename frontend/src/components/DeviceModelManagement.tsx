@@ -391,9 +391,14 @@ export function DeviceModelManagement() {
       rack_units: model.rack_units,
       layout: model.layout,
     }),
-    onCreate: (data) =>
-      createDeviceModel({ ...data, vendor_id: Number(data.vendor_id) }),
-    onUpdate: (id, data) => updateDeviceModel(id, { ...data, vendor_id: Number(data.vendor_id) }),
+    onCreate: (data) => {
+      const { id: _id, ...rest } = data;
+      return createDeviceModel({ ...rest, vendor_id: Number(data.vendor_id) });
+    },
+    onUpdate: (id, data) => {
+      const { id: _id, ...rest } = data;
+      return updateDeviceModel(Number(id), { ...rest, vendor_id: Number(data.vendor_id) });
+    },
     getItemId: (m) => String(m.id),
     modalName: 'device-model-form',
   });
@@ -414,7 +419,7 @@ export function DeviceModelManagement() {
   }, [modalRoute.modal, deviceModels]);
 
   const handleDelete = async (model: DeviceModel) => {
-    await deleteDeviceModel(String(model.id));
+    await deleteDeviceModel(model.id);
   };
 
   const handleLayoutChange = useCallback(

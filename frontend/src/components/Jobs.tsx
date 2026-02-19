@@ -525,7 +525,7 @@ export function Jobs() {
       output_parser_id: action.output_parser_id ? String(action.output_parser_id) : '',
     }),
     onCreate: (data) => {
-      const { output_parser_id, vendor_id, ...rest } = data;
+      const { id: _id, output_parser_id, vendor_id, ...rest } = data;
       return createAction({
         ...rest,
         vendor_id: Number(vendor_id),
@@ -533,7 +533,7 @@ export function Jobs() {
       });
     },
     onUpdate: (id, data) => {
-      const { output_parser_id, vendor_id, ...rest } = data;
+      const { id: _id, output_parser_id, vendor_id, ...rest } = data;
       return updateAction(id, {
         ...rest,
         vendor_id: Number(vendor_id),

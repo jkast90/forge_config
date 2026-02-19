@@ -115,7 +115,7 @@ export function DeviceFormFields({
           label="Vendor"
           value={formData.vendor}
           options={vendorOptions}
-          onChange={handleVendorChange}
+          onChange={(v) => handleVendorChange(String(v))}
           placeholder="Select Vendor..."
         />
         <ValidatedInput
@@ -142,7 +142,7 @@ export function DeviceFormFields({
           label="Config Template"
           value={formData.config_template}
           options={templateOptions}
-          onChange={(value) => onChange('config_template', value)}
+          onChange={(value) => onChange('config_template', String(value))}
           placeholder="Select Template..."
         />
       </Card>

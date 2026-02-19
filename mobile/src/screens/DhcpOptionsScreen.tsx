@@ -96,7 +96,7 @@ export function DhcpOptionsScreen() {
   // Filter options by vendor (client-side for immediate UI response)
   const filteredOptions = useMemo(() => {
     if (!filterVendor) return options;
-    return options.filter((opt) => !opt.vendor_id || opt.vendor_id === filterVendor);
+    return options.filter((opt) => !opt.vendor_id || String(opt.vendor_id) === filterVendor);
   }, [options, filterVendor]);
 
   // Group options
@@ -166,19 +166,21 @@ export function DhcpOptionsScreen() {
     }
 
     const optionData = {
-      id: formData.id || `opt-${Date.now()}`,
       option_number: formData.option_number,
       name: formData.name,
       value: formData.value,
       type: formData.type,
-      vendor_id: formData.vendor_id || undefined,
+      vendor_id: formData.vendor_id ? Number(formData.vendor_id) : undefined,
       description: formData.description || undefined,
       enabled: formData.enabled,
     };
 
     const success = editingOption
       ? await updateOption(editingOption.id, optionData)
-      : await createOption(optionData);
+      : await createOption({
+          ...optionData,
+          id: formData.id || `opt-${Date.now()}`,
+        } as Partial<DhcpOption>);
 
     if (success) {
       handleCloseForm();
@@ -195,7 +197,7 @@ export function DhcpOptionsScreen() {
     });
   };
 
-  const handleToggle = async (id: string) => {
+  const handleToggle = async (id: number) => {
     const option = options.find((o) => o.id === id);
     if (option) {
       await updateOption(id, { ...option, enabled: !option.enabled });

@@ -264,7 +264,7 @@ export function TestContainersScreen() {
           label="Vendor MAC Prefix"
           value={selectedVendorPrefix}
           options={vendorPrefixOptions}
-          onChange={handleVendorPrefixChange}
+          onChange={(v) => handleVendorPrefixChange(String(v))}
           placeholder="Random MAC"
         />
 
@@ -292,7 +292,7 @@ export function TestContainersScreen() {
           value={formData.vendor_class || ''}
           options={VENDOR_CLASS_OPTIONS}
           onChange={(value) =>
-            setFormData((prev) => ({ ...prev, vendor_class: value }))
+            setFormData((prev) => ({ ...prev, vendor_class: String(value) }))
           }
           placeholder="None"
         />

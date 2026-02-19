@@ -64,7 +64,7 @@ export function TemplatesScreen() {
   const filteredTemplates = useMemo(() => {
     if (!filterVendor) return templates;
     if (filterVendor === 'global') return templates.filter((t) => !t.vendor_id);
-    return templates.filter((t) => !t.vendor_id || t.vendor_id === filterVendor);
+    return templates.filter((t) => !t.vendor_id || String(t.vendor_id) === filterVendor);
   }, [templates, filterVendor]);
 
   // Group templates by vendor
@@ -87,7 +87,7 @@ export function TemplatesScreen() {
     return [
       { value: '', label: 'All Vendors' },
       { value: 'global', label: 'Global Only' },
-      ...vendors.map((v) => ({ value: String(v.id), label: v.name })),
+      ...vendors.map((v) => ({ value: v.id, label: v.name })),
     ];
   }, [vendors]);
 
@@ -148,10 +148,10 @@ export function TemplatesScreen() {
   const handleEdit = (template: Template) => {
     setEditingTemplate(template);
     setFormData({
-      id: String(template.id),
+      id: template.id,
       name: template.name,
       description: template.description || '',
-      vendor_id: template.vendor_id ? String(template.vendor_id) : '',
+      vendor_id: template.vendor_id ?? '',
       content: template.content,
     });
     setShowForm(true);
@@ -180,16 +180,18 @@ export function TemplatesScreen() {
     }
 
     const templateData = {
-      id: formData.id || formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
       name: formData.name,
       description: formData.description || undefined,
-      vendor_id: formData.vendor_id || undefined,
+      vendor_id: formData.vendor_id ? Number(formData.vendor_id) : undefined,
       content: formData.content,
     };
 
     const success = editingTemplate
       ? await updateTemplate(editingTemplate.id, templateData)
-      : await createTemplate(templateData);
+      : await createTemplate({
+          ...templateData,
+          id: formData.id || formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        } as Partial<Template>);
 
     if (success) {
       handleCloseForm();
@@ -291,7 +293,7 @@ export function TemplatesScreen() {
           label="Filter by Vendor"
           value={filterVendor}
           options={vendorSelectOptions}
-          onChange={setFilterVendor}
+          onChange={(v) => setFilterVendor(String(v))}
           placeholder="All Vendors"
         />
       </View>
@@ -335,7 +337,7 @@ export function TemplatesScreen() {
           value={formData.vendor_id}
           options={[
             { value: '', label: 'All Vendors (Global)' },
-            ...vendors.map((v) => ({ value: String(v.id), label: v.name })),
+            ...vendors.map((v) => ({ value: v.id, label: v.name })),
           ]}
           onChange={(value) => setFormData((prev) => ({ ...prev, vendor_id: value }))}
           placeholder="All Vendors (Global)"
@@ -384,7 +386,7 @@ export function TemplatesScreen() {
                 label="Select Device"
                 value={previewDeviceMAC}
                 options={deviceSelectOptions}
-                onChange={setPreviewDeviceMAC}
+                onChange={(v) => setPreviewDeviceMAC(String(v))}
                 placeholder="Select a device..."
               />
               <Button

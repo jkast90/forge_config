@@ -32,21 +32,21 @@ export function TopologiesScreen() {
   const [showForm, setShowForm] = useState(false);
   const [editingTopo, setEditingTopo] = useState<Topology | null>(null);
   const [formData, setFormData] = useState<TopologyFormData>(EMPTY_TOPOLOGY_FORM);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const regionOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...regions.map(r => ({ value: String(r.id), label: r.name })),
+    ...regions.map(r => ({ value: r.id, label: r.name })),
   ], [regions]);
 
   const campusOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...campuses.filter(c => !formData.region_id || String(c.region_id) === formData.region_id).map(c => ({ value: String(c.id), label: c.name })),
+    ...campuses.filter(c => !formData.region_id || c.region_id === Number(formData.region_id)).map(c => ({ value: c.id, label: c.name })),
   ], [campuses, formData.region_id]);
 
   const dcOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...datacenters.filter(d => !formData.campus_id || String(d.campus_id) === formData.campus_id).map(d => ({ value: String(d.id), label: d.name })),
+    ...datacenters.filter(d => !formData.campus_id || d.campus_id === Number(formData.campus_id)).map(d => ({ value: d.id, label: d.name })),
   ], [datacenters, formData.campus_id]);
 
   // Group devices by topology
@@ -70,24 +70,31 @@ export function TopologiesScreen() {
   const handleEdit = (topo: Topology) => {
     setEditingTopo(topo);
     setFormData({
-      id: String(topo.id),
+      id: topo.id,
       name: topo.name,
       description: topo.description || '',
-      region_id: topo.region_id ? String(topo.region_id) : '',
-      campus_id: topo.campus_id ? String(topo.campus_id) : '',
-      datacenter_id: topo.datacenter_id ? String(topo.datacenter_id) : '',
+      region_id: topo.region_id ?? '',
+      campus_id: topo.campus_id ?? '',
+      datacenter_id: topo.datacenter_id ?? '',
     });
     setShowForm(true);
   };
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) { showError('Topology name is required'); return; }
+    const { id, region_id, campus_id, datacenter_id, ...rest } = formData;
+    const payload = {
+      ...rest,
+      region_id: region_id ? Number(region_id) : undefined,
+      campus_id: campus_id ? Number(campus_id) : undefined,
+      datacenter_id: datacenter_id ? Number(datacenter_id) : undefined,
+    };
     const success = editingTopo
-      ? await updateTopology(editingTopo.id, formData)
+      ? await updateTopology(editingTopo.id, payload)
       : await createTopology({
-          ...formData,
-          id: formData.id || formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-        });
+          ...payload,
+          id: id || formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        } as Partial<Topology>);
     if (success) { setShowForm(false); setEditingTopo(null); }
   };
 
@@ -209,7 +216,7 @@ export function TopologiesScreen() {
         size="medium"
       >
         <FormInput label="Name *" value={formData.name} onChangeText={t => setFormData(p => ({ ...p, name: t }))} placeholder="DC1 Fabric" />
-        <FormInput label="ID" value={formData.id} onChangeText={t => setFormData(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingTopo} />
+        <FormInput label="ID" value={formData.id != null ? String(formData.id) : ''} onChangeText={t => setFormData(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingTopo} />
         <FormInput label="Description" value={formData.description} onChangeText={t => setFormData(p => ({ ...p, description: t }))} placeholder="Datacenter 1 CLOS fabric" />
         <FormSelect label="Region" value={formData.region_id} options={regionOptions} onChange={v => setFormData(p => ({ ...p, region_id: v }))} />
         <FormSelect label="Campus" value={formData.campus_id} options={campusOptions} onChange={v => setFormData(p => ({ ...p, campus_id: v }))} />

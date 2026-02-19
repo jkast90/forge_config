@@ -149,7 +149,7 @@ export function CredentialsScreen() {
           label="Type"
           value={formData.cred_type}
           options={CRED_TYPE_OPTIONS}
-          onChange={v => setFormData(p => ({ ...p, cred_type: v }))}
+          onChange={v => setFormData(p => ({ ...p, cred_type: String(v) }))}
         />
         <FormInput
           label="Username"

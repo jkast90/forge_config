@@ -48,8 +48,14 @@ export function VendorManagement() {
       vendor_class: vendor.vendor_class || '',
       default_template: vendor.default_template || '',
     }),
-    onCreate: (data) => createVendor({ ...data, name: data.name || slugify(data.name) }),
-    onUpdate: (id, data) => updateVendor(id, data),
+    onCreate: (data) => {
+      const { id: _id, ...rest } = data;
+      return createVendor({ ...rest, name: data.name || slugify(data.name) });
+    },
+    onUpdate: (id, data) => {
+      const { id: _id, ...rest } = data;
+      return updateVendor(id, rest);
+    },
     getItemId: (v) => String(v.id),
     modalName: 'vendor-form',
   });

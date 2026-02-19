@@ -93,10 +93,11 @@ export function VendorsScreen() {
   const handleEdit = (vendor: Vendor) => {
     setEditingVendor(vendor);
     setFormData({
-      id: String(vendor.id),
+      id: vendor.id,
       name: vendor.name,
       backup_command: vendor.backup_command,
       deploy_command: vendor.deploy_command || '',
+      diff_command: vendor.diff_command || '',
       ssh_port: vendor.ssh_port,
       ssh_user: vendor.ssh_user || '',
       ssh_pass: vendor.ssh_pass || '',
@@ -125,12 +126,13 @@ export function VendorsScreen() {
       return;
     }
 
+    const { id, ...rest } = formData;
     const success = editingVendor
-      ? await updateVendor(editingVendor.id, formData)
+      ? await updateVendor(editingVendor.id, rest)
       : await createVendor({
-          ...formData,
-          id: formData.id || formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-        });
+          ...rest,
+          id: id || formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        } as Partial<Vendor>);
 
     if (success) {
       handleCloseForm();
@@ -253,7 +255,7 @@ export function VendorsScreen() {
 
         <FormInput
           label="Vendor ID"
-          value={formData.id}
+          value={formData.id != null ? String(formData.id) : ''}
           onChangeText={(text) => setFormData((prev) => ({ ...prev, id: text }))}
           placeholder="acme (auto-generated)"
           editable={!editingVendor}

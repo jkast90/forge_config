@@ -1150,7 +1150,7 @@ export function TopologyManagement() {
       campus_id: data.campus_id ? Number(data.campus_id) : undefined,
       datacenter_id: data.datacenter_id ? Number(data.datacenter_id) : undefined,
     }),
-    onUpdate: (id, data) => updateTopology(id, {
+    onUpdate: (id, data) => updateTopology(Number(id), {
       name: data.name,
       description: data.description,
       region_id: data.region_id ? Number(data.region_id) : undefined,
@@ -1286,7 +1286,7 @@ export function TopologyManagement() {
   }, [modalRoute.modal, topologies]);
 
   const handleDelete = async (topology: Topology) => {
-    await deleteTopology(String(topology.id));
+    await deleteTopology(topology.id);
   };
 
   const handleDeleteWithDevices = async (topology: Topology) => {

@@ -24,8 +24,8 @@ export interface UseTopologiesReturn {
   error: string | null;
   refresh: () => Promise<void>;
   createTopology: (topology: Partial<Topology>) => Promise<boolean>;
-  updateTopology: (id: string, topology: Partial<Topology>) => Promise<boolean>;
-  deleteTopology: (id: string) => Promise<boolean>;
+  updateTopology: (id: number, topology: Partial<Topology>) => Promise<boolean>;
+  deleteTopology: (id: number) => Promise<boolean>;
 }
 
 export function useTopologies(options: UseTopologiesOptions = {}): UseTopologiesReturn {
@@ -61,7 +61,7 @@ export function useTopologies(options: UseTopologiesOptions = {}): UseTopologies
     }
   }, [dispatch]);
 
-  const updateTopology = useCallback(async (id: string, data: Partial<Topology>): Promise<boolean> => {
+  const updateTopology = useCallback(async (id: number, data: Partial<Topology>): Promise<boolean> => {
     try {
       await dispatch(updateTopologyThunk({ id, data })).unwrap();
       addNotification('success', 'Topology updated successfully', navigateAction('View Topologies', 'topologies'));
@@ -73,7 +73,7 @@ export function useTopologies(options: UseTopologiesOptions = {}): UseTopologies
     }
   }, [dispatch]);
 
-  const deleteTopology = useCallback(async (id: string): Promise<boolean> => {
+  const deleteTopology = useCallback(async (id: number): Promise<boolean> => {
     try {
       await dispatch(deleteTopologyThunk(id)).unwrap();
       addNotification('success', 'Topology deleted (devices unassigned)', navigateAction('View Topologies', 'topologies'));

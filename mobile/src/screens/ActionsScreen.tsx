@@ -54,11 +54,11 @@ export function ActionsScreen() {
 
   const vendorFilterOptions = useMemo(() => [
     { value: '', label: 'All Vendors' },
-    ...vendors.map(v => ({ value: String(v.id), label: v.name })),
+    ...vendors.map(v => ({ value: v.id, label: v.name })),
   ], [vendors]);
 
   const vendorOptions = useMemo(() =>
-    vendors.map(v => ({ value: String(v.id), label: v.name })),
+    vendors.map(v => ({ value: v.id, label: v.name })),
   [vendors]);
 
   const handleAdd = () => {
@@ -70,8 +70,8 @@ export function ActionsScreen() {
   const handleEdit = (action: VendorAction) => {
     setEditingAction(action);
     setFormData({
-      id: String(action.id),
-      vendor_id: String(action.vendor_id),
+      id: action.id,
+      vendor_id: action.vendor_id,
       label: action.label,
       command: action.command,
       sort_order: action.sort_order,
@@ -80,7 +80,7 @@ export function ActionsScreen() {
       webhook_method: action.webhook_method,
       webhook_headers: action.webhook_headers,
       webhook_body: action.webhook_body,
-      output_parser_id: action.output_parser_id ? String(action.output_parser_id) : '',
+      output_parser_id: action.output_parser_id ?? '',
     });
     setShowForm(true);
   };
@@ -170,7 +170,7 @@ export function ActionsScreen() {
             label="Filter by Vendor"
             value={vendorFilter}
             options={vendorFilterOptions}
-            onChange={setVendorFilter}
+            onChange={(v) => setVendorFilter(String(v))}
           />
         </View>
       </View>

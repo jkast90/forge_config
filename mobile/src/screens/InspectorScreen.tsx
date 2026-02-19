@@ -106,7 +106,7 @@ export function InspectorScreen() {
           label="Device"
           value={selectedDeviceId}
           options={deviceOptions}
-          onChange={setSelectedDeviceId}
+          onChange={(v) => setSelectedDeviceId(String(v))}
           placeholder="Select a device..."
         />
         <View style={styles.actionRow}>

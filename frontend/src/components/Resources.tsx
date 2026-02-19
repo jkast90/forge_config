@@ -299,7 +299,7 @@ function VrfsTab({ vrfs, tenants, ipam }: {
 
   const handleDelete = useCallback(async (vrf: IpamVrf) => {
     if (!(await confirm({ title: 'Delete VRF', message: `Delete VRF "${vrf.name}"? Prefixes in this VRF will become global.`, confirmText: 'Delete', destructive: true }))) return;
-    await ipam.deleteVrf(String(vrf.id));
+    await ipam.deleteVrf(vrf.id);
   }, [confirm, ipam]);
 
   const columns: TableColumn<IpamVrf>[] = useMemo(() => [

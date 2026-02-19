@@ -598,7 +598,7 @@ export function DevicesHubScreen() {
           label="Vendor MAC Prefix"
           value={selectedVendorPrefix}
           options={vendorPrefixOptions}
-          onChange={handleVendorPrefixChange}
+          onChange={(v) => handleVendorPrefixChange(String(v))}
           placeholder="Random MAC"
         />
 
@@ -623,7 +623,7 @@ export function DevicesHubScreen() {
           label="DHCP Vendor Class"
           value={spawnFormData.vendor_class || ''}
           options={VENDOR_CLASS_OPTIONS}
-          onChange={(value) => setSpawnFormData((prev) => ({ ...prev, vendor_class: value }))}
+          onChange={(value) => setSpawnFormData((prev) => ({ ...prev, vendor_class: String(value) }))}
           placeholder="None"
         />
 

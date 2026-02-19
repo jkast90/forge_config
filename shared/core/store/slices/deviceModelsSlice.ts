@@ -24,12 +24,12 @@ export const createDeviceModel = createAsyncThunk('deviceModels/create', async (
 
 export const updateDeviceModel = createAsyncThunk(
   'deviceModels/update',
-  async ({ id, data }: { id: string; data: Partial<DeviceModel> }) => {
+  async ({ id, data }: { id: number; data: Partial<DeviceModel> }) => {
     return getServices().deviceModels.update(id, data);
   }
 );
 
-export const deleteDeviceModel = createAsyncThunk('deviceModels/delete', async (id: string) => {
+export const deleteDeviceModel = createAsyncThunk('deviceModels/delete', async (id: number) => {
   await getServices().deviceModels.remove(id);
   return id;
 });

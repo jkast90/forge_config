@@ -706,7 +706,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
 
     let success: boolean;
     if (editingIp) {
-      success = await ipam.updateIpAddress(String(editingIp.id), form);
+      success = await ipam.updateIpAddress(editingIp.id, form);
     } else {
       success = await ipam.createIpAddress(form);
     }
@@ -715,7 +715,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
 
   const handleDelete = useCallback(async (ip: IpamIpAddress) => {
     if (!(await confirm({ title: 'Delete IP Address', message: `Delete IP ${ip.address}?`, confirmText: 'Delete', destructive: true }))) return;
-    await ipam.deleteIpAddress(String(ip.id));
+    await ipam.deleteIpAddress(ip.id);
   }, [ipam]);
 
   const columns: TableColumn<IpamIpAddress>[] = useMemo(() => [
@@ -837,7 +837,7 @@ function RolesTab({ roles, ipam }: {
 
   const handleDelete = useCallback(async (role: IpamRole) => {
     if (!(await confirm({ title: 'Delete Role', message: `Delete role "${role.name}"?`, confirmText: 'Delete', destructive: true }))) return;
-    await ipam.deleteRole(String(role.id));
+    await ipam.deleteRole(role.id);
   }, [ipam]);
 
   const columns: TableColumn<IpamRole>[] = useMemo(() => [

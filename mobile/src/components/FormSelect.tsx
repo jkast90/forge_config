@@ -11,16 +11,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../context';
 
-interface Option {
-  value: string;
+export interface Option {
+  value: string | number;
   label: string;
 }
 
 interface Props {
   label: string;
-  value: string;
+  value: string | number;
   options: readonly Option[];
-  onChange: (value: string) => void;
+  onChange: (value: string | number) => void;
   placeholder?: string;
   error?: string;
 }
@@ -39,7 +39,7 @@ export function FormSelect({
   const selectedOption = options.find((opt) => opt.value === value);
   const displayText = selectedOption?.label || placeholder;
 
-  const handleSelect = (optionValue: string) => {
+  const handleSelect = (optionValue: string | number) => {
     onChange(optionValue);
     setIsOpen(false);
   };
@@ -86,7 +86,7 @@ export function FormSelect({
               </View>
               <FlatList
                 data={options}
-                keyExtractor={(item) => item.value}
+                keyExtractor={(item) => String(item.value)}
                 renderItem={({ item }) => (
                   <Pressable
                     style={[

@@ -62,13 +62,13 @@ export function LocationsScreen() {
   const [dcForm, setDcForm] = useState<IpamDatacenterFormData>({ id: '', name: '', description: '', campus_id: '' });
   const [hallForm, setHallForm] = useState<IpamHallFormData>({ id: '', name: '', description: '', datacenter_id: '' });
   const [rowForm, setRowForm] = useState<IpamRowFormData>({ id: '', name: '', description: '', hall_id: '' });
-  const [rackForm, setRackForm] = useState<IpamRackFormData>({ id: '', name: '', description: '', row_id: '' });
+  const [rackForm, setRackForm] = useState<IpamRackFormData>({ id: '', name: '', description: '', row_id: '', width_cm: 60, height_ru: 42, depth_cm: 120 });
 
-  const regionOptions = useMemo(() => regions.map(r => ({ value: String(r.id), label: r.name })), [regions]);
-  const campusOptions = useMemo(() => campuses.map(c => ({ value: String(c.id), label: c.name })), [campuses]);
-  const dcOptions = useMemo(() => datacenters.map(d => ({ value: String(d.id), label: d.name })), [datacenters]);
-  const hallOptions = useMemo(() => halls.map(h => ({ value: String(h.id), label: h.name })), [halls]);
-  const rowOptions = useMemo(() => rows.map(r => ({ value: String(r.id), label: r.name })), [rows]);
+  const regionOptions = useMemo(() => regions.map(r => ({ value: r.id, label: r.name })), [regions]);
+  const campusOptions = useMemo(() => campuses.map(c => ({ value: c.id, label: c.name })), [campuses]);
+  const dcOptions = useMemo(() => datacenters.map(d => ({ value: d.id, label: d.name })), [datacenters]);
+  const hallOptions = useMemo(() => halls.map(h => ({ value: h.id, label: h.name })), [halls]);
+  const rowOptions = useMemo(() => rows.map(r => ({ value: r.id, label: r.name })), [rows]);
 
   const handleAdd = () => {
     setEditingId(null);
@@ -78,7 +78,7 @@ export function LocationsScreen() {
       case 'datacenters': setDcForm({ id: '', name: '', description: '', campus_id: '' }); break;
       case 'halls': setHallForm({ id: '', name: '', description: '', datacenter_id: '' }); break;
       case 'rows': setRowForm({ id: '', name: '', description: '', hall_id: '' }); break;
-      case 'racks': setRackForm({ id: '', name: '', description: '', row_id: '' }); break;
+      case 'racks': setRackForm({ id: '', name: '', description: '', row_id: '', width_cm: 60, height_ru: 42, depth_cm: 120 }); break;
     }
     setShowForm(true);
   };
@@ -133,12 +133,12 @@ export function LocationsScreen() {
   const handleEdit = (item: any) => {
     setEditingId(String(item.id));
     switch (activeTab) {
-      case 'regions': setRegionForm({ id: String(item.id), name: item.name, description: item.description || '' }); break;
-      case 'campuses': setCampusForm({ id: String(item.id), name: item.name, description: item.description || '', region_id: String(item.region_id) }); break;
-      case 'datacenters': setDcForm({ id: String(item.id), name: item.name, description: item.description || '', campus_id: String(item.campus_id) }); break;
-      case 'halls': setHallForm({ id: String(item.id), name: item.name, description: item.description || '', datacenter_id: String(item.datacenter_id) }); break;
-      case 'rows': setRowForm({ id: String(item.id), name: item.name, description: item.description || '', hall_id: String(item.hall_id) }); break;
-      case 'racks': setRackForm({ id: String(item.id), name: item.name, description: item.description || '', row_id: String(item.row_id) }); break;
+      case 'regions': setRegionForm({ id: item.id, name: item.name, description: item.description || '' }); break;
+      case 'campuses': setCampusForm({ id: item.id, name: item.name, description: item.description || '', region_id: item.region_id }); break;
+      case 'datacenters': setDcForm({ id: item.id, name: item.name, description: item.description || '', campus_id: item.campus_id }); break;
+      case 'halls': setHallForm({ id: item.id, name: item.name, description: item.description || '', datacenter_id: item.datacenter_id }); break;
+      case 'rows': setRowForm({ id: item.id, name: item.name, description: item.description || '', hall_id: item.hall_id }); break;
+      case 'racks': setRackForm({ id: item.id, name: item.name, description: item.description || '', row_id: item.row_id, width_cm: item.width_cm ?? 60, height_ru: item.height_ru ?? 42, depth_cm: item.depth_cm ?? 120 }); break;
     }
     setShowForm(true);
   };
@@ -209,42 +209,42 @@ export function LocationsScreen() {
       case 'regions':
         return <>
           <FormInput label="Name *" value={regionForm.name} onChangeText={t => setRegionForm(p => ({ ...p, name: t }))} placeholder="US East" />
-          <FormInput label="ID" value={regionForm.id} onChangeText={t => setRegionForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
+          <FormInput label="ID" value={String(regionForm.id ?? '')} onChangeText={t => setRegionForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
           <FormInput label="Description" value={regionForm.description} onChangeText={t => setRegionForm(p => ({ ...p, description: t }))} placeholder="Eastern US region" />
         </>;
       case 'campuses':
         return <>
           <FormInput label="Name *" value={campusForm.name} onChangeText={t => setCampusForm(p => ({ ...p, name: t }))} placeholder="Main Campus" />
           <FormSelect label="Region *" value={campusForm.region_id} options={regionOptions} onChange={v => setCampusForm(p => ({ ...p, region_id: v }))} />
-          <FormInput label="ID" value={campusForm.id} onChangeText={t => setCampusForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
+          <FormInput label="ID" value={String(campusForm.id ?? '')} onChangeText={t => setCampusForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
           <FormInput label="Description" value={campusForm.description} onChangeText={t => setCampusForm(p => ({ ...p, description: t }))} />
         </>;
       case 'datacenters':
         return <>
           <FormInput label="Name *" value={dcForm.name} onChangeText={t => setDcForm(p => ({ ...p, name: t }))} placeholder="DC-1" />
           <FormSelect label="Campus *" value={dcForm.campus_id} options={campusOptions} onChange={v => setDcForm(p => ({ ...p, campus_id: v }))} />
-          <FormInput label="ID" value={dcForm.id} onChangeText={t => setDcForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
+          <FormInput label="ID" value={String(dcForm.id ?? '')} onChangeText={t => setDcForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
           <FormInput label="Description" value={dcForm.description} onChangeText={t => setDcForm(p => ({ ...p, description: t }))} />
         </>;
       case 'halls':
         return <>
           <FormInput label="Name *" value={hallForm.name} onChangeText={t => setHallForm(p => ({ ...p, name: t }))} placeholder="Hall A" />
           <FormSelect label="Datacenter *" value={hallForm.datacenter_id} options={dcOptions} onChange={v => setHallForm(p => ({ ...p, datacenter_id: v }))} />
-          <FormInput label="ID" value={hallForm.id} onChangeText={t => setHallForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
+          <FormInput label="ID" value={String(hallForm.id ?? '')} onChangeText={t => setHallForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
           <FormInput label="Description" value={hallForm.description} onChangeText={t => setHallForm(p => ({ ...p, description: t }))} />
         </>;
       case 'rows':
         return <>
           <FormInput label="Name *" value={rowForm.name} onChangeText={t => setRowForm(p => ({ ...p, name: t }))} placeholder="Row 1" />
           <FormSelect label="Hall *" value={rowForm.hall_id} options={hallOptions} onChange={v => setRowForm(p => ({ ...p, hall_id: v }))} />
-          <FormInput label="ID" value={rowForm.id} onChangeText={t => setRowForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
+          <FormInput label="ID" value={String(rowForm.id ?? '')} onChangeText={t => setRowForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
           <FormInput label="Description" value={rowForm.description} onChangeText={t => setRowForm(p => ({ ...p, description: t }))} />
         </>;
       case 'racks':
         return <>
           <FormInput label="Name *" value={rackForm.name} onChangeText={t => setRackForm(p => ({ ...p, name: t }))} placeholder="Rack A1" />
           <FormSelect label="Row *" value={rackForm.row_id} options={rowOptions} onChange={v => setRackForm(p => ({ ...p, row_id: v }))} />
-          <FormInput label="ID" value={rackForm.id} onChangeText={t => setRackForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
+          <FormInput label="ID" value={String(rackForm.id ?? '')} onChangeText={t => setRackForm(p => ({ ...p, id: t }))} placeholder="Auto-generated" editable={!editingId} />
           <FormInput label="Description" value={rackForm.description} onChangeText={t => setRackForm(p => ({ ...p, description: t }))} />
         </>;
     }
@@ -274,7 +274,7 @@ export function LocationsScreen() {
 
       <FlatList
         data={dataMap[activeTab]}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
         ListEmptyComponent={
           <EmptyState
