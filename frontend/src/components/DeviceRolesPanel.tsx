@@ -101,7 +101,7 @@ export function DeviceRolesPanel({ deviceRoles, templates, groups, loading, onCr
         if (names.length === 0) return <span className="text-muted">None</span>;
         return (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-            {names.map(name => Cell.badge(name, 'default'))}
+            {names.map(name => <span key={name}>{Cell.badge(name, 'default')}</span>)}
           </div>
         );
       },
@@ -114,7 +114,7 @@ export function DeviceRolesPanel({ deviceRoles, templates, groups, loading, onCr
         if (names.length === 0) return <span className="text-muted">None</span>;
         return (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-            {names.map(name => Cell.badge(name, 'default'))}
+            {names.map(name => <span key={name}>{Cell.badge(name, 'default')}</span>)}
           </div>
         );
       },

@@ -222,7 +222,8 @@ function SliceContent({ config }: { config: SliceConfig }) {
   const items = useAppSelector(config.getItems);
   const loading = useAppSelector(config.isLoading);
   const error = useAppSelector(config.getError);
-  const state = useAppSelector((s) => s);
+  const settingsData = useAppSelector((s) => s.settings.data);
+  const backupsByDevice = useAppSelector((s) => s.backups.byDevice);
 
   if (error) {
     return (
@@ -239,11 +240,11 @@ function SliceContent({ config }: { config: SliceConfig }) {
 
   // Special renderers
   if (config.id === 'settings') {
-    return <SettingsView data={state.settings.data} />;
+    return <SettingsView data={settingsData} />;
   }
 
   if (config.id === 'backups') {
-    return <BackupsView byDevice={state.backups.byDevice} />;
+    return <BackupsView byDevice={backupsByDevice} />;
   }
 
   if (items.length === 0) {
