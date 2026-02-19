@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useTemplates, useGroups, useDeviceVariables, useCredentials, useDeviceRoles, usePersistedTab } from '@core';
 import { Card } from './Card';
+import { RefreshButton } from './Button';
 import { InfoSection } from './InfoSection';
 import { SideTabs } from './SideTabs';
 import type { SideTab } from './SideTabs';
@@ -17,10 +18,17 @@ export function ConfigManagement() {
   const [showInfo, setShowInfo] = useState(false);
   const [activeTab, setActiveTab] = usePersistedTab<Tab>('templates', ['templates', 'roles', 'groups', 'variables', 'inspector', 'credentials'], 'tab_config');
   const { templates } = useTemplates();
-  const { groups } = useGroups();
-  const { keys: variableKeys } = useDeviceVariables();
+  const { groups, refresh: refreshGroups } = useGroups();
+  const { keys: variableKeys, refresh: refreshVariables } = useDeviceVariables();
   const { credentials, loading: credentialsLoading, refresh: refreshCredentials, createCredential, updateCredential, deleteCredential } = useCredentials();
   const { deviceRoles, loading: rolesLoading, refresh: refreshRoles, createDeviceRole, updateDeviceRole, deleteDeviceRole } = useDeviceRoles();
+
+  const handleRefresh = useCallback(() => {
+    refreshGroups();
+    refreshVariables();
+    refreshCredentials();
+    refreshRoles();
+  }, [refreshGroups, refreshVariables, refreshCredentials, refreshRoles]);
 
   const tabs: SideTab[] = [
     { id: 'templates', label: 'Templates', icon: 'description', count: templates.length },
@@ -32,7 +40,7 @@ export function ConfigManagement() {
   ];
 
   return (
-    <Card title="Configuration" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+    <Card title="Configuration" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />} headerAction={<RefreshButton onClick={handleRefresh} />}>
       <InfoSection open={showInfo}>
         <div>
           <p>
@@ -64,7 +72,6 @@ export function ConfigManagement() {
             onCreate={createDeviceRole}
             onUpdate={updateDeviceRole}
             onDelete={deleteDeviceRole}
-            onRefresh={refreshRoles}
           />
         )}
         {activeTab === 'groups' && <GroupManagement />}
@@ -77,7 +84,6 @@ export function ConfigManagement() {
             onCreate={createCredential}
             onUpdate={updateCredential}
             onDelete={deleteCredential}
-            onRefresh={refreshCredentials}
           />
         )}
       </SideTabs>

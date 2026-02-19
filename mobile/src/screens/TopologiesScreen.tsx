@@ -36,17 +36,17 @@ export function TopologiesScreen() {
 
   const regionOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...regions.map(r => ({ value: r.id, label: r.name })),
+    ...regions.map(r => ({ value: String(r.id), label: r.name })),
   ], [regions]);
 
   const campusOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...campuses.filter(c => !formData.region_id || c.region_id === formData.region_id).map(c => ({ value: c.id, label: c.name })),
+    ...campuses.filter(c => !formData.region_id || String(c.region_id) === formData.region_id).map(c => ({ value: String(c.id), label: c.name })),
   ], [campuses, formData.region_id]);
 
   const dcOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...datacenters.filter(d => !formData.campus_id || d.campus_id === formData.campus_id).map(d => ({ value: d.id, label: d.name })),
+    ...datacenters.filter(d => !formData.campus_id || String(d.campus_id) === formData.campus_id).map(d => ({ value: String(d.id), label: d.name })),
   ], [datacenters, formData.campus_id]);
 
   // Group devices by topology
@@ -70,12 +70,12 @@ export function TopologiesScreen() {
   const handleEdit = (topo: Topology) => {
     setEditingTopo(topo);
     setFormData({
-      id: topo.id,
+      id: String(topo.id),
       name: topo.name,
       description: topo.description || '',
-      region_id: topo.region_id || '',
-      campus_id: topo.campus_id || '',
-      datacenter_id: topo.datacenter_id || '',
+      region_id: topo.region_id ? String(topo.region_id) : '',
+      campus_id: topo.campus_id ? String(topo.campus_id) : '',
+      datacenter_id: topo.datacenter_id ? String(topo.datacenter_id) : '',
     });
     setShowForm(true);
   };
@@ -194,7 +194,7 @@ export function TopologiesScreen() {
 
       <FlatList
         data={topologies}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderTopology}
         ListEmptyComponent={<EmptyState message="No topologies" actionLabel="Add Topology" onAction={handleAdd} />}
         contentContainerStyle={topologies.length === 0 ? styles.emptyList : undefined}

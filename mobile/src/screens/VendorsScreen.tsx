@@ -46,12 +46,14 @@ function getDefaultBackupCommand(vendorId: string): string {
 const DEFAULT_VENDORS: Omit<Vendor, 'created_at' | 'updated_at'>[] = getVendorSelectOptions()
   .filter((v) => v.value !== '')
   .map((v) => ({
-    id: v.value,
+    id: v.value as unknown as number,
     name: v.label,
     backup_command: getDefaultBackupCommand(v.value),
     deploy_command: '',
+    diff_command: '',
     ssh_port: 22,
     mac_prefixes: [],
+    group_names: [],
   }));
 
 export function VendorsScreen() {
@@ -91,7 +93,7 @@ export function VendorsScreen() {
   const handleEdit = (vendor: Vendor) => {
     setEditingVendor(vendor);
     setFormData({
-      id: vendor.id,
+      id: String(vendor.id),
       name: vendor.name,
       backup_command: vendor.backup_command,
       deploy_command: vendor.deploy_command || '',
@@ -221,7 +223,7 @@ export function VendorsScreen() {
 
       <FlatList
         data={vendorsWithStats}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderVendor}
         ListEmptyComponent={
           <EmptyState

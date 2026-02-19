@@ -13,10 +13,9 @@ import type {
   IpamIpAddress, IpamIpAddressFormData,
   IpamRole, IpamVrf, IpamTag,
 } from '@core';
-import { ActionBar } from './ActionBar';
-import { Button } from './Button';
+import { Button, RefreshButton } from './Button';
 import { Card } from './Card';
-import { Checkbox } from './Checkbox';
+import { Toggle } from './Toggle';
 import { IconButton } from './IconButton';
 import { InfoSection } from './InfoSection';
 import { LoadingState } from './LoadingState';
@@ -27,7 +26,6 @@ import { Table } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { PlusIcon, TrashIcon, EditIcon, Icon } from './Icon';
 import { ValidatedInput } from './ValidatedInput';
-import { Toggle } from './Toggle';
 import { SideTabs } from './SideTabs';
 import type { SideTab } from './SideTabs';
 import { useConfirm } from './ConfirmDialog';
@@ -45,14 +43,13 @@ export function IpamManagement() {
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading IPAM data...">
-      <ActionBar>
-        <Button variant="secondary" onClick={ipam.refresh}>
-          <Icon name="refresh" size={16} />
-          Refresh
-        </Button>
-      </ActionBar>
-
-      <Card title="IP Address Management" headerAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="IP Address Management"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <RefreshButton onClick={ipam.refresh} />
+        }
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>
@@ -122,6 +119,7 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
   ipam: ReturnType<typeof useIpam>;
 }) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
+  const [showInfo, setShowInfo] = useState(false);
   const [selectedPrefixId, setSelectedPrefixId] = useState<number | null>(null);
   const [showPrefixForm, setShowPrefixForm] = useState(false);
   const [editingPrefix, setEditingPrefix] = useState<IpamPrefix | null>(null);
@@ -323,22 +321,26 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
 
   return (
     <>
-      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '0', minHeight: '500px' }}>
-        {/* Left: prefix tree */}
-        <div style={{ borderRight: '1px solid var(--border-color)' }}>
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontWeight: 600, fontSize: '13px', opacity: 0.7 }}>PREFIXES ({prefixes.length})</span>
-            <Button size="sm" onClick={handleOpenCreate}><PlusIcon size={14} /> Add</Button>
-          </div>
-          <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-color)' }}>
-            <input
-              type="text"
-              value={prefixSearch}
-              onChange={(e) => setPrefixSearch(e.target.value)}
-              placeholder="Filter prefixes..."
-              style={{ width: '100%', padding: '5px 8px', fontSize: '12px', border: '1px solid var(--border-color)', borderRadius: '4px', background: 'var(--input-bg, transparent)', color: 'inherit' }}
-            />
-          </div>
+      <Card
+        title="Prefixes"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={<Button onClick={handleOpenCreate}><PlusIcon size={14} />Add Prefix</Button>}
+      >
+        <InfoSection open={showInfo}>
+          <p>Prefixes define your IP address space in CIDR notation. Organize them in a hierarchy of supernets and child subnets. Select a prefix to view details, allocate child prefixes or IPs, and manage tags.</p>
+        </InfoSection>
+        <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '0', minHeight: '500px' }}>
+          {/* Left: prefix tree */}
+          <div style={{ borderRight: '1px solid var(--color-border)' }}>
+            <div style={{ padding: '6px 12px', borderBottom: '1px solid var(--color-border)' }}>
+              <input
+                type="text"
+                value={prefixSearch}
+                onChange={(e) => setPrefixSearch(e.target.value)}
+                placeholder="Filter prefixes..."
+                style={{ width: '100%', padding: '5px 8px', fontSize: '12px', border: '1px solid var(--color-border)', borderRadius: '4px', background: 'var(--color-bg-input, transparent)', color: 'inherit' }}
+              />
+            </div>
           {filteredPrefixTree.length === 0 ? (
             <div style={{ padding: '24px 16px', textAlign: 'center', opacity: 0.6, fontSize: '13px' }}>
               {prefixSearch ? 'No matching prefixes.' : 'No prefixes defined yet.'}
@@ -427,6 +429,7 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
           )}
         </div>
       </div>
+      </Card>
 
       {/* Create/Edit Prefix Modal */}
       <FormDialog isOpen={showPrefixForm} onClose={() => setShowPrefixForm(false)} title={editingPrefix ? 'Edit Prefix' : 'Create Prefix'} onSubmit={(e) => { e.preventDefault(); handleSubmitPrefix(); }} submitText={editingPrefix ? 'Update' : 'Create'} variant="wide">
@@ -445,7 +448,7 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Roles</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {roles.map(r => (
-                <Checkbox
+                <Toggle
                   key={r.id}
                   label={r.name}
                   checked={prefixForm.role_ids.includes(r.id)}
@@ -481,7 +484,7 @@ function PrefixesTab({ prefixes, datacenters, vrfs, roles, ipam }: {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '4px' }}>Roles</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {roles.map(r => (
-                <Checkbox
+                <Toggle
                   key={r.id}
                   label={r.name}
                   checked={allocateIpRoles.includes(String(r.id))}
@@ -646,6 +649,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
   ipam: ReturnType<typeof useIpam>;
 }) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingIp, setEditingIp] = useState<IpamIpAddress | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -735,6 +739,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
     <>
       <Card
         title="IP Addresses"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
         headerAction={
           <Button variant="primary" onClick={handleOpenCreate}>
             <PlusIcon size={14} />
@@ -742,6 +747,9 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
           </Button>
         }
       >
+        <InfoSection open={showInfo}>
+          <p>Individual IP address allocations within prefixes. Each address can be assigned to a device, role, and VRF.</p>
+        </InfoSection>
         <Table
           data={ipAddresses}
           columns={columns}
@@ -768,7 +776,7 @@ function IpAddressesTab({ ipAddresses, prefixes, roles, vrfs, devices, ipam }: {
               {roleOptions.map(opt => {
                 const numericId = Number(opt.value);
                 return (
-                  <Checkbox
+                  <Toggle
                     key={opt.value}
                     label={opt.label}
                     checked={form.role_ids.includes(numericId)}
@@ -807,6 +815,7 @@ function RolesTab({ roles, ipam }: {
   ipam: ReturnType<typeof useIpam>;
 }) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [roleId, setRoleId] = useState('');
   const [roleName, setRoleName] = useState('');
@@ -845,6 +854,7 @@ function RolesTab({ roles, ipam }: {
     <>
       <Card
         title="Roles"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
         headerAction={
           <Button variant="primary" onClick={() => setShowForm(true)}>
             <PlusIcon size={14} />
@@ -852,6 +862,9 @@ function RolesTab({ roles, ipam }: {
           </Button>
         }
       >
+        <InfoSection open={showInfo}>
+          <p>Roles categorize IP address assignments by function (e.g., loopback, management, transit). Roles can be assigned to individual IP addresses.</p>
+        </InfoSection>
         <Table
           data={roles}
           columns={columns}
@@ -887,6 +900,7 @@ function TagsTab({ ipam, prefixes }: {
   prefixes: IpamPrefix[];
 }) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [tagResourceType, setTagResourceType] = useState('prefix');
   const [tagResourceId, setTagResourceId] = useState('');
@@ -953,6 +967,7 @@ function TagsTab({ ipam, prefixes }: {
     <>
       <Card
         title="Tags"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
         headerAction={
           <Button variant="primary" onClick={() => { ipam.fetchTagKeys(); setShowForm(true); }}>
             <PlusIcon size={14} />
@@ -960,6 +975,9 @@ function TagsTab({ ipam, prefixes }: {
           </Button>
         }
       >
+        <InfoSection open={showInfo}>
+          <p>Tags are key-value pairs attached to IPAM resources for flexible querying and filtering. Tags can be applied to prefixes and other IPAM objects.</p>
+        </InfoSection>
         <LoadingState loading={ipam.allTagsLoading} loadingMessage="Loading tags...">
           <Table
             data={ipam.allTags}

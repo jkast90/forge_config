@@ -4,8 +4,6 @@ export {
   lightTheme,
   plainTheme,
   solarizedTheme,
-  draculaTheme,
-  nordTheme,
   evergreenDarkTheme,
   evergreenLightTheme,
   oceanDarkTheme,

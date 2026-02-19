@@ -17,12 +17,13 @@ fn map_job_row(row: &SqliteRow) -> Job {
         started_at: row.get("started_at"),
         completed_at: row.get("completed_at"),
         credential_id: row.get("credential_id"),
+        triggered_by: row.try_get("triggered_by").unwrap_or_else(|_| "manual".to_string()),
     }
 }
 
 const SELECT_JOB: &str = r#"
     SELECT id, job_type, device_id, command, status, output, error,
-           created_at, started_at, completed_at, credential_id
+           created_at, started_at, completed_at, credential_id, triggered_by
     FROM jobs
 "#;
 
@@ -33,8 +34,8 @@ impl JobRepo {
         let now = Utc::now();
         sqlx::query(
             r#"
-            INSERT INTO jobs (id, job_type, device_id, command, status, created_at, credential_id)
-            VALUES (?, ?, ?, ?, 'queued', ?, ?)
+            INSERT INTO jobs (id, job_type, device_id, command, status, created_at, credential_id, triggered_by)
+            VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)
             "#,
         )
         .bind(id)
@@ -43,6 +44,7 @@ impl JobRepo {
         .bind(&req.command)
         .bind(now)
         .bind(&req.credential_id)
+        .bind(&req.triggered_by)
         .execute(pool)
         .await?;
 

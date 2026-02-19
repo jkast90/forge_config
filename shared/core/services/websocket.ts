@@ -14,7 +14,9 @@ export type WebSocketEventType =
   | 'job_queued'
   | 'job_started'
   | 'job_completed'
-  | 'job_failed';
+  | 'job_failed'
+  | 'system_broadcast'
+  | 'message';
 
 export interface DeviceDiscoveredPayload {
   mac: string;

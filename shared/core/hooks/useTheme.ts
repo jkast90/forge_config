@@ -14,13 +14,11 @@ export interface ThemeConfig {
 }
 
 export const THEME_OPTIONS: ThemeConfig[] = [
-  { value: 'dark', icon: 'dark_mode', label: 'Dark', description: 'Dark background with blue accents' },
-  { value: 'light', icon: 'light_mode', label: 'Light', description: 'Light background with blue accents' },
-  { value: 'plain', icon: 'check_box_outline_blank', label: 'Plain', description: 'Minimal styling, no gradients' },
-  { value: 'solarized', icon: 'wb_sunny', label: 'Solarized', description: 'Ethan Schoonover\'s iconic palette' },
-  { value: 'dracula', icon: 'nights_stay', label: 'Dracula', description: 'Dark theme with vibrant colors' },
-  { value: 'nord', icon: 'ac_unit', label: 'Nord', description: 'Arctic, north-bluish color palette' },
-  { value: 'evergreen-dark', icon: 'forest', label: 'Evergreen Dark', description: 'Deep forest greens, dark mode' },
+  { value: 'dark', icon: 'dark_mode', label: 'Dark', description: 'Pitch dark background with RGB cyan accents' },
+  { value: 'light', icon: 'light_mode', label: 'Light', description: 'Soft white background with cyan accents' },
+  { value: 'plain', icon: 'tonality', label: 'Mid', description: 'Gray background with deep cyan accents' },
+  { value: 'solarized', icon: 'water', label: 'Cyan Monochrome', description: 'Deep cyan-teal background, cyan elements' },
+{ value: 'evergreen-dark', icon: 'forest', label: 'Evergreen Dark', description: 'Deep forest greens, dark mode' },
   { value: 'evergreen-light', icon: 'park', label: 'Evergreen Light', description: 'Fresh forest greens, light mode' },
   { value: 'ocean-dark', icon: 'water', label: 'Ocean Dark', description: 'Deep sea blues, dark mode (I\'m blue da ba dee)' },
   { value: 'ocean-light', icon: 'waves', label: 'Ocean Light', description: 'Coastal blues, light mode' },

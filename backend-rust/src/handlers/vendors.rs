@@ -173,6 +173,7 @@ pub async fn run_vendor_action(
         job_type: job_type::WEBHOOK.to_string(),
         command: action.id.to_string(),
         credential_id: String::new(),
+        triggered_by: "manual".to_string(),
     };
 
     let job = state.store.create_job(&job_id, &req).await

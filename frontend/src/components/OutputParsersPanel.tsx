@@ -2,13 +2,13 @@ import { useState, useMemo } from 'react';
 import type { OutputParser, OutputParserFormData } from '@core';
 import { Button } from './Button';
 import { Card } from './Card';
-import { Checkbox } from './Checkbox';
+import { Toggle } from './Toggle';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { InfoSection } from './InfoSection';
 import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
-import { Icon, PlusIcon, RefreshIcon, SpinnerIcon } from './Icon';
+import { Icon, PlusIcon, SpinnerIcon } from './Icon';
 
 interface OutputParsersPanelProps {
   outputParsers: OutputParser[];
@@ -16,7 +16,6 @@ interface OutputParsersPanelProps {
   onCreate: (data: OutputParserFormData) => Promise<boolean>;
   onUpdate: (id: number, data: OutputParserFormData) => Promise<boolean>;
   onDelete: (id: number) => Promise<boolean>;
-  onRefresh: () => void;
 }
 
 const EMPTY_FORM: OutputParserFormData = {
@@ -27,7 +26,7 @@ const EMPTY_FORM: OutputParserFormData = {
   enabled: true,
 };
 
-export function OutputParsersPanel({ outputParsers, loading, onCreate, onUpdate, onDelete, onRefresh }: OutputParsersPanelProps) {
+export function OutputParsersPanel({ outputParsers, loading, onCreate, onUpdate, onDelete }: OutputParsersPanelProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<OutputParser | null>(null);
@@ -152,15 +151,10 @@ export function OutputParsersPanel({ outputParsers, loading, onCreate, onUpdate,
         title="Output Parsers"
         titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
         headerAction={
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Button variant="primary" onClick={openCreate}>
-              <PlusIcon size={14} />
-              Add Parser
-            </Button>
-            <Button variant="secondary" onClick={onRefresh} disabled={loading}>
-              <RefreshIcon size={14} />
-            </Button>
-          </div>
+          <Button variant="primary" onClick={openCreate}>
+            <PlusIcon size={14} />
+            Add Parser
+          </Button>
         }
       >
         <InfoSection open={showInfo}>
@@ -246,13 +240,11 @@ export function OutputParsersPanel({ outputParsers, loading, onCreate, onUpdate,
         <div className="form-hint">
           Each capture group in the regex maps to a name. Names are used as column headers when displaying parsed output.
         </div>
-        <div className="form-group">
-          <Checkbox
-            label="Enabled"
-            checked={formData.enabled}
-            onChange={(checked) => setFormData({ ...formData, enabled: checked })}
-          />
-        </div>
+        <Toggle
+          label="Enabled"
+          checked={formData.enabled}
+          onChange={(checked) => setFormData({ ...formData, enabled: checked })}
+        />
 
         {/* Test Section */}
         <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '12px', marginTop: '8px' }}>

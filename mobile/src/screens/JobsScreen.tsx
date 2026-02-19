@@ -167,7 +167,7 @@ export function JobsScreen() {
 
       <FlatList
         data={filteredJobs}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderJob}
         ListEmptyComponent={<EmptyState message="No jobs" />}
         contentContainerStyle={filteredJobs.length === 0 ? styles.emptyList : undefined}

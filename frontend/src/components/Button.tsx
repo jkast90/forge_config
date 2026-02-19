@@ -1,4 +1,5 @@
 import { ButtonHTMLAttributes, ReactNode } from 'react';
+import { RefreshIcon } from './Icon';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -35,5 +36,20 @@ export function Button({
     >
       {isLoading ? <span className="btn-spinner" /> : children}
     </button>
+  );
+}
+
+interface RefreshButtonProps {
+  onClick: () => void;
+  loading?: boolean;
+  disabled?: boolean;
+  size?: ButtonSize;
+}
+
+export function RefreshButton({ onClick, loading, disabled, size }: RefreshButtonProps) {
+  return (
+    <Button variant="secondary" size={size} onClick={onClick} disabled={disabled} isLoading={loading}>
+      <RefreshIcon size={14} />
+    </Button>
   );
 }

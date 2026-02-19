@@ -11,7 +11,6 @@ import {
   formatEventType,
   getEventTypeIcon,
 } from '@core';
-import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
 import { Card } from './Card';
@@ -85,47 +84,31 @@ export function Discovery({ onAddDevice }: Props) {
 
   return (
     <LoadingState loading={loading && discovered.length === 0} error={error} loadingMessage="Scanning for devices...">
-      <ActionBar>
-        <Button onClick={refresh}>
-          <RefreshIcon size={16} />
-          Refresh
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => setShowAllLeases(!showAllLeases)}
-        >
-          <Icon name={showAllLeases ? 'visibility_off' : 'visibility'} size={16} />
-          {showAllLeases ? 'Show New Only' : 'Show All Leases'}
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => setShowLog(!showLog)}
-        >
-          <Icon name="history" size={16} />
-          {showLog ? 'Hide Log' : 'Show Log'}
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={async () => { await clearKnownDevices(); refresh(); }}
-        >
-          <Icon name="restart_alt" size={16} />
-          Clear &amp; Rediscover
-        </Button>
-        <span className="helper-text-sm ml-auto">
-          Auto-refreshing every 10s
-        </span>
-      </ActionBar>
-
       <Card
         title={`Discovered Devices (${discovered.length})`}
         titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
         headerAction={
-          discovered.length > 0 ? (
-            <Button size="sm" variant="secondary" onClick={clearKnownDevices}>
-              <Icon name="restart_alt" size={14} />
-              Clear
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span className="helper-text-sm" style={{ opacity: 0.5, fontSize: 11 }}>Auto-refreshes every 10s</span>
+            <Button variant="secondary" onClick={() => setShowAllLeases(!showAllLeases)}>
+              <Icon name={showAllLeases ? 'visibility_off' : 'visibility'} size={16} />
+              {showAllLeases ? 'Show New Only' : 'Show All Leases'}
             </Button>
-          ) : undefined
+            <Button variant="secondary" onClick={() => setShowLog(!showLog)}>
+              <Icon name="history" size={16} />
+              {showLog ? 'Hide Log' : 'Show Log'}
+            </Button>
+            {discovered.length > 0 && (
+              <Button variant="secondary" onClick={async () => { await clearKnownDevices(); refresh(); }}>
+                <Icon name="restart_alt" size={16} />
+                Clear &amp; Rediscover
+              </Button>
+            )}
+            <Button onClick={refresh}>
+              <RefreshIcon size={16} />
+              Refresh
+            </Button>
+          </div>
         }
       >
         <InfoSection open={showInfo}>

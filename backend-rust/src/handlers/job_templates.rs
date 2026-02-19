@@ -102,6 +102,7 @@ pub async fn run_job_template(
             job_type: template.job_type.clone(),
             command: template.action_id.to_string(),
             credential_id: credential_id_str.clone(),
+            triggered_by: "manual".to_string(),
         };
         let job = state.store.create_job(&job_id, &req).await
             .map_err(|e| ApiError::internal(e.to_string()))?;
@@ -140,6 +141,7 @@ pub async fn run_job_template(
                 job_type: jt,
                 command,
                 credential_id: credential_id_str.clone(),
+                triggered_by: "manual".to_string(),
             };
 
             match state.store.create_job(&job_id, &req).await {

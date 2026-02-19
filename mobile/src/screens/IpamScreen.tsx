@@ -102,16 +102,16 @@ export function IpamScreen() {
 
   const dcOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...datacenters.map(d => ({ value: d.id, label: d.name })),
+    ...datacenters.map(d => ({ value: String(d.id), label: d.name })),
   ], [datacenters]);
 
   const vrfOptions = useMemo(() => [
     { value: '', label: 'None' },
-    ...vrfs.map(v => ({ value: v.id, label: v.name })),
+    ...vrfs.map(v => ({ value: String(v.id), label: v.name })),
   ], [vrfs]);
 
   const roleOptions = useMemo(() =>
-    roles.map(r => ({ value: r.id, label: r.name })),
+    roles.map(r => ({ value: String(r.id), label: r.name })),
   [roles]);
 
   const prefixOptions = useMemo(() => [
@@ -135,9 +135,9 @@ export function IpamScreen() {
       is_supernet: p.is_supernet,
       role_ids: p.role_ids || [],
       parent_id: p.parent_id?.toString() || '',
-      datacenter_id: p.datacenter_id || '',
+      datacenter_id: p.datacenter_id ? String(p.datacenter_id) : '',
       vlan_id: p.vlan_id?.toString() || '',
-      vrf_id: p.vrf_id || '',
+      vrf_id: p.vrf_id ? String(p.vrf_id) : '',
     });
     setShowPrefixForm(true);
   };
@@ -206,7 +206,7 @@ export function IpamScreen() {
       dns_name: ip.dns_name || '',
       device_id: ip.device_id != null ? String(ip.device_id) : '',
       interface_name: ip.interface_name || '',
-      vrf_id: ip.vrf_id || '',
+      vrf_id: ip.vrf_id ? String(ip.vrf_id) : '',
     });
     setShowIpForm(true);
   };

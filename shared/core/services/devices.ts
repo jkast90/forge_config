@@ -119,10 +119,10 @@ export class DeviceService extends BaseService {
     return this.post<Job>(`/devices/${encodeURIComponent(id)}/diff-config`);
   }
 
-  async exec(id: number, command: string, actionId?: string): Promise<Job> {
-    const body: { command?: string; action_id?: string } = {};
+  async exec(id: number, command: string, actionId?: number): Promise<Job> {
+    const body: { command?: string; action_id?: number } = {};
     if (command) body.command = command;
-    if (actionId) body.action_id = actionId;
+    if (actionId != null) body.action_id = actionId;
     return this.post<Job>(`/devices/${encodeURIComponent(id)}/exec`, body);
   }
 

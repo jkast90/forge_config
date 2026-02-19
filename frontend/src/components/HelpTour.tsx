@@ -329,7 +329,7 @@ const SLIDES: Slide[] = [
           <ul>
             <li><strong>Users</strong> — create, edit, enable/disable, and delete user accounts</li>
             <li><strong>Branding</strong> — upload a custom logo and set an application name (shown on the header, login page, and browser tab)</li>
-            <li><strong>Device Naming</strong> — configure the hostname auto-generation pattern using <code>$datacenter</code>, <code>$region</code>, <code>$hall</code>, <code>$role</code>, and <code>#</code> (auto-incrementing number)</li>
+            <li><strong>Slack % and Device Naming</strong> — configure the hostname auto-generation pattern using <code>$datacenter</code>, <code>$region</code>, <code>$hall</code>, <code>$role</code>, and <code>#</code> (auto-incrementing number)</li>
           </ul>
         </div>
       </>

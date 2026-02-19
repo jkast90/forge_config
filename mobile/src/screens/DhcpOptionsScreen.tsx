@@ -30,9 +30,8 @@ const OPTION_TYPES: { value: DhcpOptionType; label: string }[] = [
   { value: 'number', label: 'Number' },
 ];
 
-const DEFAULT_OPTIONS: Omit<DhcpOption, 'created_at' | 'updated_at'>[] = [
+const DEFAULT_OPTIONS: Omit<DhcpOption, 'id' | 'created_at' | 'updated_at'>[] = [
   {
-    id: 'tftp-server',
     option_number: 66,
     name: 'TFTP Server',
     value: '${tftp_server_ip}',
@@ -41,32 +40,26 @@ const DEFAULT_OPTIONS: Omit<DhcpOption, 'created_at' | 'updated_at'>[] = [
     enabled: true,
   },
   {
-    id: 'bootfile-cisco',
     option_number: 67,
     name: 'Cisco Bootfile',
     value: 'network-confg',
     type: 'string',
-    vendor_id: 'cisco',
     description: 'Cisco IOS config filename',
     enabled: true,
   },
   {
-    id: 'bootfile-arista',
     option_number: 67,
     name: 'Arista Bootfile',
     value: 'startup-config',
     type: 'string',
-    vendor_id: 'arista',
     description: 'Arista EOS config filename',
     enabled: true,
   },
   {
-    id: 'tftp-cisco-150',
     option_number: 150,
     name: 'Cisco TFTP (Option 150)',
     value: '${tftp_server_ip}',
     type: 'ip',
-    vendor_id: 'cisco',
     description: 'Cisco-specific TFTP server option',
     enabled: true,
   },

@@ -35,7 +35,7 @@ export function DeviceModelsScreen() {
 
   const vendorOptions = useMemo(() => [
     { value: '', label: 'Select vendor...' },
-    ...vendors.map(v => ({ value: v.id, label: v.name })),
+    ...vendors.map(v => ({ value: String(v.id), label: v.name })),
   ], [vendors]);
 
   const handleAdd = () => {
@@ -47,8 +47,8 @@ export function DeviceModelsScreen() {
   const handleEdit = (model: DeviceModel) => {
     setEditingModel(model);
     setFormData({
-      id: model.id,
-      vendor_id: model.vendor_id,
+      id: String(model.id),
+      vendor_id: String(model.vendor_id),
       model: model.model,
       display_name: model.display_name,
       rack_units: model.rack_units,
@@ -162,7 +162,7 @@ export function DeviceModelsScreen() {
 
       <FlatList
         data={deviceModels}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderModel}
         ListEmptyComponent={<EmptyState message="No device models" actionLabel="Add Model" onAction={handleAdd} />}
         contentContainerStyle={deviceModels.length === 0 ? styles.emptyList : undefined}

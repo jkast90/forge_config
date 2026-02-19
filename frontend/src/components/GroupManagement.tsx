@@ -7,7 +7,6 @@ import {
   addNotification,
 } from '@core';
 import type { Group, GroupFormData, GroupVariable } from '@core';
-import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
 import { IconButton } from './IconButton';
@@ -299,19 +298,62 @@ export function GroupManagement() {
     },
   ], [handleStartEditVar, selectedGroupId, deleteGroupVariable]);
 
+  // Find roles/vendors that auto-assign to the selected group (needed by memberData below)
+  const rolesForGroup = useMemo(() => {
+    if (!selectedGroup) return [];
+    return deviceRoles.filter(r => r.group_names.includes(selectedGroup.name));
+  }, [selectedGroup, deviceRoles]);
+
+  const vendorsForGroup = useMemo(() => {
+    if (!selectedGroup) return [];
+    return vendors.filter(v => v.group_names?.includes(selectedGroup.name));
+  }, [selectedGroup, vendors]);
+
   // Member table columns
-  interface MemberRow { id: number; hostname: string }
+  interface MemberRow { id: number; hostname: string; memberType: 'explicit' | 'role' }
   const memberData: MemberRow[] = useMemo(() => {
     // "all" group (id=1): all devices are implicit members
     if (selectedGroupId === 1) {
-      return devices.map(d => ({ id: d.id, hostname: d.hostname || d.mac || String(d.id) }));
+      return devices.map(d => ({ id: d.id, hostname: d.hostname || d.mac || String(d.id), memberType: 'explicit' as const }));
     }
-    return members.map(id => ({ id, hostname: deviceMap[id] || String(id) }));
-  }, [members, deviceMap, selectedGroupId, devices]);
+    const explicitIds = new Set(members);
+    const explicit: MemberRow[] = members.map(id => ({
+      id,
+      hostname: deviceMap[id] || String(id),
+      memberType: 'explicit' as const,
+    }));
+    const roleNames = new Set(rolesForGroup.map(r => r.name));
+    const vendorNames = new Set(vendorsForGroup.map(v => v.name));
+    const role: MemberRow[] = devices
+      .filter(d => !explicitIds.has(d.id) && (
+        (d.topology_role && roleNames.has(d.topology_role)) ||
+        (d.vendor && vendorNames.has(d.vendor))
+      ))
+      .map(d => ({ id: d.id, hostname: d.hostname || d.mac || String(d.id), memberType: 'role' as const }));
+    return [...explicit, ...role];
+  }, [members, deviceMap, selectedGroupId, devices, rolesForGroup, vendorsForGroup]);
 
   const memberColumns: TableColumn<MemberRow>[] = useMemo(() => [
     { header: 'Hostname', accessor: 'hostname' as keyof MemberRow },
     { header: 'ID', accessor: 'id' as keyof MemberRow },
+    {
+      header: 'Member Type',
+      accessor: (row: MemberRow) => (
+        <span style={{
+          display: 'inline-block',
+          padding: '1px 8px',
+          borderRadius: 10,
+          fontSize: 11,
+          fontWeight: 600,
+          background: row.memberType === 'role' ? 'var(--color-accent-blue)22' : 'var(--color-bg-hover)',
+          color: row.memberType === 'role' ? 'var(--color-accent-blue)' : 'var(--color-text-secondary)',
+          border: `1px solid ${row.memberType === 'role' ? 'var(--color-accent-blue)44' : 'var(--color-border)'}`,
+        }}>
+          {row.memberType}
+        </span>
+      ),
+      searchValue: (row: MemberRow) => row.memberType,
+    },
   ], []);
 
   const memberActions: TableAction<MemberRow>[] = useMemo(() => [
@@ -320,20 +362,9 @@ export function GroupManagement() {
       label: 'Remove',
       onClick: (row: MemberRow) => handleRemoveMember(row.id),
       variant: 'danger' as const,
+      show: (row: MemberRow) => row.memberType === 'explicit',
     },
   ], [handleRemoveMember]);
-
-  // Find roles that auto-assign to the selected group
-  const rolesForGroup = useMemo(() => {
-    if (!selectedGroup) return [];
-    return deviceRoles.filter(r => r.group_names.includes(selectedGroup.name));
-  }, [selectedGroup, deviceRoles]);
-
-  // Find vendors that auto-assign to the selected group
-  const vendorsForGroup = useMemo(() => {
-    if (!selectedGroup) return [];
-    return vendors.filter(v => v.group_names?.includes(selectedGroup.name));
-  }, [selectedGroup, vendors]);
 
   // Devices that are implicit members via role or vendor
   interface ImplicitMemberRow { id: number; hostname: string; source: string }
@@ -386,18 +417,16 @@ export function GroupManagement() {
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading groups...">
-      <ActionBar>
-        <Button onClick={handleOpenCreate}>
-          <PlusIcon size={16} />
-          Add Group
-        </Button>
-        <Button variant="secondary" onClick={refresh}>
-          <Icon name="refresh" size={16} />
-          Refresh
-        </Button>
-      </ActionBar>
-
-      <Card title="Device Groups" headerAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="Device Groups"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <Button onClick={handleOpenCreate}>
+            <PlusIcon size={16} />
+            Add Group
+          </Button>
+        }
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>

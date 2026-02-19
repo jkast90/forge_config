@@ -108,6 +108,8 @@ export interface TopologyPreviewResponse {
   devices: TopologyPreviewDevice[];
   fabric_links: TopologyPreviewLink[];
   racks: TopologyPreviewRack[];
+  tier1_placement?: string;
+  tier2_placement?: string;
   tier3_placement: string;
   gpu_clusters?: TopologyPreviewGpuCluster[];
 }

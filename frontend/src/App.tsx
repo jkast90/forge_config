@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Provider } from 'react-redux';
-import { store, useAuth, useAuthState, AuthProvider, useDevices, useWebTheme, useWebSocket, useVendors, useSettings, useInflight, useModalRoute, useNotificationHistory, lookupVendorByMac, setVendorCache, addNotification, navigateAction, registerNavigator, DeviceDiscoveredPayload, getServices, initTelemetry, trackEvent } from '@core';
+import { store, useAuth, useAuthState, AuthProvider, useDevices, useWebTheme, useWebSocket, useVendors, useSettings, useInflight, useModalRoute, useNotificationHistory, lookupVendorByMac, setVendorCache, addNotification, navigateAction, registerNavigator, DeviceDiscoveredPayload, getServices, initTelemetry, trackEvent, getApiHistory, getTelemetryEvents, type WebSocketEvent } from '@core';
 import type { Branding } from '@core';
 import { DeviceForm } from './components/DeviceForm';
 import { LoginPage } from './components/LoginPage';
@@ -63,7 +63,6 @@ function useBranding() {
 const PAGES: DropdownOption[] = [
   { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', description: 'Overview and activity' },
   { id: 'config', label: 'Configuration', icon: 'description', description: 'Templates, groups, variables' },
-  { id: 'explorer', label: 'Data Explorer', icon: 'storage', description: 'Inspect Redux store data' },
   { id: 'resources', label: 'Devices & Tenants', icon: 'devices', description: 'Devices, tenants, VRFs, GPU clusters' },
   { id: 'ipam', label: 'IPAM', icon: 'lan', description: 'IP Address Management' },
   { id: 'jobs', label: 'Jobs', icon: 'schedule', description: 'Actions, job history, templates, credentials' },
@@ -132,6 +131,35 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
     if (saved === 'users') return 'system';
     return saved;
   });
+
+  const handleBugReport = useCallback(() => {
+    const readStorage = (storage: Storage): Record<string, unknown> => {
+      const out: Record<string, unknown> = {};
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i)!;
+        const raw = storage.getItem(key);
+        try { out[key] = JSON.parse(raw!); } catch { out[key] = raw; }
+      }
+      return out;
+    };
+    const report = {
+      timestamp: new Date().toISOString(),
+      apiHistory: getApiHistory(),
+      telemetry: getTelemetryEvents(),
+      reduxStore: store.getState(),
+      localStorage: readStorage(localStorage),
+      sessionStorage: readStorage(sessionStorage),
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `forgeconfig-bugreport-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
 
   // Keep document title and favicon in sync with settings changes
   useEffect(() => {
@@ -240,10 +268,26 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
     addNotification('info', `New device discovered: ${payload.ip}${vendorText}`);
   }, [vendors]);
 
+  // WebSocket handler for broadcast/message notifications
+  const handleBroadcastEvent = useCallback((event: WebSocketEvent) => {
+    if (event.type !== 'system_broadcast' && event.type !== 'message') return;
+    const p = event.payload as Record<string, unknown> | null;
+    let text: string;
+    if (p && typeof p.message === 'string') {
+      text = p.message;
+    } else if (p && Object.keys(p).length > 0) {
+      text = JSON.stringify(p);
+    } else {
+      text = event.type === 'system_broadcast' ? 'System broadcast received' : 'Message received';
+    }
+    addNotification('info', text);
+  }, []);
+
   // Connect to WebSocket for real-time notifications
   useWebSocket({
     autoConnect: true,
     onDeviceDiscovered: handleDeviceDiscovered,
+    onAnyEvent: handleBroadcastEvent,
   });
 
 
@@ -335,6 +379,12 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
             onDeleteDevice={deleteDevice}
             onBackupDevice={triggerBackup}
             onRefreshDevices={refresh}
+            onAddDevice={() => {
+              setEditingDevice(null);
+              setInitialDeviceData(null);
+              setShowDeviceForm(true);
+              modalRoute.openModal('device-form');
+            }}
             onAddDiscoveredDevice={(device) => {
               setEditingDevice(null);
               setInitialDeviceData(device);
@@ -403,6 +453,22 @@ function AuthenticatedApp({ username, onLogout }: { username: string | null; onL
                 onClick={() => { setShowTelemetry(true); modalRoute.openModal('telemetry'); }}
               >
                 <Icon name="insights" size={20} />
+              </button>
+            </Tooltip>
+            <Tooltip content="Data Explorer">
+              <button
+                className="icon-button"
+                onClick={() => handlePageChange('explorer')}
+              >
+                <Icon name="storage" size={20} />
+              </button>
+            </Tooltip>
+            <Tooltip content="Download bug report">
+              <button
+                className="icon-button"
+                onClick={handleBugReport}
+              >
+                <Icon name="bug_report" size={20} />
               </button>
             </Tooltip>
           </div>

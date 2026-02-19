@@ -339,6 +339,7 @@ pub async fn exec_command(
         job_type: jt,
         command,
         credential_id: String::new(),
+        triggered_by: "manual".to_string(),
     };
 
     let job = state.store.create_job(&job_id, &req).await?;
@@ -526,6 +527,7 @@ pub async fn deploy_device_config(
         job_type: job_type::DEPLOY.to_string(),
         command: template_name,
         credential_id: String::new(),
+        triggered_by: "manual".to_string(),
     };
 
     let job = state.store.create_job(&job_id, &req).await?;
@@ -564,6 +566,7 @@ pub async fn diff_device_config(
         job_type: job_type::DIFF.to_string(),
         command: template_name,
         credential_id: String::new(),
+        triggered_by: "manual".to_string(),
     };
 
     let job = state.store.create_job(&job_id, &req).await?;

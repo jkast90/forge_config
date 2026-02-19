@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useBackups, useDevices, useTopologies, useAsyncModal, useModalRoute, useWebSocket, usePersistedSet, formatDate, getServices, addNotification, navigateAction } from '@core';
 import type { Device, ConfigResult, BackupContentResult, ConfigPreviewResult, Backup, NetBoxStatus, Job, TopologyRole } from '@core';
-import { Button } from './Button';
+import { Button, RefreshButton } from './Button';
 import { Card } from './Card';
 import { useConfirm } from './ConfirmDialog';
 import { ConnectModal, useConnectModal } from './ConnectModal';
@@ -17,18 +17,19 @@ import type { TableColumn, TableAction } from './Table';
 import { ConfigViewer } from './ConfigViewer';
 import { CommandDrawer } from './CommandDrawer';
 import { DevicePortAssignments } from './DevicePortAssignments';
-import { Icon, EditIcon, DownloadIcon, ClockIcon, TrashIcon, SpinnerIcon, loadingIcon } from './Icon';
+import { Icon, EditIcon, DownloadIcon, ClockIcon, TrashIcon, SpinnerIcon, loadingIcon, PlusIcon } from './Icon';
 
 interface Props {
   onEdit: (device: Device) => void;
   onDelete: (id: number) => Promise<boolean>;
   onBackup: (id: number) => Promise<boolean>;
   onRefresh?: () => void;
+  onAdd?: () => void;
 }
 
 type NetBoxSyncResult = { message: string; result: { created: number; updated: number; errors?: string[] } };
 
-export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
+export function DeviceList({ onEdit, onDelete, onBackup, onRefresh, onAdd }: Props) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
   const { devices } = useDevices();
   const modalRoute = useModalRoute();
@@ -222,6 +223,7 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
         status: 'failed',
         output: null,
         error: err instanceof Error ? err.message : 'Deploy failed',
+        triggered_by: 'manual',
         created_at: new Date().toISOString(),
         started_at: null,
         completed_at: null,
@@ -387,7 +389,21 @@ export function DeviceList({ onEdit, onDelete, onBackup, onRefresh }: Props) {
 
   return (
     <>
-      <Card title="Devices" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="Devices"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <div style={{ display: 'flex', gap: 6 }}>
+            {onAdd && (
+              <Button onClick={onAdd}>
+                <PlusIcon size={16} />
+                Add Device
+              </Button>
+            )}
+            {onRefresh && <RefreshButton onClick={onRefresh} />}
+          </div>
+        }
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>

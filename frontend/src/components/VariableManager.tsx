@@ -5,7 +5,6 @@ import {
   addNotification,
 } from '@core';
 import type { DeviceVariable, VariableKeyInfo } from '@core';
-import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
 import { IconButton } from './IconButton';
@@ -173,18 +172,16 @@ export function VariableManager() {
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading variables...">
-      <ActionBar>
-        <Button onClick={() => setShowAddKey(true)}>
-          <PlusIcon size={16} />
-          Add Key
-        </Button>
-        <Button variant="secondary" onClick={refresh}>
-          <Icon name="refresh" size={16} />
-          Refresh
-        </Button>
-      </ActionBar>
-
-      <Card title="Device Variables" headerAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="Device Variables"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <Button onClick={() => setShowAddKey(true)}>
+            <PlusIcon size={16} />
+            Add Key
+          </Button>
+        }
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>

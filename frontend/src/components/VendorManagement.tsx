@@ -10,7 +10,6 @@ import {
   formatListValue,
   parseListValue,
 } from '@core';
-import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
 import { FormDialog } from './FormDialog';
@@ -116,16 +115,6 @@ export function VendorManagement() {
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading vendors...">
-      <ActionBar>
-        <Button onClick={form.openAdd}>
-          <PlusIcon size={16} />
-          Add Vendor
-        </Button>
-        <Button variant="secondary" onClick={handleReset}>
-          Reset to Defaults
-        </Button>
-      </ActionBar>
-
       {unassignedCount > 0 && (
         <Card>
           <div className="message error">
@@ -134,7 +123,21 @@ export function VendorManagement() {
         </Card>
       )}
 
-      <Card title="Configured Vendors" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="Configured Vendors"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Button onClick={form.openAdd}>
+              <PlusIcon size={16} />
+              Add Vendor
+            </Button>
+            <Button variant="secondary" onClick={handleReset}>
+              Reset to Defaults
+            </Button>
+          </div>
+        }
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>

@@ -17,12 +17,11 @@ import {
   slugify,
   isPatchPanel,
 } from '@core';
-import { ActionBar } from './ActionBar';
 import { ActionMenu } from './ActionMenu';
 import { Tooltip } from './Tooltip';
-import { Button } from './Button';
+import { Button, RefreshButton } from './Button';
 import { Card } from './Card';
-import { Checkbox } from './Checkbox';
+import { Toggle } from './Toggle';
 import { CommandDrawer } from './CommandDrawer';
 import { DevicePortAssignments } from './DevicePortAssignments';
 import { IconButton } from './IconButton';
@@ -45,6 +44,8 @@ import { Icon, PlusIcon, SpinnerIcon, TrashIcon, loadingIcon } from './Icon';
 import { TopologyDiagramViewer } from './TopologyDiagram';
 import type { TopologyDiagramViewerHandle } from './TopologyDiagram';
 import { useConfirm } from './ConfirmDialog';
+import { CsvPreviewModal } from './CsvPreviewModal';
+import type { CsvPreviewSheet } from './CsvPreviewModal';
 
 function getRoleVariant(d: Device): 'online' | 'provisioning' | 'accent' | 'neutral' | 'offline' {
   if (isPatchPanel(d) || d.topology_role === 'patch panel') return 'neutral';
@@ -236,6 +237,7 @@ export function TopologyManagement() {
         status: 'failed',
         output: null,
         error: err instanceof Error ? err.message : 'Deploy failed',
+        triggered_by: 'manual',
         created_at: new Date().toISOString(),
         started_at: null,
         completed_at: null,
@@ -266,98 +268,96 @@ export function TopologyManagement() {
   const [generatingCutsheet, setGeneratingCutsheet] = useState(false);
   const [generatingConnectionSheet, setGeneratingConnectionSheet] = useState(false);
   const [generatingBOM, setGeneratingBOM] = useState(false);
+  const [csvPreview, setCsvPreview] = useState<{
+    title: string;
+    sheets: CsvPreviewSheet[];
+    filename: string;
+    onDownload: () => void;
+  } | null>(null);
 
-  const handleGenerateCutsheet = async (topology: Topology) => {
+  const buildCutsheetData = async (topology: Topology): Promise<(string | number)[][]> => {
     const topoDevices = devicesByTopology[topology.id] || [];
     const spines = topoDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine');
     const leaves = topoDevices.filter(d => d.topology_role === 'leaf');
 
     if (spines.length === 0 || leaves.length === 0) {
-      addNotification('error', 'Need at least one spine and one leaf to generate a cutsheet');
-      return;
+      throw new Error('Need at least one spine and one leaf to generate a cutsheet');
     }
 
-    setGeneratingCutsheet(true);
-    try {
-      // Fetch port assignments for all topology devices
-      const assignmentsByDevice: Record<number, PortAssignment[]> = {};
-      await Promise.all(
-        topoDevices.map(async (d) => {
-          try {
-            assignmentsByDevice[d.id] = await getServices().portAssignments.list(d.id);
-          } catch {
-            assignmentsByDevice[d.id] = [];
-          }
-        })
-      );
-
-      const csvEscape = (v: string) => v.includes(',') ? `"${v}"` : v;
-
-      const rows: string[] = [
-        'Side A Hostname,Side A Interface,Side A Patch Panel,Side A PP Port,Side B Hostname,Side B Interface,Side B Patch Panel,Side B PP Port,Cable Length (m)',
-      ];
-
-      // Check if any device has port assignments
-      const hasAssignments = Object.values(assignmentsByDevice).some(a => a.length > 0);
-
-      if (hasAssignments) {
-        // Use actual port assignment data
-        const seen = new Set<string>(); // avoid duplicate rows for bidirectional links
-        for (const device of topoDevices) {
-          const assignments = assignmentsByDevice[device.id] || [];
-          for (const pa of assignments) {
-            if (!pa.remote_device_id) continue;
-            // Deduplicate: sort device IDs to create a canonical key
-            const linkKey = [device.id, pa.port_name, pa.remote_device_id, pa.remote_port_name]
-              .sort()
-              .join('|');
-            if (seen.has(linkKey)) continue;
-            seen.add(linkKey);
-
-            const remoteDevice = topoDevices.find(d => d.id === pa.remote_device_id);
-            rows.push([
-              csvEscape(device.hostname || device.mac || String(device.id)),
-              csvEscape(pa.port_name),
-              pa.patch_panel_a_hostname ? csvEscape(`${pa.patch_panel_a_hostname}`) : '',
-              pa.patch_panel_a_port || '',
-              csvEscape(pa.remote_device_hostname || (remoteDevice ? remoteDevice.hostname || remoteDevice.mac || String(remoteDevice.id) : String(pa.remote_device_id))),
-              csvEscape(pa.remote_port_name || ''),
-              pa.patch_panel_b_hostname ? csvEscape(`${pa.patch_panel_b_hostname}`) : '',
-              pa.patch_panel_b_port || '',
-              pa.cable_length_meters != null ? String(pa.cable_length_meters) : '',
-            ].join(','));
-          }
+    const assignmentsByDevice: Record<number, PortAssignment[]> = {};
+    await Promise.all(
+      topoDevices.map(async (d) => {
+        try {
+          assignmentsByDevice[d.id] = await getServices().portAssignments.list(d.id);
+        } catch {
+          assignmentsByDevice[d.id] = [];
         }
-      } else {
-        // Fallback: auto-generate interface numbers (legacy behavior)
-        const ifIndex: Record<number, number> = {};
-        const nextIf = (d: Device) => {
-          ifIndex[d.id] = (ifIndex[d.id] || 0) + 1;
-          const prefix = d.vendor === 'FRR' ? 'eth' : 'Ethernet';
-          return `${prefix}${ifIndex[d.id]}`;
-        };
+      })
+    );
 
-        const linksPerPair = 2;
-        for (const spine of spines) {
-          for (const leaf of leaves) {
-            for (let link = 0; link < linksPerPair; link++) {
-              rows.push([
-                csvEscape(spine.hostname || spine.mac || String(spine.id)),
-                nextIf(spine),
-                '', // Side A Patch Panel
-                '', // Side A PP Port
-                csvEscape(leaf.hostname || leaf.mac || String(leaf.id)),
-                nextIf(leaf),
-                '', // Side B Patch Panel
-                '', // Side B PP Port
-                '', // Cable Length
-              ].join(','));
-            }
+    const rows: (string | number)[][] = [
+      ['Side A Hostname', 'Side A Interface', 'Side A Patch Panel', 'Side A PP Port', 'Side B Hostname', 'Side B Interface', 'Side B Patch Panel', 'Side B PP Port', 'Cable Length (m)'],
+    ];
+
+    const hasAssignments = Object.values(assignmentsByDevice).some(a => a.length > 0);
+
+    if (hasAssignments) {
+      const seen = new Set<string>();
+      for (const device of topoDevices) {
+        const assignments = assignmentsByDevice[device.id] || [];
+        for (const pa of assignments) {
+          if (!pa.remote_device_id) continue;
+          const linkKey = [device.id, pa.port_name, pa.remote_device_id, pa.remote_port_name].sort().join('|');
+          if (seen.has(linkKey)) continue;
+          seen.add(linkKey);
+          const remoteDevice = topoDevices.find(d => d.id === pa.remote_device_id);
+          rows.push([
+            device.hostname || device.mac || String(device.id),
+            pa.port_name,
+            pa.patch_panel_a_hostname || '',
+            pa.patch_panel_a_port || '',
+            pa.remote_device_hostname || (remoteDevice ? remoteDevice.hostname || remoteDevice.mac || String(remoteDevice.id) : String(pa.remote_device_id)),
+            pa.remote_port_name || '',
+            pa.patch_panel_b_hostname || '',
+            pa.patch_panel_b_port || '',
+            pa.cable_length_meters != null ? pa.cable_length_meters : '',
+          ]);
+        }
+      }
+    } else {
+      const ifIndex: Record<number, number> = {};
+      const nextIf = (d: Device) => {
+        ifIndex[d.id] = (ifIndex[d.id] || 0) + 1;
+        const prefix = d.vendor === 'FRR' ? 'eth' : 'Ethernet';
+        return `${prefix}${ifIndex[d.id]}`;
+      };
+      const linksPerPair = 2;
+      for (const spine of spines) {
+        for (const leaf of leaves) {
+          for (let link = 0; link < linksPerPair; link++) {
+            rows.push([
+              spine.hostname || spine.mac || String(spine.id),
+              nextIf(spine),
+              '', '', // Patch Panel A
+              leaf.hostname || leaf.mac || String(leaf.id),
+              nextIf(leaf),
+              '', '', '', // Patch Panel B, Cable Length
+            ]);
           }
         }
       }
+    }
 
-      const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+    return rows;
+  };
+
+  const handleGenerateCutsheet = async (topology: Topology) => {
+    setGeneratingCutsheet(true);
+    try {
+      const rows = await buildCutsheetData(topology);
+      const csvEscape = (v: string) => v.includes(',') ? `"${v}"` : v;
+      const csvRows = rows.map(row => row.map(cell => csvEscape(String(cell))).join(','));
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -372,76 +372,94 @@ export function TopologyManagement() {
     }
   };
 
-  const handleDownloadTopologyBOM = async (topology: Topology) => {
-    const topoDevices = devicesByTopology[topology.id] || [];
-    if (topoDevices.length === 0) {
-      addNotification('error', 'No devices in this topology');
-      return;
+  const handlePreviewCutsheet = async (topology: Topology) => {
+    setGeneratingCutsheet(true);
+    try {
+      const rows = await buildCutsheetData(topology);
+      setCsvPreview({
+        title: `Cutsheet — ${topology.name}`,
+        sheets: [{ name: 'Cutsheet', rows }],
+        filename: `${topology.id}-cutsheet.csv`,
+        onDownload: () => handleGenerateCutsheet(topology),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to generate cutsheet: ${msg}`);
+    } finally {
+      setGeneratingCutsheet(false);
     }
+  };
+
+  const buildBomData = async (topology: Topology): Promise<(string | number)[][]> => {
+    const topoDevices = devicesByTopology[topology.id] || [];
+    if (topoDevices.length === 0) throw new Error('No devices in this topology');
+
+    const allAssignments: PortAssignment[] = [];
+    await Promise.all(
+      topoDevices.map(async (d) => {
+        try {
+          const pas = await getServices().portAssignments.list(d.id);
+          allAssignments.push(...pas);
+        } catch { /* skip */ }
+      })
+    );
+
+    const rows: (string | number)[][] = [['Category', 'Item', 'Specification', 'Quantity', 'Unit Length', 'Notes']];
+    const excludedRoles = new Set(['patch panel']);
+
+    const deviceGroups = new Map<string, { model: string; role: string; count: number }>();
+    for (const dev of topoDevices) {
+      if (excludedRoles.has(dev.topology_role || '') || dev.device_type === 'external') continue;
+      const model = dev.model || 'Unknown';
+      const role = dev.topology_role || 'unknown';
+      const key = `${model}|${role}`;
+      const existing = deviceGroups.get(key);
+      if (existing) existing.count++;
+      else deviceGroups.set(key, { model, role, count: 1 });
+    }
+    for (const { model, role, count } of deviceGroups.values()) {
+      rows.push(['Device', model, role, count, '', '']);
+    }
+
+    const standardLengths = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50];
+    const roundToStandard = (m: number) => standardLengths.find(l => l >= m) ?? Math.ceil(m);
+    const seenLinks = new Set<string>();
+    const fiberGroups = new Map<number, number>();
+    let totalFabricLinks = 0;
+    for (const pa of allAssignments) {
+      if (!pa.remote_device_id) continue;
+      const linkKey = [Math.min(pa.device_id, pa.remote_device_id), Math.max(pa.device_id, pa.remote_device_id), pa.port_name, pa.remote_port_name].join(':');
+      if (seenLinks.has(linkKey)) continue;
+      seenLinks.add(linkKey);
+      const length = pa.cable_length_meters ?? 3;
+      const rounded = roundToStandard(length);
+      fiberGroups.set(rounded, (fiberGroups.get(rounded) || 0) + 1);
+      totalFabricLinks++;
+    }
+    for (const [length, qty] of [...fiberGroups.entries()].sort((a, b) => a[0] - b[0])) {
+      rows.push(['Fiber', 'DAC/AOC Cable', '100G', qty, `${length}m`, '']);
+    }
+    if (totalFabricLinks > 0) {
+      rows.push(['Optic', 'QSFP28', '100G', totalFabricLinks * 2, '', '2 per fabric link']);
+    }
+
+    const managedDevices = topoDevices.filter(d =>
+      !excludedRoles.has(d.topology_role || '') && d.device_type !== 'external' && d.topology_role !== 'mgmt-switch'
+    );
+    const hasMgmt = topoDevices.some(d => d.topology_role === 'mgmt-switch');
+    if (hasMgmt && managedDevices.length > 0) {
+      rows.push(['Mgmt Ethernet', 'Cat6 Ethernet Cable', '1G', managedDevices.length, '2m', 'OOB management per device']);
+    }
+
+    return rows;
+  };
+
+  const handleDownloadTopologyBOM = async (topology: Topology) => {
     setGeneratingBOM(true);
     try {
-      // Fetch port assignments for all devices to get cable lengths
-      const allAssignments: PortAssignment[] = [];
-      await Promise.all(
-        topoDevices.map(async (d) => {
-          try {
-            const pas = await getServices().portAssignments.list(d.id);
-            allAssignments.push(...pas);
-          } catch { /* skip */ }
-        })
-      );
-
-      const csvRows: string[] = ['Category,Item,Specification,Quantity,Unit Length,Notes'];
-      const excludedRoles = new Set(['patch panel']);
-
-      // Device BOM: group by model + role
-      const deviceGroups = new Map<string, { model: string; role: string; count: number }>();
-      for (const dev of topoDevices) {
-        if (excludedRoles.has(dev.topology_role || '') || dev.device_type === 'external') continue;
-        const model = dev.model || 'Unknown';
-        const role = dev.topology_role || 'unknown';
-        const key = `${model}|${role}`;
-        const existing = deviceGroups.get(key);
-        if (existing) existing.count++;
-        else deviceGroups.set(key, { model, role, count: 1 });
-      }
-      for (const { model, role, count } of deviceGroups.values()) {
-        csvRows.push(`Device,${model},${role},${count},,`);
-      }
-
-      // Fiber BOM: group fabric links by cable length (deduplicate A→B / B→A pairs)
-      const standardLengths = [0.5, 1, 2, 3, 5, 7, 10, 15, 20, 30, 50];
-      const roundToStandard = (m: number) => standardLengths.find(l => l >= m) ?? Math.ceil(m);
-      const seenLinks = new Set<string>();
-      const fiberGroups = new Map<number, number>();
-      let totalFabricLinks = 0;
-      for (const pa of allAssignments) {
-        if (!pa.remote_device_id) continue;
-        // Deduplicate: only count A→B, not B→A
-        const linkKey = [Math.min(pa.device_id, pa.remote_device_id), Math.max(pa.device_id, pa.remote_device_id), pa.port_name, pa.remote_port_name].join(':');
-        if (seenLinks.has(linkKey)) continue;
-        seenLinks.add(linkKey);
-        const length = pa.cable_length_meters ?? 3;
-        const rounded = roundToStandard(length);
-        fiberGroups.set(rounded, (fiberGroups.get(rounded) || 0) + 1);
-        totalFabricLinks++;
-      }
-      for (const [length, qty] of [...fiberGroups.entries()].sort((a, b) => a[0] - b[0])) {
-        csvRows.push(`Fiber,DAC/AOC Cable,100G,${qty},${length}m,`);
-      }
-      if (totalFabricLinks > 0) {
-        csvRows.push(`Optic,QSFP28,100G,${totalFabricLinks * 2},,2 per fabric link`);
-      }
-
-      // Management ethernet cables
-      const managedDevices = topoDevices.filter(d =>
-        !excludedRoles.has(d.topology_role || '') && d.device_type !== 'external' && d.topology_role !== 'mgmt-switch'
-      );
-      const hasMgmt = topoDevices.some(d => d.topology_role === 'mgmt-switch');
-      if (hasMgmt && managedDevices.length > 0) {
-        csvRows.push(`Mgmt Ethernet,Cat6 Ethernet Cable,1G,${managedDevices.length},2m,OOB management per device`);
-      }
-
+      const rows = await buildBomData(topology);
+      const csvEscape = (v: string) => v.includes(',') ? `"${v}"` : v;
+      const csvRows = rows.map(row => row.map(cell => csvEscape(String(cell))).join(','));
       const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -457,256 +475,214 @@ export function TopologyManagement() {
     }
   };
 
-  const handleGenerateConnectionSheet = async (topology: Topology) => {
+  const handlePreviewBOM = async (topology: Topology) => {
+    setGeneratingBOM(true);
+    try {
+      const rows = await buildBomData(topology);
+      setCsvPreview({
+        title: `Bill of Materials — ${topology.name}`,
+        sheets: [{ name: 'BOM', rows }],
+        filename: `${topology.name.replace(/\s+/g, '-')}-BOM.csv`,
+        onDownload: () => handleDownloadTopologyBOM(topology),
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to generate BOM: ${msg}`);
+    } finally {
+      setGeneratingBOM(false);
+    }
+  };
+
+  const buildConnectionSheetData = async (topology: Topology): Promise<CsvPreviewSheet[]> => {
     const topoDevices = devicesByTopology[topology.id] || [];
-    if (topoDevices.length === 0) {
-      addNotification('error', 'No devices in this topology');
-      return;
+    if (topoDevices.length === 0) throw new Error('No devices in this topology');
+
+    const assignmentsByDevice: Record<number, PortAssignment[]> = {};
+    await Promise.all(
+      topoDevices.map(async (d) => {
+        try {
+          assignmentsByDevice[d.id] = await getServices().portAssignments.list(d.id);
+        } catch {
+          assignmentsByDevice[d.id] = [];
+        }
+      })
+    );
+
+    const hallMap = new Map(halls.map(h => [h.id, h]));
+    const rowMap = new Map(ipamRows.map(r => [r.id, r]));
+    const rackMap = new Map(racks.map(r => [r.id, r]));
+    const dcMap = new Map(datacenters.map(d => [d.id, d]));
+    const campusMap = new Map(campuses.map(c => [c.id, c]));
+    const regionMap = new Map(regions.map(r => [r.id, r]));
+
+    const dc = topology.datacenter_id ? dcMap.get(topology.datacenter_id) : undefined;
+    const campus = dc?.campus_id ? campusMap.get(dc.campus_id) : undefined;
+    const region = campus?.region_id ? regionMap.get(campus.region_id) : undefined;
+    const locationBreadcrumb = [region?.name, campus?.name, dc?.name].filter(Boolean).join(' > ') || '—';
+
+    const devicesByRack: Record<number, Device[]> = {};
+    const unrackedDevices: Device[] = [];
+    for (const d of topoDevices) {
+      if (d.rack_id) (devicesByRack[d.rack_id] ??= []).push(d);
+      else unrackedDevices.push(d);
+    }
+    const rackIds = Object.keys(devicesByRack).map(Number).sort((a, b) => a - b);
+
+    const sheets: CsvPreviewSheet[] = [];
+
+    // Summary sheet
+    const summaryRows: (string | number)[][] = [
+      ['Topology', topology.name],
+      ['Location', locationBreadcrumb],
+      ['Total Devices', topoDevices.length],
+      ['Racks', rackIds.length],
+      [],
+      ['Rack', 'Hall', 'Row', 'Devices', 'Spines', 'Leaves', 'Patch Panels'],
+    ];
+    for (const rackId of rackIds) {
+      const rack = rackMap.get(rackId);
+      const row = rack?.row_id ? rowMap.get(rack.row_id) : undefined;
+      const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
+      const rDevices = devicesByRack[rackId];
+      summaryRows.push([
+        rack?.name || String(rackId),
+        hall?.name || '—',
+        row?.name || '—',
+        rDevices.length,
+        rDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine').length,
+        rDevices.filter(d => d.topology_role === 'leaf').length,
+        rDevices.filter(d => d.vendor === 'Patch Panel').length,
+      ]);
+    }
+    if (unrackedDevices.length > 0) {
+      summaryRows.push(['Unracked', '—', '—', unrackedDevices.length, 0, 0, unrackedDevices.filter(d => d.vendor === 'Patch Panel').length]);
+    }
+    sheets.push({ name: 'Summary', rows: summaryRows });
+
+    // Per-rack sheets
+    const buildRackRows = (sheetDevices: Device[], rackName: string, hallName: string, rowName: string): (string | number)[][] => {
+      const data: (string | number)[][] = [];
+      data.push(['Topology:', topology.name]);
+      data.push(['Location:', locationBreadcrumb]);
+      data.push(['Hall:', hallName, 'Row:', rowName, 'Rack:', rackName]);
+      data.push([]);
+      data.push(['RU', '│', 'Device', 'Role', 'Model', '│']);
+      const ruMap = new Map<number, Device>();
+      for (const d of sheetDevices) {
+        if (d.rack_position && d.rack_position > 0) ruMap.set(d.rack_position, d);
+      }
+      for (let ru = 42; ru >= 1; ru--) {
+        const dev = ruMap.get(ru);
+        if (dev) {
+          const role = dev.vendor === 'Patch Panel' ? 'patch panel' : dev.topology_role || dev.device_type || '';
+          data.push([ru, '│', dev.hostname || String(dev.id), role, dev.model || '', '│']);
+        } else {
+          data.push([ru, '│', '', '', '', '│']);
+        }
+      }
+      data.push([]);
+      data.push(['Device', 'Port', 'PP-A', 'PP-A Port', 'Remote Device', 'Remote Port', 'PP-B', 'PP-B Port', 'Cable (m)']);
+      const seen = new Set<string>();
+      for (const device of sheetDevices) {
+        for (const pa of assignmentsByDevice[device.id] || []) {
+          if (!pa.remote_device_id) continue;
+          const linkKey = [device.id, pa.port_name, pa.remote_device_id, pa.remote_port_name].sort().join('|');
+          if (seen.has(linkKey)) continue;
+          seen.add(linkKey);
+          const remoteDevice = topoDevices.find(d => d.id === pa.remote_device_id);
+          data.push([
+            device.hostname || String(device.id), pa.port_name,
+            pa.patch_panel_a_hostname || '', pa.patch_panel_a_port || '',
+            pa.remote_device_hostname || remoteDevice?.hostname || String(pa.remote_device_id),
+            pa.remote_port_name || '',
+            pa.patch_panel_b_hostname || '', pa.patch_panel_b_port || '',
+            pa.cable_length_meters != null ? pa.cable_length_meters : '',
+          ]);
+        }
+      }
+      return data;
+    };
+
+    const usedNames = new Set<string>();
+    for (const rackId of rackIds) {
+      const rack = rackMap.get(rackId);
+      const row = rack?.row_id ? rowMap.get(rack.row_id) : undefined;
+      const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
+      const rackName = rack?.name || String(rackId);
+      const hallName = hall?.name || '—';
+      const rowName = row?.name || '—';
+      let sheetName = `${hallName}-${rowName}-${rackName}`.replace(/[[\]*?/\\:]/g, '-').slice(0, 31);
+      if (usedNames.has(sheetName)) sheetName = sheetName.slice(0, 28) + `-${usedNames.size}`;
+      usedNames.add(sheetName);
+      sheets.push({ name: sheetName, rows: buildRackRows(devicesByRack[rackId], rackName, hallName, rowName) });
     }
 
+    // Unracked sheet
+    if (unrackedDevices.length > 0) {
+      const byRow: Record<number, Device[]> = {};
+      const noRow: Device[] = [];
+      for (const d of unrackedDevices) {
+        if (d.row_id) (byRow[d.row_id] ??= []).push(d);
+        else noRow.push(d);
+      }
+      const data: (string | number)[][] = [
+        ['Topology:', topology.name],
+        ['Location:', locationBreadcrumb],
+        ['', '', '', 'Unracked Devices'],
+        [],
+      ];
+      const addDeviceRows = (devs: Device[], groupLabel: string) => {
+        data.push([groupLabel]);
+        data.push(['Device', 'Role', 'Model', 'Hall', 'Row']);
+        for (const d of devs) {
+          const hall = d.hall_id ? hallMap.get(d.hall_id) : undefined;
+          const row = d.row_id ? rowMap.get(d.row_id) : undefined;
+          const role = d.vendor === 'Patch Panel' ? 'patch panel' : d.topology_role || d.device_type || '';
+          data.push([d.hostname || String(d.id), role, d.model || '', hall?.name || '—', row?.name || '—']);
+        }
+        data.push([]);
+      };
+      for (const rowId of Object.keys(byRow).map(Number).sort((a, b) => a - b)) {
+        const row = rowMap.get(rowId);
+        const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
+        addDeviceRows(byRow[rowId], `${hall?.name || '—'} / ${row?.name || rowId}`);
+      }
+      if (noRow.length > 0) addDeviceRows(noRow, 'No Row Assignment');
+      data.push(['Connections']);
+      data.push(['Device', 'Port', 'PP-A', 'PP-A Port', 'Remote Device', 'Remote Port', 'PP-B', 'PP-B Port']);
+      const seen = new Set<string>();
+      for (const device of unrackedDevices) {
+        for (const pa of assignmentsByDevice[device.id] || []) {
+          if (!pa.remote_device_id) continue;
+          const linkKey = [device.id, pa.port_name, pa.remote_device_id, pa.remote_port_name].sort().join('|');
+          if (seen.has(linkKey)) continue;
+          seen.add(linkKey);
+          const remoteDevice = topoDevices.find(d => d.id === pa.remote_device_id);
+          data.push([
+            device.hostname || String(device.id), pa.port_name,
+            pa.patch_panel_a_hostname || '', pa.patch_panel_a_port || '',
+            pa.remote_device_hostname || remoteDevice?.hostname || String(pa.remote_device_id),
+            pa.remote_port_name || '',
+            pa.patch_panel_b_hostname || '', pa.patch_panel_b_port || '',
+          ]);
+        }
+      }
+      sheets.push({ name: 'Unracked', rows: data });
+    }
+
+    return sheets;
+  };
+
+  const handleGenerateConnectionSheet = async (topology: Topology) => {
     setGeneratingConnectionSheet(true);
     try {
+      const sheets = await buildConnectionSheetData(topology);
       const XLSX = await import('xlsx');
-
-      // Fetch port assignments for all topology devices
-      const assignmentsByDevice: Record<number, PortAssignment[]> = {};
-      await Promise.all(
-        topoDevices.map(async (d) => {
-          try {
-            assignmentsByDevice[d.id] = await getServices().portAssignments.list(d.id);
-          } catch {
-            assignmentsByDevice[d.id] = [];
-          }
-        })
-      );
-
-      // Build location lookup maps
-      const hallMap = new Map(halls.map(h => [h.id, h]));
-      const rowMap = new Map(ipamRows.map(r => [r.id, r]));
-      const rackMap = new Map(racks.map(r => [r.id, r]));
-      const dcMap = new Map(datacenters.map(d => [d.id, d]));
-      const campusMap = new Map(campuses.map(c => [c.id, c]));
-      const regionMap = new Map(regions.map(r => [r.id, r]));
-
-      // Derive location breadcrumb for the topology
-      const dc = topology.datacenter_id ? dcMap.get(topology.datacenter_id) : undefined;
-      const campus = dc?.campus_id ? campusMap.get(dc.campus_id) : undefined;
-      const region = campus?.region_id ? regionMap.get(campus.region_id) : undefined;
-      const locationBreadcrumb = [region?.name, campus?.name, dc?.name].filter(Boolean).join(' > ') || '—';
-
-      // Group devices by rack_id
-      const devicesByRack: Record<number, Device[]> = {};
-      const unrackedDevices: Device[] = [];
-      for (const d of topoDevices) {
-        if (d.rack_id) {
-          (devicesByRack[d.rack_id] ??= []).push(d);
-        } else {
-          unrackedDevices.push(d);
-        }
-      }
-
-      // Sort rack IDs for consistent tab ordering
-      const rackIds = Object.keys(devicesByRack).map(Number).sort((a, b) => a - b);
-
       const wb = XLSX.utils.book_new();
-
-      // --- Summary sheet ---
-      const summaryData: (string | number)[][] = [
-        ['Topology', topology.name],
-        ['Location', locationBreadcrumb],
-        ['Total Devices', topoDevices.length],
-        ['Racks', rackIds.length],
-        [],
-        ['Rack', 'Hall', 'Row', 'Devices', 'Spines', 'Leaves', 'Patch Panels'],
-      ];
-      for (const rackId of rackIds) {
-        const rack = rackMap.get(rackId);
-        const row = rack?.row_id ? rowMap.get(rack.row_id) : undefined;
-        const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
-        const rDevices = devicesByRack[rackId];
-        summaryData.push([
-          rack?.name || String(rackId),
-          hall?.name || '—',
-          row?.name || '—',
-          rDevices.length,
-          rDevices.filter(d => d.topology_role === 'spine' || d.topology_role === 'super-spine').length,
-          rDevices.filter(d => d.topology_role === 'leaf').length,
-          rDevices.filter(d => d.vendor === 'Patch Panel').length,
-        ]);
+      for (const sheet of sheets) {
+        const ws = XLSX.utils.aoa_to_sheet(sheet.rows);
+        XLSX.utils.book_append_sheet(wb, ws, sheet.name);
       }
-      if (unrackedDevices.length > 0) {
-        summaryData.push(['Unracked', '—', '—', unrackedDevices.length, 0, 0, unrackedDevices.filter(d => d.vendor === 'Patch Panel').length]);
-      }
-      const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
-      summaryWs['!cols'] = [{ wch: 20 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }];
-      XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
-
-      // --- Helper to build a rack sheet ---
-      const buildRackSheet = (sheetDevices: Device[], rackName: string, hallName: string, rowName: string) => {
-        const data: (string | number)[][] = [];
-
-        // Header section
-        data.push(['Topology:', topology.name]);
-        data.push(['Location:', locationBreadcrumb]);
-        data.push(['Hall:', hallName, 'Row:', rowName, 'Rack:', rackName]);
-        data.push([]); // separator
-
-        // Rack elevation
-        data.push(['RU', '│', 'Device', 'Role', 'Model', '│']);
-        const maxRU = 42;
-        // Build RU occupancy map (rack_position is 1-based from bottom)
-        const ruMap = new Map<number, Device>();
-        for (const d of sheetDevices) {
-          if (d.rack_position && d.rack_position > 0) {
-            ruMap.set(d.rack_position, d);
-          }
-        }
-        // Render top-down (highest RU first)
-        for (let ru = maxRU; ru >= 1; ru--) {
-          const dev = ruMap.get(ru);
-          if (dev) {
-            const role = dev.vendor === 'Patch Panel' ? 'patch panel' : dev.topology_role || dev.device_type || '';
-            data.push([ru, '│', dev.hostname || String(dev.id), role, dev.model || '', '│']);
-          } else {
-            data.push([ru, '│', '', '', '', '│']);
-          }
-        }
-        data.push([]); // separator
-
-        // Connection table
-        data.push(['Device', 'Port', 'PP-A', 'PP-A Port', 'Remote Device', 'Remote Port', 'PP-B', 'PP-B Port', 'Cable (m)']);
-        const seen = new Set<string>();
-        for (const device of sheetDevices) {
-          const assignments = assignmentsByDevice[device.id] || [];
-          for (const pa of assignments) {
-            if (!pa.remote_device_id) continue;
-            const linkKey = [device.id, pa.port_name, pa.remote_device_id, pa.remote_port_name].sort().join('|');
-            if (seen.has(linkKey)) continue;
-            seen.add(linkKey);
-
-            const remoteDevice = topoDevices.find(d => d.id === pa.remote_device_id);
-            data.push([
-              device.hostname || String(device.id),
-              pa.port_name,
-              pa.patch_panel_a_hostname || '',
-              pa.patch_panel_a_port || '',
-              pa.remote_device_hostname || remoteDevice?.hostname || String(pa.remote_device_id),
-              pa.remote_port_name || '',
-              pa.patch_panel_b_hostname || '',
-              pa.patch_panel_b_port || '',
-              pa.cable_length_meters != null ? pa.cable_length_meters : '',
-            ]);
-          }
-        }
-
-        const ws = XLSX.utils.aoa_to_sheet(data);
-        ws['!cols'] = [
-          { wch: 6 },  // RU / Device
-          { wch: 3 },  // │ / Port
-          { wch: 22 }, // Device / PP-A
-          { wch: 14 }, // Role / PP-A Port
-          { wch: 22 }, // Model / Remote Device
-          { wch: 14 }, // │ / Remote Port
-          { wch: 14 }, // PP-B
-          { wch: 14 }, // PP-B Port
-        ];
-        return ws;
-      };
-
-      // --- Rack sheets ---
-      for (const rackId of rackIds) {
-        const rack = rackMap.get(rackId);
-        const row = rack?.row_id ? rowMap.get(rack.row_id) : undefined;
-        const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
-
-        const rackName = rack?.name || String(rackId);
-        const hallName = hall?.name || '—';
-        const rowName = row?.name || '—';
-
-        // Sheet name: truncated to 31 chars (Excel limit), sanitize invalid chars
-        let sheetName = `${hallName}-${rowName}-${rackName}`.replace(/[[\]*?/\\:]/g, '-').slice(0, 31);
-        // Ensure unique sheet name
-        const existingNames = wb.SheetNames;
-        if (existingNames.includes(sheetName)) {
-          sheetName = sheetName.slice(0, 28) + `-${existingNames.length}`;
-        }
-
-        const ws = buildRackSheet(devicesByRack[rackId], rackName, hallName, rowName);
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      }
-
-      // --- Unracked sheet ---
-      if (unrackedDevices.length > 0) {
-        // Group by row for organization
-        const byRow: Record<number, Device[]> = {};
-        const noRow: Device[] = [];
-        for (const d of unrackedDevices) {
-          if (d.row_id) {
-            (byRow[d.row_id] ??= []).push(d);
-          } else {
-            noRow.push(d);
-          }
-        }
-
-        const data: (string | number)[][] = [
-          ['Topology:', topology.name],
-          ['Location:', locationBreadcrumb],
-          ['', '', '', 'Unracked Devices'],
-          [],
-        ];
-
-        const addDeviceRows = (devs: Device[], groupLabel: string) => {
-          data.push([groupLabel]);
-          data.push(['Device', 'Role', 'Model', 'Hall', 'Row']);
-          for (const d of devs) {
-            const hall = d.hall_id ? hallMap.get(d.hall_id) : undefined;
-            const row = d.row_id ? rowMap.get(d.row_id) : undefined;
-            const role = d.vendor === 'Patch Panel' ? 'patch panel' : d.topology_role || d.device_type || '';
-            data.push([d.hostname || String(d.id), role, d.model || '', hall?.name || '—', row?.name || '—']);
-          }
-          data.push([]);
-        };
-
-        for (const rowId of Object.keys(byRow).map(Number).sort((a, b) => a - b)) {
-          const row = rowMap.get(rowId);
-          const hall = row?.hall_id ? hallMap.get(row.hall_id) : undefined;
-          addDeviceRows(byRow[rowId], `${hall?.name || '—'} / ${row?.name || rowId}`);
-        }
-        if (noRow.length > 0) {
-          addDeviceRows(noRow, 'No Row Assignment');
-        }
-
-        // Connection table for unracked devices
-        data.push(['Connections']);
-        data.push(['Device', 'Port', 'PP-A', 'PP-A Port', 'Remote Device', 'Remote Port', 'PP-B', 'PP-B Port']);
-        const seen = new Set<string>();
-        for (const device of unrackedDevices) {
-          const assignments = assignmentsByDevice[device.id] || [];
-          for (const pa of assignments) {
-            if (!pa.remote_device_id) continue;
-            const linkKey = [device.id, pa.port_name, pa.remote_device_id, pa.remote_port_name].sort().join('|');
-            if (seen.has(linkKey)) continue;
-            seen.add(linkKey);
-            const remoteDevice = topoDevices.find(d => d.id === pa.remote_device_id);
-            data.push([
-              device.hostname || String(device.id),
-              pa.port_name,
-              pa.patch_panel_a_hostname || '',
-              pa.patch_panel_a_port || '',
-              pa.remote_device_hostname || remoteDevice?.hostname || String(pa.remote_device_id),
-              pa.remote_port_name || '',
-              pa.patch_panel_b_hostname || '',
-              pa.patch_panel_b_port || '',
-            ]);
-          }
-        }
-
-        const ws = XLSX.utils.aoa_to_sheet(data);
-        ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 22 }, { wch: 14 }, { wch: 14 }, { wch: 14 }];
-        XLSX.utils.book_append_sheet(wb, ws, 'Unracked');
-      }
-
-      // Download
       const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
@@ -715,6 +691,24 @@ export function TopologyManagement() {
       a.download = `${topology.id}-rack-connections.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addNotification('error', `Failed to generate connection sheet: ${msg}`);
+    } finally {
+      setGeneratingConnectionSheet(false);
+    }
+  };
+
+  const handlePreviewConnectionSheet = async (topology: Topology) => {
+    setGeneratingConnectionSheet(true);
+    try {
+      const sheets = await buildConnectionSheetData(topology);
+      setCsvPreview({
+        title: `Rack Sheet — ${topology.name}`,
+        sheets,
+        filename: `${topology.id}-rack-connections.xlsx`,
+        onDownload: () => handleGenerateConnectionSheet(topology),
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       addNotification('error', `Failed to generate connection sheet: ${msg}`);
@@ -1471,7 +1465,7 @@ export function TopologyManagement() {
             let rackNumericId: number | undefined;
             if (dcId && rowNumericId) {
               try {
-                const createdRack = await svc.ipam.createRack({ name: `Rack ${rackIdx + 1}`, description: '', row_id: String(rowNumericId) });
+                const createdRack = await svc.ipam.createRack({ name: `Rack ${rackIdx + 1}`, description: '', row_id: String(rowNumericId), width_cm: 60, height_ru: 42, depth_cm: 100 });
                 rackNumericId = createdRack.id;
               } catch { /* rack may already exist */ }
             }
@@ -1561,32 +1555,36 @@ export function TopologyManagement() {
   return (
     <>
     <LoadingState loading={loading} error={error} loadingMessage="Loading topologies...">
-      <ActionBar>
-        <Button onClick={form.openAdd}>
-          <PlusIcon size={16} />
-          Add Topology
-        </Button>
-        <Button onClick={() => setShowTopologyDialog(true)} disabled={buildingTopology}>
-          <Icon name="lan" size={16} />
-          {buildingTopology ? 'Building...' : 'Topology Builder'}
-        </Button>
-        {hasBuiltTopology && (
-          <Button variant="danger" onClick={async () => {
-            if (await confirm({ title: 'Teardown Built Topologies', message: 'This will remove all devices, IPAM allocations, and containers for built topologies (CLOS and/or Hierarchical).', confirmText: 'Teardown', destructive: true })) {
-              // Teardown both if they exist
-              const closTopo = topologies.find(t => t.name === 'DC1 CLOS Fabric');
-              const hierTopo = topologies.find(t => t.name === 'DC1 Hierarchical Fabric');
-              if (closTopo) await handleTeardownTopology('clos');
-              if (hierTopo) await handleTeardownTopology('hierarchical');
-            }
-          }}>
-            <TrashIcon size={16} />
-            Teardown
-          </Button>
-        )}
-      </ActionBar>
-
-      <Card title="Topologies" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="Topologies"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <div style={{ display: 'flex', gap: 6 }}>
+            {hasBuiltTopology && (
+              <Button variant="danger" onClick={async () => {
+                if (await confirm({ title: 'Teardown Built Topologies', message: 'This will remove all devices, IPAM allocations, and containers for built topologies (CLOS and/or Hierarchical).', confirmText: 'Teardown', destructive: true })) {
+                  const closTopo = topologies.find(t => t.name === 'DC1 CLOS Fabric');
+                  const hierTopo = topologies.find(t => t.name === 'DC1 Hierarchical Fabric');
+                  if (closTopo) await handleTeardownTopology('clos');
+                  if (hierTopo) await handleTeardownTopology('hierarchical');
+                }
+              }}>
+                <TrashIcon size={16} />
+                Teardown
+              </Button>
+            )}
+            <Button onClick={() => setShowTopologyDialog(true)} disabled={buildingTopology}>
+              <Icon name="lan" size={16} />
+              {buildingTopology ? 'Building...' : 'Topology Builder'}
+            </Button>
+            <Button onClick={form.openAdd}>
+              <PlusIcon size={16} />
+              Add Topology
+            </Button>
+            <RefreshButton onClick={() => { refreshTopologies(); refreshDevices(); }} />
+          </div>
+        }
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>
@@ -1664,6 +1662,30 @@ export function TopologyManagement() {
                         setTimeout(() => diagramRef.current?.exportSvg(), 100);
                       },
                       disabled: !hasSpines || !hasLeaves,
+                    },
+                  ]}
+                />
+                <ActionMenu
+                  icon={<Icon name="visibility" size={14} />}
+                  tooltip="Preview"
+                  items={[
+                    {
+                      icon: <Icon name="table_view" size={14} />,
+                      label: 'Preview Cutsheet',
+                      onClick: () => handlePreviewCutsheet(t),
+                      disabled: generatingCutsheet || !hasSpines || !hasLeaves,
+                    },
+                    {
+                      icon: <Icon name="receipt_long" size={14} />,
+                      label: 'Preview Bill of Materials',
+                      onClick: () => handlePreviewBOM(t),
+                      disabled: generatingBOM || !hasDevices,
+                    },
+                    {
+                      icon: <Icon name="grid_on" size={14} />,
+                      label: 'Preview Rack Sheet',
+                      onClick: () => handlePreviewConnectionSheet(t),
+                      disabled: generatingConnectionSheet || !hasDevices,
                     },
                   ]}
                 />
@@ -2194,7 +2216,7 @@ export function TopologyManagement() {
             ]}
           />
           <div style={{ marginTop: '20px' }}>
-            <Checkbox
+            <Toggle
               label="Spawn Containers"
               checked={topologyConfig.spawn_containers}
               onChange={(checked) => setTopologyConfig(c => ({ ...c, spawn_containers: checked }))}
@@ -2216,7 +2238,7 @@ export function TopologyManagement() {
         {/* Super-Spine Toggle (CLOS only) */}
         {topologyConfig.architecture === 'clos' && (
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
-            <Checkbox
+            <Toggle
               label="Enable Super-Spine (5-Stage CLOS)"
               checked={topologyConfig.super_spine_enabled}
               onChange={(checked) => setTopologyConfig(c => ({ ...c, super_spine_enabled: checked }))}
@@ -2779,12 +2801,12 @@ export function TopologyManagement() {
                     placeholder="None"
                   />
                 ))}
-                <Checkbox
+                <Toggle
                   label="Include Leaf Uplinks"
                   checked={topologyConfig.gpu_include_leaf_uplinks}
                   onChange={(checked) => setTopologyConfig(c => ({ ...c, gpu_include_leaf_uplinks: checked }))}
                 />
-                <Checkbox
+                <Toggle
                   label="Include Fabric Cabling"
                   checked={topologyConfig.gpu_include_fabric_cabling}
                   onChange={(checked) => setTopologyConfig(c => ({ ...c, gpu_include_fabric_cabling: checked }))}
@@ -3011,8 +3033,13 @@ export function TopologyManagement() {
                     </td>
                     {previewData.racks.length > 0 && (
                       <td>
-                        <select
-                          value={device.rack_index ?? ''}
+                        <SelectField
+                          name="rack"
+                          value={String(device.rack_index ?? '')}
+                          options={[
+                            { value: '', label: 'None' },
+                            ...previewData.racks.map(r => ({ value: String(r.index), label: r.name })),
+                          ]}
                           onChange={(e) => {
                             const val = e.target.value;
                             if (val === '') {
@@ -3029,13 +3056,7 @@ export function TopologyManagement() {
                               }
                             }
                           }}
-                          style={{ width: '100%', padding: '2px 4px', fontSize: '11px', background: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', borderRadius: '3px', color: 'inherit' }}
-                        >
-                          <option value="">None</option>
-                          {previewData.racks.map(r => (
-                            <option key={r.index} value={r.index}>{r.name}</option>
-                          ))}
-                        </select>
+                        />
                       </td>
                     )}
                     {previewData.racks.length > 0 && (
@@ -3170,6 +3191,16 @@ export function TopologyManagement() {
             )
           )}
         </Modal>
+      )}
+
+      {csvPreview && (
+        <CsvPreviewModal
+          title={csvPreview.title}
+          sheets={csvPreview.sheets}
+          filename={csvPreview.filename}
+          onClose={() => setCsvPreview(null)}
+          onDownload={() => { csvPreview.onDownload(); setCsvPreview(null); }}
+        />
       )}
 
       <ConfirmDialogRenderer />

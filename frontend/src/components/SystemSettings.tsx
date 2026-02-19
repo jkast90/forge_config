@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type { User, UserFormData, Settings } from '@core';
-import { useUsers, useAuth, useSettings, useDhcpOptions, usePersistedTab, formatRelativeTime, createChangeHandler, getServices, addNotification, validators } from '@core';
-import { Button } from './Button';
+import { useUsers, useAuth, useSettings, useDhcpOptions, usePersistedTab, formatRelativeTime, createChangeHandler, getServices, addNotification, validators, useWebSocket, getServiceConfig, getTokenStorage } from '@core';
+import { Button, RefreshButton } from './Button';
 import { Card } from './Card';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
@@ -12,11 +12,11 @@ import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { Icon, PlusIcon, RefreshIcon, SpinnerIcon } from './Icon';
 import { ModelSelector } from './ModelSelector';
+import { SelectField } from './SelectField';
 import { Toggle } from './Toggle';
-import { DhcpOptions } from './DhcpOptions';
 import { ValidatedInput } from './ValidatedInput';
 
-type SystemTab = 'users' | 'branding' | 'naming' | 'topology' | 'dhcp' | 'ssh' | 'opengear';
+type SystemTab = 'users' | 'branding' | 'naming' | 'topology' | 'dhcp' | 'ssh' | 'opengear' | 'broadcast';
 
 const EMPTY_FORM: UserFormData = {
   username: '',
@@ -31,7 +31,7 @@ function UsersPanel() {
   const [formData, setFormData] = useState<UserFormData>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
 
-  const { users, loading, error, refresh, createUser, updateUser, deleteUser } = useUsers();
+  const { users, loading, error, createUser, updateUser, deleteUser } = useUsers();
   const { username: currentUsername } = useAuth();
 
   const openCreate = () => {
@@ -113,15 +113,10 @@ function UsersPanel() {
         title="Users"
         titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
         headerAction={
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Button variant="primary" onClick={openCreate}>
-              <PlusIcon size={14} />
-              Add User
-            </Button>
-            <Button variant="secondary" onClick={refresh}>
-              <RefreshIcon size={14} />
-            </Button>
-          </div>
+          <Button variant="primary" onClick={openCreate}>
+            <PlusIcon size={14} />
+            Add User
+          </Button>
         }
       >
         <InfoSection open={showInfo}>
@@ -190,6 +185,7 @@ function UsersPanel() {
 function BrandingPanel() {
   const { settings, loading, load, save } = useSettings();
   const [formData, setFormData] = useState<Settings | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -257,6 +253,7 @@ function BrandingPanel() {
   return (
     <Card
       title="Branding"
+      titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
       headerAction={
         <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
           {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
@@ -264,6 +261,9 @@ function BrandingPanel() {
         </Button>
       }
     >
+      <InfoSection open={showInfo}>
+        <p>Customize the application's name and logo shown in the header and login page.</p>
+      </InfoSection>
       {loading ? (
         <p>Loading settings...</p>
       ) : !formData ? (
@@ -346,6 +346,7 @@ function BrandingPanel() {
 
 function DeviceNamingPanel() {
   const { settings, loading, load, save } = useSettings();
+  const [showInfo, setShowInfo] = useState(false);
   const [formData, setFormData] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -375,7 +376,8 @@ function DeviceNamingPanel() {
 
   return (
     <Card
-      title="Device Naming"
+      title="Slack % and Device Naming"
+      titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
       headerAction={
         <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
           {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
@@ -383,6 +385,9 @@ function DeviceNamingPanel() {
         </Button>
       }
     >
+      <InfoSection open={showInfo}>
+        <p>Configure the hostname pattern for auto-generated device names and the cable slack percentage added to estimated cable runs.</p>
+      </InfoSection>
       {loading ? (
         <p>Loading settings...</p>
       ) : !formData ? (
@@ -424,6 +429,7 @@ function DeviceNamingPanel() {
 
 function TopologyDefaultsPanel() {
   const { settings, loading, load, save } = useSettings();
+  const [showInfo, setShowInfo] = useState(false);
   const [formData, setFormData] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -454,6 +460,7 @@ function TopologyDefaultsPanel() {
   return (
     <Card
       title="Topology Builder Defaults"
+      titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
       headerAction={
         <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
           {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
@@ -461,6 +468,9 @@ function TopologyDefaultsPanel() {
         </Button>
       }
     >
+      <InfoSection open={showInfo}>
+        <p>Default port counts and speeds used when building CLOS and hierarchical fabric topologies.</p>
+      </InfoSection>
       {loading ? (
         <p>Loading settings...</p>
       ) : !formData ? (
@@ -511,6 +521,7 @@ function TopologyDefaultsPanel() {
 
 function SshDefaultsPanel() {
   const { settings, loading, load, save } = useSettings();
+  const [showInfo, setShowInfo] = useState(false);
   const [formData, setFormData] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -541,6 +552,7 @@ function SshDefaultsPanel() {
   return (
     <Card
       title="SSH Defaults"
+      titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
       headerAction={
         <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
           {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
@@ -548,6 +560,9 @@ function SshDefaultsPanel() {
         </Button>
       }
     >
+      <InfoSection open={showInfo}>
+        <p>Default SSH credentials and backup command used when no vendor-specific settings are configured.</p>
+      </InfoSection>
       {loading ? (
         <p>Loading settings...</p>
       ) : !formData ? (
@@ -595,6 +610,7 @@ function SshDefaultsPanel() {
 
 function DhcpSettingsPanel() {
   const { settings, loading, load, save } = useSettings();
+  const [showInfo, setShowInfo] = useState(false);
   const [formData, setFormData] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -625,6 +641,7 @@ function DhcpSettingsPanel() {
   return (
     <Card
       title="DHCP Settings"
+      titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
       headerAction={
         <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
           {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
@@ -632,6 +649,9 @@ function DhcpSettingsPanel() {
         </Button>
       }
     >
+      <InfoSection open={showInfo}>
+        <p>Configure the DHCP server settings used for ZTP device provisioning, including the server address and lease durations.</p>
+      </InfoSection>
       {loading ? (
         <p>Loading settings...</p>
       ) : !formData ? (
@@ -690,6 +710,7 @@ function DhcpSettingsPanel() {
 
 function OpenGearPanel() {
   const { settings, loading, load, save } = useSettings();
+  const [showInfo, setShowInfo] = useState(false);
   const [formData, setFormData] = useState<Settings | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -720,6 +741,7 @@ function OpenGearPanel() {
   return (
     <Card
       title="OpenGear ZTP Enrollment"
+      titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
       headerAction={
         <Button variant="primary" onClick={handleSave} disabled={saving || loading || !formData}>
           {saving ? <SpinnerIcon size={14} /> : <Icon name="save" size={14} />}
@@ -727,6 +749,9 @@ function OpenGearPanel() {
         </Button>
       }
     >
+      <InfoSection open={showInfo}>
+        <p>Configure OpenGear console server settings for Zero Touch Provisioning enrollment of new devices.</p>
+      </InfoSection>
       {loading ? (
         <p>Loading settings...</p>
       ) : !formData ? (
@@ -765,12 +790,133 @@ function OpenGearPanel() {
   );
 }
 
+const WS_EVENT_TYPES = [
+  'system_broadcast', 'message',
+  'device_discovered', 'device_online', 'device_offline',
+  'backup_started', 'backup_completed', 'backup_failed',
+  'config_pulled', 'job_queued', 'job_started', 'job_completed', 'job_failed',
+];
+
+function BroadcastPanel() {
+  const [showInfo, setShowInfo] = useState(false);
+  const [eventType, setEventType] = useState('');
+  const [payloadText, setPayloadText] = useState('{"message":""}');
+  const [sending, setSending] = useState(false);
+  const [lastResult, setLastResult] = useState<{ clients: number; error?: string } | null>(null);
+  const { isConnected } = useWebSocket({ autoConnect: false });
+
+  const handleSend = async () => {
+    if (!eventType.trim()) return;
+    let payload: unknown;
+    try {
+      payload = JSON.parse(payloadText);
+    } catch {
+      setLastResult({ clients: 0, error: 'Invalid JSON payload' });
+      return;
+    }
+    setSending(true);
+    setLastResult(null);
+    try {
+      const baseUrl = getServiceConfig().baseUrl || '/api';
+      const token = await getTokenStorage().getToken();
+      const response = await fetch(`${baseUrl}/ws/broadcast`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ type: eventType.trim(), payload }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        throw new Error(err.error || `HTTP ${response.status}`);
+      }
+      const result = await response.json() as { clients: number };
+      setLastResult({ clients: result.clients });
+      addNotification('success', `Broadcast sent to ${result.clients} client${result.clients !== 1 ? 's' : ''}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setLastResult({ clients: 0, error: msg });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Card
+      title="Broadcast"
+      titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+    >
+      <InfoSection open={showInfo}>
+        <p>Send a WebSocket event to all connected browser clients. Useful for testing real-time event handling or triggering UI updates across sessions.</p>
+        <ul>
+          <li>Choose a known event type or enter a custom one</li>
+          <li>Provide a JSON payload matching the event's expected shape</li>
+          <li>All currently connected clients will receive the message instantly</li>
+        </ul>
+      </InfoSection>
+
+      <div className="settings-section">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+          <span className={`status-dot status-${isConnected ? 'online' : 'offline'}`} />
+          <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+            {isConnected ? 'WebSocket connected' : 'WebSocket disconnected'}
+          </span>
+        </div>
+
+        <SelectField
+          label="Event Type"
+          name="event_type"
+          value={eventType}
+          onChange={(e) => setEventType(e.target.value)}
+          options={WS_EVENT_TYPES.map(t => ({ value: t, label: t }))}
+          placeholder="Select event type..."
+        />
+
+        <div className="form-group">
+          <label htmlFor="broadcast-payload">Payload (JSON)</label>
+          <textarea
+            id="broadcast-payload"
+            value={payloadText}
+            onChange={(e) => setPayloadText(e.target.value)}
+            rows={6}
+            style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: '0.85rem' }}
+            placeholder="{}"
+          />
+        </div>
+
+        <Button
+          variant="primary"
+          onClick={handleSend}
+          disabled={sending || !eventType.trim()}
+        >
+          {sending ? <SpinnerIcon size={14} /> : <Icon name="send" size={14} />}
+          {sending ? 'Sending...' : 'Broadcast'}
+        </Button>
+
+        {lastResult && (
+          <div style={{ marginTop: '12px' }}>
+            {lastResult.error ? (
+              <div className="form-error">{lastResult.error}</div>
+            ) : (
+              <span style={{ fontSize: '13px', color: 'var(--color-text-secondary)' }}>
+                Sent to <strong>{lastResult.clients}</strong> client{lastResult.clients !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export function SystemSettings() {
-  const { users } = useUsers();
+  const { users, refresh: refreshUsers } = useUsers();
   const { options } = useDhcpOptions();
+  const [showInfo, setShowInfo] = useState(false);
   const [activeTab, setActiveTab] = usePersistedTab<SystemTab>(
     'users',
-    ['users', 'branding', 'naming', 'topology', 'dhcp', 'ssh', 'opengear'],
+    ['users', 'branding', 'naming', 'topology', 'dhcp', 'ssh', 'opengear', 'broadcast'],
     'tab_system',
   );
 
@@ -780,12 +926,20 @@ export function SystemSettings() {
     { id: 'dhcp', label: 'DHCP Settings', icon: 'lan' },
     { id: 'opengear', label: 'OpenGear', icon: 'router' },
     { id: 'branding', label: 'Branding', icon: 'palette' },
-    { id: 'naming', label: 'Device Naming', icon: 'badge' },
+    { id: 'naming', label: 'Slack % and Device Naming', icon: 'badge' },
     { id: 'topology', label: 'Topology Defaults', icon: 'hub' },
+    { id: 'broadcast', label: 'Broadcast', icon: 'campaign' },
   ], [users.length]);
 
   return (
-    <Card title="System">
+    <Card
+      title="System"
+      titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+      headerAction={<RefreshButton onClick={refreshUsers} />}
+    >
+      <InfoSection open={showInfo}>
+        <p>System-wide settings including user accounts, branding, device naming, SSH defaults, DHCP, and ZTP enrollment configuration.</p>
+      </InfoSection>
       <SideTabs tabs={tabs} activeTab={activeTab} onTabChange={(id) => setActiveTab(id as SystemTab)}>
         {activeTab === 'users' && <UsersPanel />}
         {activeTab === 'ssh' && <SshDefaultsPanel />}
@@ -794,6 +948,7 @@ export function SystemSettings() {
         {activeTab === 'branding' && <BrandingPanel />}
         {activeTab === 'naming' && <DeviceNamingPanel />}
         {activeTab === 'topology' && <TopologyDefaultsPanel />}
+        {activeTab === 'broadcast' && <BroadcastPanel />}
       </SideTabs>
     </Card>
   );

@@ -150,7 +150,7 @@ pub(super) async fn compute_three_tier_preview(
             for k in 1..=racks_per_row {
                 // Insert spine rack at the midpoint
                 if k == mid + 1 {
-                    let spine_name = format!("Hall {} Row {} Spine Rack", h, r);
+                    let spine_name = format!("Hall {} Row {} Network Rack", h, r);
                     racks.push(TopologyPreviewRack {
                         index: rack_index,
                         name: spine_name.clone(),
@@ -807,7 +807,7 @@ pub async fn build_three_tier(
                 for k in 1..=racks_per_row {
                     if k == mid + 1 {
                         let spine_rack_req = crate::models::CreateIpamRackRequest {
-                            name: format!("Hall {} Row {} Spine Rack", h, r),
+                            name: format!("Hall {} Row {} Network Rack", h, r),
                             description: Some("Auto-created by Hierarchical Build — distribution switches".to_string()),
                             row_id,
                             width_cm: req.rack_width_cm,

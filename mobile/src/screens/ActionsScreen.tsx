@@ -54,11 +54,11 @@ export function ActionsScreen() {
 
   const vendorFilterOptions = useMemo(() => [
     { value: '', label: 'All Vendors' },
-    ...vendors.map(v => ({ value: v.id, label: v.name })),
+    ...vendors.map(v => ({ value: String(v.id), label: v.name })),
   ], [vendors]);
 
   const vendorOptions = useMemo(() =>
-    vendors.map(v => ({ value: v.id, label: v.name })),
+    vendors.map(v => ({ value: String(v.id), label: v.name })),
   [vendors]);
 
   const handleAdd = () => {
@@ -70,8 +70,8 @@ export function ActionsScreen() {
   const handleEdit = (action: VendorAction) => {
     setEditingAction(action);
     setFormData({
-      id: action.id,
-      vendor_id: action.vendor_id,
+      id: String(action.id),
+      vendor_id: String(action.vendor_id),
       label: action.label,
       command: action.command,
       sort_order: action.sort_order,
@@ -91,17 +91,15 @@ export function ActionsScreen() {
     if (formData.action_type === 'ssh' && !formData.command.trim()) { showError('Command is required'); return; }
     if (formData.action_type === 'webhook' && !formData.webhook_url.trim()) { showError('Webhook URL is required'); return; }
 
-    const { output_parser_id, ...rest } = formData;
+    const { output_parser_id, id: _id, ...rest } = formData;
     const payload = {
       ...rest,
+      vendor_id: Number(rest.vendor_id),
       output_parser_id: output_parser_id ? Number(output_parser_id) : undefined,
     };
     const success = editingAction
       ? await updateAction(editingAction.id, payload)
-      : await createAction({
-          ...payload,
-          id: formData.id || `${formData.vendor_id}-${formData.label}`.toLowerCase().replace(/[^a-z0-9]/g, '-'),
-        });
+      : await createAction(payload);
     if (success) { setShowForm(false); setEditingAction(null); }
   };
 
@@ -183,7 +181,7 @@ export function ActionsScreen() {
 
       <FlatList
         data={displayActions}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderAction}
         ListEmptyComponent={<EmptyState message="No actions" actionLabel="Add Action" onAction={handleAdd} />}
         contentContainerStyle={displayActions.length === 0 ? styles.emptyList : undefined}

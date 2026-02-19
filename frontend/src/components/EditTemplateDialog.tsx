@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { JobTemplate, CreateJobTemplateRequest, Device } from '@core';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
@@ -22,6 +22,8 @@ export function EditTemplateDialog({ isOpen, onClose, template, onUpdate, creden
   const [schedule, setSchedule] = useState('');
   const [enabled, setEnabled] = useState(true);
   const [credentialId, setCredentialId] = useState('');
+  const [targetDeviceIds, setTargetDeviceIds] = useState<number[]>([]);
+  const [deviceSearch, setDeviceSearch] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -31,8 +33,31 @@ export function EditTemplateDialog({ isOpen, onClose, template, onUpdate, creden
       setSchedule(template.schedule);
       setEnabled(template.enabled);
       setCredentialId(template.credential_id != null ? String(template.credential_id) : '');
+      setTargetDeviceIds(template.target_device_ids ?? []);
+      setDeviceSearch('');
     }
   }, [isOpen, template]);
+
+  const allDevices = useMemo(() => {
+    if (!deviceMap) return [];
+    return Array.from(deviceMap.values()).sort((a, b) =>
+      (a.hostname || '').localeCompare(b.hostname || '')
+    );
+  }, [deviceMap]);
+
+  const filteredDevices = useMemo(() => {
+    if (!deviceSearch.trim()) return allDevices;
+    const q = deviceSearch.toLowerCase();
+    return allDevices.filter(d =>
+      (d.hostname || '').toLowerCase().includes(q) || d.ip.toLowerCase().includes(q)
+    );
+  }, [allDevices, deviceSearch]);
+
+  const toggleDevice = (id: number) => {
+    setTargetDeviceIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +71,7 @@ export function EditTemplateDialog({ isOpen, onClose, template, onUpdate, creden
         command: template.command,
         action_id: template.action_id,
         target_mode: template.target_mode,
-        target_device_ids: template.target_device_ids,
+        target_device_ids: targetDeviceIds,
         target_group_id: template.target_group_id,
         schedule,
         enabled,
@@ -58,6 +83,8 @@ export function EditTemplateDialog({ isOpen, onClose, template, onUpdate, creden
       setSaving(false);
     }
   };
+
+  const showDevicePicker = template?.target_mode === 'device';
 
   return (
     <FormDialog
@@ -106,16 +133,6 @@ export function EditTemplateDialog({ isOpen, onClose, template, onUpdate, creden
                   <span><code className="text-xs">{template.command}</code></span>
                 </>
               ) : null}
-              {template.target_device_ids.length > 0 && (
-                <>
-                  <span className="label">Target</span>
-                  <span>
-                    {template.target_device_ids
-                      .map((id) => deviceMap?.get(id)?.hostname || String(id))
-                      .join(', ')}
-                  </span>
-                </>
-              )}
               {template.target_mode === 'group' && template.target_group_id > 0 && (
                 <>
                   <span className="label">Target</span>
@@ -126,6 +143,72 @@ export function EditTemplateDialog({ isOpen, onClose, template, onUpdate, creden
           </div>
         );
       })()}
+
+      {showDevicePicker && (
+        <div className="form-group">
+          <label className="form-label">
+            Target Devices
+            {targetDeviceIds.length > 0 && (
+              <span style={{ marginLeft: 6, fontWeight: 400, opacity: 0.6 }}>
+                ({targetDeviceIds.length} selected)
+              </span>
+            )}
+          </label>
+          <input
+            type="text"
+            placeholder="Search devices..."
+            value={deviceSearch}
+            onChange={e => setDeviceSearch(e.target.value)}
+            style={{ marginBottom: 6, fontSize: 13 }}
+          />
+          <div style={{
+            maxHeight: 180,
+            overflowY: 'auto',
+            border: '1px solid var(--border-color)',
+            borderRadius: 6,
+            background: 'var(--bg-secondary)',
+          }}>
+            {filteredDevices.length === 0 ? (
+              <div style={{ padding: '8px 12px', fontSize: 12, opacity: 0.5 }}>No devices found</div>
+            ) : filteredDevices.map(d => (
+              <div
+                key={d.id}
+                onClick={() => toggleDevice(d.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  borderBottom: '1px solid var(--border-color)',
+                }}
+                className="hover-highlight"
+              >
+                <input
+                  type="checkbox"
+                  checked={targetDeviceIds.includes(d.id)}
+                  onChange={() => toggleDevice(d.id)}
+                  onClick={e => e.stopPropagation()}
+                  style={{ flexShrink: 0, flex: '0 0 auto', width: 14, height: 14 }}
+                />
+                <span style={{ fontWeight: 500 }}>{d.hostname || d.mac || String(d.id)}</span>
+                <span style={{ opacity: 0.5, fontFamily: 'monospace', fontSize: 11 }}>{d.ip}</span>
+              </div>
+            ))}
+          </div>
+          {targetDeviceIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTargetDeviceIds([])}
+              style={{ marginTop: 4, fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.5, padding: 0 }}
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      )}
+
       <CronScheduleInput value={schedule} onChange={setSchedule} />
       <SelectField
         label="Credential"

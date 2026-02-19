@@ -185,7 +185,7 @@ Topology table with expandable rows showing device assignments by role. Features
 |-----|-------------|
 | **Users** | User management (create, edit, enable/disable, delete) |
 | **Branding** | Application name and logo customization |
-| **Device Naming** | Hostname pattern configuration (`$datacenter-$region-$hall-$role-#`) with live preview |
+| **Slack % and Device Naming** | Hostname pattern configuration (`$datacenter-$region-$hall-$role-#`) with live preview |
 
 ### Data Explorer
 Redux store inspector with real-time JSON tree navigation for debugging application state.

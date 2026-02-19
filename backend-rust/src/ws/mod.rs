@@ -25,6 +25,8 @@ pub enum EventType {
     JobStarted,
     JobCompleted,
     JobFailed,
+    SystemBroadcast,
+    Message,
 }
 
 /// WebSocket event message
@@ -143,6 +145,26 @@ impl Hub {
             payload: serde_json::to_value(job).unwrap_or_default(),
         })
         .await;
+    }
+
+    /// Broadcast arbitrary JSON to all connected clients, returns client count
+    pub async fn broadcast_json(&self, data: serde_json::Value) -> usize {
+        let count = *self.client_count.read().await;
+        if count > 0 {
+            match serde_json::to_string(&data) {
+                Ok(json) => {
+                    if let Err(e) = self.tx.send(json) {
+                        tracing::warn!("Error broadcasting JSON: {}", e);
+                    } else {
+                        tracing::debug!("Broadcasting custom event to {} clients", count);
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Error serializing broadcast JSON: {}", e);
+                }
+            }
+        }
+        count
     }
 
     /// Get the number of connected clients

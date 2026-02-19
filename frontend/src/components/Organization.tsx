@@ -9,9 +9,9 @@ import type {
   IpamRack, IpamRackFormData,
   Device,
 } from '@core';
-import { ActionBar } from './ActionBar';
-import { Button } from './Button';
+import { Button, RefreshButton } from './Button';
 import { Card } from './Card';
+import { InfoSection } from './InfoSection';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { Modal } from './Modal';
@@ -36,6 +36,7 @@ const EMPTY_RACK_FORM: IpamRackFormData = { name: '', description: '', row_id: '
 
 export function Locations() {
   const [activeTab, setActiveTab] = usePersistedTab<OrgTab>('regions', ['regions', 'campuses', 'datacenters', 'halls', 'rows', 'racks'], 'tab_locations');
+  const [showInfo, setShowInfo] = useState(false);
   const ipam = useIpam();
   const { regions, campuses, datacenters, halls, rows, racks, loading, error } = ipam;
   const { devices } = useDevices();
@@ -51,14 +52,22 @@ export function Locations() {
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading locations...">
-      <ActionBar>
-        <Button variant="secondary" onClick={ipam.refresh}>
-          <Icon name="refresh" size={16} />
-          Refresh
-        </Button>
-      </ActionBar>
-
-      <Card title="Locations">
+      <Card
+        title="Locations"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={<RefreshButton onClick={ipam.refresh} />}
+      >
+        <InfoSection open={showInfo}>
+          <p>The locations hierarchy organizes your physical infrastructure from geographic regions down to individual racks.</p>
+          <ul>
+            <li><strong>Regions</strong> — top-level geographic areas</li>
+            <li><strong>Campuses</strong> — physical sites within a region</li>
+            <li><strong>Datacenters</strong> — buildings or rooms within a campus</li>
+            <li><strong>Halls</strong> — areas within a datacenter floor</li>
+            <li><strong>Rows</strong> — equipment rows within a hall</li>
+            <li><strong>Racks</strong> — individual equipment racks within a row</li>
+          </ul>
+        </InfoSection>
         <SideTabs
           tabs={tabs}
           activeTab={activeTab}
@@ -84,6 +93,7 @@ function RegionsTab({ regions, ipam }: {
   regions: IpamRegion[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<IpamRegion | null>(null);
   const [form, setForm] = useState<IpamRegionFormData>(EMPTY_REGION_FORM);
@@ -121,7 +131,6 @@ function RegionsTab({ regions, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamRegion>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamRegion) => row.id, searchValue: (row: IpamRegion) => String(row.id) },
     { header: 'Name', accessor: (row: IpamRegion) => row.name, searchValue: (row: IpamRegion) => row.name },
     { header: 'Description', accessor: (row: IpamRegion) => row.description || '', searchValue: (row: IpamRegion) => row.description || '' },
     { header: 'Campuses', accessor: (row: IpamRegion) => String(row.campus_count ?? 0) },
@@ -134,20 +143,26 @@ function RegionsTab({ regions, ipam }: {
 
   return (
     <>
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={handleOpenCreate}><PlusIcon size={14} /> Add Region</Button>
-      </div>
-      <Table
-        data={regions}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="org-regions"
-        emptyMessage="No regions defined yet."
-        emptyDescription="Add a region to start building your location hierarchy."
-        searchable
-        searchPlaceholder="Search regions..."
-      />
+      <Card
+        title="Regions"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={<Button onClick={handleOpenCreate}><PlusIcon size={14} />Add Region</Button>}
+      >
+        <InfoSection open={showInfo}>
+          <p>Regions represent the top-level geographic areas in your location hierarchy. Each region can contain multiple campuses.</p>
+        </InfoSection>
+        <Table
+          data={regions}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="org-regions"
+          emptyMessage="No regions defined yet."
+          emptyDescription="Add a region to start building your location hierarchy."
+          searchable
+          searchPlaceholder="Search regions..."
+        />
+      </Card>
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Region' : 'Create Region'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., US East" />
@@ -168,6 +183,7 @@ function CampusesTab({ campuses, regions, ipam }: {
   regions: IpamRegion[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<IpamCampus | null>(null);
   const [form, setForm] = useState<IpamCampusFormData>(EMPTY_CAMPUS_FORM);
@@ -210,7 +226,6 @@ function CampusesTab({ campuses, regions, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamCampus>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamCampus) => row.id, searchValue: (row: IpamCampus) => String(row.id) },
     { header: 'Name', accessor: (row: IpamCampus) => row.name, searchValue: (row: IpamCampus) => row.name },
     { header: 'Region', accessor: (row: IpamCampus) => row.region_name || String(row.region_id), searchValue: (row: IpamCampus) => `${row.region_name || ''} ${row.region_id}` },
     { header: 'Description', accessor: (row: IpamCampus) => row.description || '', searchValue: (row: IpamCampus) => row.description || '' },
@@ -224,20 +239,26 @@ function CampusesTab({ campuses, regions, ipam }: {
 
   return (
     <>
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={handleOpenCreate}><PlusIcon size={14} /> Add Campus</Button>
-      </div>
-      <Table
-        data={campuses}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="org-campuses"
-        emptyMessage="No campuses defined yet."
-        emptyDescription="Add a campus to organize datacenters within a region."
-        searchable
-        searchPlaceholder="Search campuses..."
-      />
+      <Card
+        title="Campuses"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={<Button onClick={handleOpenCreate}><PlusIcon size={14} />Add Campus</Button>}
+      >
+        <InfoSection open={showInfo}>
+          <p>Campuses group datacenters within a region, typically representing a physical site or office location.</p>
+        </InfoSection>
+        <Table
+          data={campuses}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="org-campuses"
+          emptyMessage="No campuses defined yet."
+          emptyDescription="Add a campus to organize datacenters within a region."
+          searchable
+          searchPlaceholder="Search campuses..."
+        />
+      </Card>
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Campus' : 'Create Campus'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., New York City" />
@@ -259,6 +280,7 @@ function DatacentersTab({ datacenters, campuses, ipam }: {
   campuses: IpamCampus[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<IpamDatacenter | null>(null);
   const [form, setForm] = useState<IpamDatacenterFormData>(EMPTY_DATACENTER_FORM);
@@ -301,7 +323,6 @@ function DatacentersTab({ datacenters, campuses, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamDatacenter>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamDatacenter) => row.id, searchValue: (row: IpamDatacenter) => String(row.id) },
     { header: 'Name', accessor: (row: IpamDatacenter) => row.name, searchValue: (row: IpamDatacenter) => row.name },
     { header: 'Campus', accessor: (row: IpamDatacenter) => row.campus_name || String(row.campus_id), searchValue: (row: IpamDatacenter) => `${row.campus_name || ''} ${row.campus_id}` },
     { header: 'Region', accessor: (row: IpamDatacenter) => row.region_name || '', searchValue: (row: IpamDatacenter) => row.region_name || '' },
@@ -316,20 +337,26 @@ function DatacentersTab({ datacenters, campuses, ipam }: {
 
   return (
     <>
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={handleOpenCreate}><PlusIcon size={14} /> Add Datacenter</Button>
-      </div>
-      <Table
-        data={datacenters}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="org-datacenters"
-        emptyMessage="No datacenters defined yet."
-        emptyDescription="Add a datacenter within a campus."
-        searchable
-        searchPlaceholder="Search datacenters..."
-      />
+      <Card
+        title="Datacenters"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={<Button onClick={handleOpenCreate}><PlusIcon size={14} />Add Datacenter</Button>}
+      >
+        <InfoSection open={showInfo}>
+          <p>Datacenters are physical facilities within a campus that house networking equipment and servers.</p>
+        </InfoSection>
+        <Table
+          data={datacenters}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="org-datacenters"
+          emptyMessage="No datacenters defined yet."
+          emptyDescription="Add a datacenter within a campus."
+          searchable
+          searchPlaceholder="Search datacenters..."
+        />
+      </Card>
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Datacenter' : 'Create Datacenter'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., NYC DC1" />
@@ -351,6 +378,7 @@ function HallsTab({ halls, datacenters, ipam }: {
   datacenters: IpamDatacenter[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<IpamHall | null>(null);
   const [form, setForm] = useState<IpamHallFormData>(EMPTY_HALL_FORM);
@@ -393,7 +421,6 @@ function HallsTab({ halls, datacenters, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamHall>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamHall) => row.id, searchValue: (row: IpamHall) => String(row.id) },
     { header: 'Name', accessor: (row: IpamHall) => row.name, searchValue: (row: IpamHall) => row.name },
     { header: 'Datacenter', accessor: (row: IpamHall) => row.datacenter_name || String(row.datacenter_id), searchValue: (row: IpamHall) => `${row.datacenter_name || ''} ${row.datacenter_id}` },
     { header: 'Description', accessor: (row: IpamHall) => row.description || '', searchValue: (row: IpamHall) => row.description || '' },
@@ -407,20 +434,26 @@ function HallsTab({ halls, datacenters, ipam }: {
 
   return (
     <>
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={handleOpenCreate}><PlusIcon size={14} /> Add Hall</Button>
-      </div>
-      <Table
-        data={halls}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="org-halls"
-        emptyMessage="No halls defined yet."
-        emptyDescription="Add a hall within a datacenter."
-        searchable
-        searchPlaceholder="Search halls..."
-      />
+      <Card
+        title="Halls"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={<Button onClick={handleOpenCreate}><PlusIcon size={14} />Add Hall</Button>}
+      >
+        <InfoSection open={showInfo}>
+          <p>Halls are subdivisions within a datacenter, such as server rooms or wings, used to organize rows of racks.</p>
+        </InfoSection>
+        <Table
+          data={halls}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="org-halls"
+          emptyMessage="No halls defined yet."
+          emptyDescription="Add a hall within a datacenter."
+          searchable
+          searchPlaceholder="Search halls..."
+        />
+      </Card>
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Hall' : 'Create Hall'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Hall A" />
@@ -444,6 +477,7 @@ function RowsTab({ rows, halls, racks, devices, ipam }: {
   devices: Device[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<IpamRow | null>(null);
   const [form, setForm] = useState<IpamRowFormData>(EMPTY_ROW_FORM);
@@ -512,7 +546,6 @@ function RowsTab({ rows, halls, racks, devices, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamRow>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamRow) => row.id, searchValue: (row: IpamRow) => String(row.id) },
     { header: 'Name', accessor: (row: IpamRow) => row.name, searchValue: (row: IpamRow) => row.name },
     { header: 'Hall', accessor: (row: IpamRow) => row.hall_name || String(row.hall_id), searchValue: (row: IpamRow) => `${row.hall_name || ''} ${row.hall_id}` },
     { header: 'Description', accessor: (row: IpamRow) => row.description || '', searchValue: (row: IpamRow) => row.description || '' },
@@ -533,20 +566,26 @@ function RowsTab({ rows, halls, racks, devices, ipam }: {
 
   return (
     <>
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={handleOpenCreate}><PlusIcon size={14} /> Add Row</Button>
-      </div>
-      <Table
-        data={rows}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="org-rows"
-        emptyMessage="No rows defined yet."
-        emptyDescription="Add a row within a hall."
-        searchable
-        searchPlaceholder="Search rows..."
-      />
+      <Card
+        title="Rows"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={<Button onClick={handleOpenCreate}><PlusIcon size={14} />Add Row</Button>}
+      >
+        <InfoSection open={showInfo}>
+          <p>Rows organize racks within a hall. Use the eye icon to view a row's rack elevation diagram.</p>
+        </InfoSection>
+        <Table
+          data={rows}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="org-rows"
+          emptyMessage="No rows defined yet."
+          emptyDescription="Add a row within a hall."
+          searchable
+          searchPlaceholder="Search rows..."
+        />
+      </Card>
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Row' : 'Create Row'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Row 1" />
@@ -593,6 +632,7 @@ function RacksTab({ racks, rows, devices, ipam }: {
   devices: Device[];
   ipam: ReturnType<typeof useIpam>;
 }) {
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<IpamRack | null>(null);
   const [form, setForm] = useState<IpamRackFormData>(EMPTY_RACK_FORM);
@@ -641,7 +681,6 @@ function RacksTab({ racks, rows, devices, ipam }: {
   }, [ipam]);
 
   const columns: TableColumn<IpamRack>[] = useMemo(() => [
-    { header: 'ID', accessor: (row: IpamRack) => row.id, searchValue: (row: IpamRack) => String(row.id) },
     { header: 'Name', accessor: (row: IpamRack) => row.name, searchValue: (row: IpamRack) => row.name },
     { header: 'Row', accessor: (row: IpamRack) => row.row_name || String(row.row_id), searchValue: (row: IpamRack) => `${row.row_name || ''} ${row.row_id}` },
     { header: 'Description', accessor: (row: IpamRack) => row.description || '', searchValue: (row: IpamRack) => row.description || '' },
@@ -667,20 +706,26 @@ function RacksTab({ racks, rows, devices, ipam }: {
 
   return (
     <>
-      <div style={{ padding: '8px 16px', display: 'flex', justifyContent: 'flex-end' }}>
-        <Button size="sm" onClick={handleOpenCreate}><PlusIcon size={14} /> Add Rack</Button>
-      </div>
-      <Table
-        data={racks}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="org-racks"
-        emptyMessage="No racks defined yet."
-        emptyDescription="Add a rack within a row."
-        searchable
-        searchPlaceholder="Search racks..."
-      />
+      <Card
+        title="Racks"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={<Button onClick={handleOpenCreate}><PlusIcon size={14} />Add Rack</Button>}
+      >
+        <InfoSection open={showInfo}>
+          <p>Racks are physical enclosures within a row. Each rack has configurable dimensions and can hold devices assigned to specific rack units (U positions). Use the eye icon to view device placement.</p>
+        </InfoSection>
+        <Table
+          data={racks}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="org-racks"
+          emptyMessage="No racks defined yet."
+          emptyDescription="Add a rack within a row."
+          searchable
+          searchPlaceholder="Search racks..."
+        />
+      </Card>
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title={editing ? 'Edit Rack' : 'Create Rack'} onSubmit={(e) => { e.preventDefault(); handleSubmit(); }} submitText={editing ? 'Update' : 'Create'}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <FormField label="Name" name="name" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g., Rack 01" />

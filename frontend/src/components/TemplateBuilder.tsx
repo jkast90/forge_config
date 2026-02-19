@@ -12,7 +12,6 @@ import {
   EMPTY_TEMPLATE_FORM,
   SAMPLE_DEVICE_FOR_PREVIEW,
 } from '@core';
-import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
 import { DialogActions } from './DialogActions';
@@ -20,7 +19,7 @@ import { InfoSection } from './InfoSection';
 import { Modal } from './Modal';
 import { FormField } from './FormField';
 import { SelectField } from './SelectField';
-import { Table, SimpleTable, Cell } from './Table';
+import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
 import { Tooltip } from './Tooltip';
 import { VendorBadge } from './VendorBadge';
@@ -33,7 +32,6 @@ import { useConfirm } from './ConfirmDialog';
 export function TemplateBuilder() {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showInfo, setShowInfo] = useState(false);
-  const [showVarsInfo, setShowVarsInfo] = useState(false);
   const [filterVendor, setFilterVendor] = useState('');
   const {
     templates,
@@ -281,46 +279,33 @@ export function TemplateBuilder() {
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading templates...">
-      <ActionBar>
-        <Button onClick={form.openAdd}>
-          <PlusIcon size={16} />
-          Add Template
-        </Button>
-        <Tooltip content="Convert a raw config into a template by detecting variables">
-          <Button variant="secondary" onClick={() => { setShowTemplatizer(true); modalRoute.openModal('templatizer'); }}>
-            <Icon name="auto_fix_high" size={16} />
-            Templatize Config
-          </Button>
-        </Tooltip>
-        <SelectField
-          name="filter-vendor"
-          options={filterVendorOptions}
-          value={filterVendor}
-          onChange={(e) => setFilterVendor(e.target.value)}
-          placeholder="Filter: All Vendors"
-          icon="filter_list"
-          className="filter-dropdown"
-        />
-      </ActionBar>
-
-      <Card title="Template Variables" titleAction={<InfoSection.Toggle open={showVarsInfo} onToggle={setShowVarsInfo} />}>
-        <InfoSection open={showVarsInfo}>
-          <p>
-            Use Go template syntax. Variables are accessed with {'{{.VariableName}}'}.
-            These variables are automatically populated from device and global settings when rendering a template.
-          </p>
-        </InfoSection>
-        <SimpleTable
-          headers={['Variable', 'Description', 'Example']}
-          rows={variables.map((v) => [
-            Cell.code(`{{.${v.name}}}`),
-            v.description,
-            Cell.code(v.example),
-          ])}
-        />
-      </Card>
-
-      <Card title="Configuration Templates" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="Configuration Templates"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <SelectField
+              name="filter-vendor"
+              options={filterVendorOptions}
+              value={filterVendor}
+              onChange={(e) => setFilterVendor(e.target.value)}
+              placeholder="Filter: All Vendors"
+              icon="filter_list"
+              className="filter-dropdown"
+            />
+            <Tooltip content="Convert a raw config into a template by detecting variables">
+              <Button variant="secondary" onClick={() => { setShowTemplatizer(true); modalRoute.openModal('templatizer'); }}>
+                <Icon name="auto_fix_high" size={16} />
+                Templatize Config
+              </Button>
+            </Tooltip>
+            <Button onClick={form.openAdd}>
+              <PlusIcon size={16} />
+              Add Template
+            </Button>
+          </div>
+        }
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>

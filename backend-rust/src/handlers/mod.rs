@@ -24,6 +24,7 @@ pub mod gpu_clusters;
 pub mod tenants;
 pub mod topologies;
 pub mod users;
+pub mod ws_broadcast;
 
 use axum::{
     http::StatusCode,

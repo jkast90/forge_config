@@ -39,195 +39,140 @@ export interface ThemeColors {
 }
 
 export const darkTheme: ThemeColors = {
-  // Backgrounds
-  bgPrimary: '#0a0a0f',
-  bgSecondary: '#12121a',
-  bgCard: '#1a1a24',
-  bgHover: '#22222e',
+  // Backgrounds — primary-pitch
+  bgPrimary: '#000808',
+  bgSecondary: '#000E10',
+  bgCard: '#001418',
+  bgHover: '#001C20',
 
-  // Accent Colors
-  accentBlue: '#3b82f6',
-  accentCyan: '#22d3ee',
-  accentTeal: '#14b8a6',
-  accentPurple: '#a855f7',
+  // Accent Colors — primary-cyan
+  accentBlue: '#0CE2F2',
+  accentCyan: '#0CE2F2',
+  accentTeal: '#00A0B0',
+  accentPurple: '#0A52F2',
 
-  // Text Colors
-  textPrimary: '#f8fafc',
-  textSecondary: '#94a3b8',
-  textMuted: '#64748b',
+  // Text Colors — primary-white
+  textPrimary: '#E6E6E6',
+  textSecondary: '#8AACAC',
+  textMuted: '#456060',
 
   // Border Colors
-  border: '#2d2d3a',
-  borderHover: '#3d3d4a',
+  border: '#002828',
+  borderHover: '#003C3C',
 
   // Status Colors
-  success: '#22c55e',
-  successBg: 'rgba(34, 197, 94, 0.15)',
-  error: '#ef4444',
-  errorBg: 'rgba(239, 68, 68, 0.15)',
-  warning: '#f59e0b',
-  warningBg: 'rgba(245, 158, 11, 0.15)',
+  success: '#12F25D',
+  successBg: 'rgba(18, 242, 93, 0.15)',
+  error: '#F25829',
+  errorBg: 'rgba(242, 88, 41, 0.15)',
+  warning: '#C0F20A',
+  warningBg: 'rgba(192, 242, 10, 0.15)',
 
   // Overlay colors
-  overlayLight: 'rgba(255, 255, 255, 0.2)',
-  overlayDark: 'rgba(0, 0, 0, 0.5)',
+  overlayLight: 'rgba(230, 230, 230, 0.15)',
+  overlayDark: 'rgba(0, 8, 8, 0.6)',
 };
 
 export const lightTheme: ThemeColors = {
-  // Backgrounds
-  bgPrimary: '#f8fafc',
-  bgSecondary: '#ffffff',
-  bgCard: '#ffffff',
-  bgHover: '#f1f5f9',
+  // Backgrounds — primary-white
+  bgPrimary: '#E6E6E6',
+  bgSecondary: '#EEEEEE',
+  bgCard: '#F5F5F5',
+  bgHover: '#DADADA',
 
-  // Accent Colors
-  accentBlue: '#2563eb',
-  accentCyan: '#0891b2',
-  accentTeal: '#0d9488',
-  accentPurple: '#9333ea',
+  // Accent Colors — cyan-300
+  accentBlue: '#09C4D4',
+  accentCyan: '#09C4D4',
+  accentTeal: '#005E70',
+  accentPurple: '#0A52F2',
 
-  // Text Colors
-  textPrimary: '#0f172a',
-  textSecondary: '#475569',
-  textMuted: '#94a3b8',
+  // Text Colors — primary-pitch
+  textPrimary: '#000808',
+  textSecondary: '#2A3838',
+  textMuted: '#6A7878',
 
   // Border Colors
-  border: '#e2e8f0',
-  borderHover: '#cbd5e1',
+  border: '#C4CCCC',
+  borderHover: '#A8B4B4',
 
   // Status Colors
-  success: '#16a34a',
-  successBg: 'rgba(22, 163, 74, 0.1)',
-  error: '#dc2626',
-  errorBg: 'rgba(220, 38, 38, 0.1)',
-  warning: '#d97706',
-  warningBg: 'rgba(217, 119, 6, 0.1)',
+  success: '#0A7A30',
+  successBg: 'rgba(10, 122, 48, 0.12)',
+  error: '#B83010',
+  errorBg: 'rgba(184, 48, 16, 0.12)',
+  warning: '#8A6800',
+  warningBg: 'rgba(138, 104, 0, 0.12)',
 
   // Overlay colors
   overlayLight: 'rgba(255, 255, 255, 0.5)',
-  overlayDark: 'rgba(0, 0, 0, 0.3)',
+  overlayDark: 'rgba(0, 8, 8, 0.2)',
 };
 
 export const plainTheme: ThemeColors = {
-  // Backgrounds
-  bgPrimary: '#ffffff',
-  bgSecondary: '#fafafa',
-  bgCard: '#ffffff',
-  bgHover: '#f5f5f5',
+  // Backgrounds — gray-300
+  bgPrimary: '#B8C4C4',
+  bgSecondary: '#C2CCCC',
+  bgCard: '#CCCECE',
+  bgHover: '#AABCBC',
 
-  // Accent Colors (all use same blue for minimal styling)
-  accentBlue: '#2563eb',
-  accentCyan: '#2563eb',
-  accentTeal: '#2563eb',
-  accentPurple: '#2563eb',
+  // Accent Colors — cyan-600
+  accentBlue: '#005E70',
+  accentCyan: '#005E70',
+  accentTeal: '#003C4A',
+  accentPurple: '#0A52F2',
 
-  // Text Colors
-  textPrimary: '#171717',
-  textSecondary: '#525252',
-  textMuted: '#a3a3a3',
+  // Text Colors — primary-pitch
+  textPrimary: '#000808',
+  textSecondary: '#1E2A2A',
+  textMuted: '#4A5C5C',
 
   // Border Colors
-  border: '#e5e5e5',
-  borderHover: '#d4d4d4',
+  border: '#9AACAC',
+  borderHover: '#7A9090',
 
   // Status Colors
-  success: '#16a34a',
-  successBg: '#f0fdf4',
-  error: '#dc2626',
-  errorBg: '#fef2f2',
-  warning: '#d97706',
-  warningBg: '#fffbeb',
+  success: '#0A7A30',
+  successBg: 'rgba(10, 122, 48, 0.15)',
+  error: '#B83010',
+  errorBg: 'rgba(184, 48, 16, 0.15)',
+  warning: '#8A6800',
+  warningBg: 'rgba(138, 104, 0, 0.15)',
 
   // Overlay colors
-  overlayLight: 'rgba(255, 255, 255, 0.7)',
-  overlayDark: 'rgba(0, 0, 0, 0.2)',
+  overlayLight: 'rgba(255, 255, 255, 0.4)',
+  overlayDark: 'rgba(0, 8, 8, 0.25)',
 };
 
 export const solarizedTheme: ThemeColors = {
-  bgPrimary: '#002b36',
-  bgSecondary: '#073642',
-  bgCard: '#073642',
-  bgHover: '#0a4050',
+  // Backgrounds — cyan-900
+  bgPrimary: '#001820',
+  bgSecondary: '#002028',
+  bgCard: '#002830',
+  bgHover: '#003038',
 
-  accentBlue: '#268bd2',
-  accentCyan: '#2aa198',
-  accentTeal: '#2aa198',
-  accentPurple: '#6c71c4',
+  // Accent Colors — primary-cyan + cyan-400
+  accentBlue: '#0CE2F2',
+  accentCyan: '#0CE2F2',
+  accentTeal: '#00C4D6',
+  accentPurple: '#0CE2F2',
 
-  textPrimary: '#fdf6e3',
-  textSecondary: '#93a1a1',
-  textMuted: '#657b83',
+  // Text — cyan-400 for primary, lighter tones for secondary
+  textPrimary: '#E6E6E6',
+  textSecondary: '#00C4D6',
+  textMuted: '#008898',
 
-  border: '#0a4050',
-  borderHover: '#2aa198',
+  border: '#003040',
+  borderHover: '#004858',
 
-  success: '#859900',
-  successBg: 'rgba(133, 153, 0, 0.15)',
-  error: '#dc322f',
-  errorBg: 'rgba(220, 50, 47, 0.15)',
-  warning: '#b58900',
-  warningBg: 'rgba(181, 137, 0, 0.15)',
+  success: '#12F25D',
+  successBg: 'rgba(18, 242, 93, 0.15)',
+  error: '#F25829',
+  errorBg: 'rgba(242, 88, 41, 0.15)',
+  warning: '#C0F20A',
+  warningBg: 'rgba(192, 242, 10, 0.15)',
 
-  overlayLight: 'rgba(253, 246, 227, 0.1)',
-  overlayDark: 'rgba(0, 43, 54, 0.6)',
-};
-
-export const draculaTheme: ThemeColors = {
-  bgPrimary: '#282a36',
-  bgSecondary: '#21222c',
-  bgCard: '#2d2f3d',
-  bgHover: '#363848',
-
-  accentBlue: '#8be9fd',
-  accentCyan: '#8be9fd',
-  accentTeal: '#50fa7b',
-  accentPurple: '#bd93f9',
-
-  textPrimary: '#f8f8f2',
-  textSecondary: '#bfbfbf',
-  textMuted: '#6272a4',
-
-  border: '#44475a',
-  borderHover: '#6272a4',
-
-  success: '#50fa7b',
-  successBg: 'rgba(80, 250, 123, 0.15)',
-  error: '#ff5555',
-  errorBg: 'rgba(255, 85, 85, 0.15)',
-  warning: '#f1fa8c',
-  warningBg: 'rgba(241, 250, 140, 0.15)',
-
-  overlayLight: 'rgba(248, 248, 242, 0.1)',
-  overlayDark: 'rgba(40, 42, 54, 0.6)',
-};
-
-export const nordTheme: ThemeColors = {
-  bgPrimary: '#2e3440',
-  bgSecondary: '#3b4252',
-  bgCard: '#3b4252',
-  bgHover: '#434c5e',
-
-  accentBlue: '#88c0d0',
-  accentCyan: '#8fbcbb',
-  accentTeal: '#8fbcbb',
-  accentPurple: '#b48ead',
-
-  textPrimary: '#eceff4',
-  textSecondary: '#d8dee9',
-  textMuted: '#7b88a1',
-
-  border: '#434c5e',
-  borderHover: '#4c566a',
-
-  success: '#a3be8c',
-  successBg: 'rgba(163, 190, 140, 0.15)',
-  error: '#bf616a',
-  errorBg: 'rgba(191, 97, 106, 0.15)',
-  warning: '#ebcb8b',
-  warningBg: 'rgba(235, 203, 139, 0.15)',
-
-  overlayLight: 'rgba(236, 239, 244, 0.1)',
-  overlayDark: 'rgba(46, 52, 64, 0.6)',
+  overlayLight: 'rgba(12, 226, 242, 0.1)',
+  overlayDark: 'rgba(0, 24, 32, 0.6)',
 };
 
 export const evergreenDarkTheme: ThemeColors = {
@@ -467,8 +412,6 @@ export const themes: Record<Theme, ThemeColors> = {
   light: lightTheme,
   plain: plainTheme,
   solarized: solarizedTheme,
-  dracula: draculaTheme,
-  nord: nordTheme,
   'evergreen-dark': evergreenDarkTheme,
   'evergreen-light': evergreenLightTheme,
   'ocean-dark': oceanDarkTheme,

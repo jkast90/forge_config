@@ -64,11 +64,11 @@ export function LocationsScreen() {
   const [rowForm, setRowForm] = useState<IpamRowFormData>({ id: '', name: '', description: '', hall_id: '' });
   const [rackForm, setRackForm] = useState<IpamRackFormData>({ id: '', name: '', description: '', row_id: '' });
 
-  const regionOptions = useMemo(() => regions.map(r => ({ value: r.id, label: r.name })), [regions]);
-  const campusOptions = useMemo(() => campuses.map(c => ({ value: c.id, label: c.name })), [campuses]);
-  const dcOptions = useMemo(() => datacenters.map(d => ({ value: d.id, label: d.name })), [datacenters]);
-  const hallOptions = useMemo(() => halls.map(h => ({ value: h.id, label: h.name })), [halls]);
-  const rowOptions = useMemo(() => rows.map(r => ({ value: r.id, label: r.name })), [rows]);
+  const regionOptions = useMemo(() => regions.map(r => ({ value: String(r.id), label: r.name })), [regions]);
+  const campusOptions = useMemo(() => campuses.map(c => ({ value: String(c.id), label: c.name })), [campuses]);
+  const dcOptions = useMemo(() => datacenters.map(d => ({ value: String(d.id), label: d.name })), [datacenters]);
+  const hallOptions = useMemo(() => halls.map(h => ({ value: String(h.id), label: h.name })), [halls]);
+  const rowOptions = useMemo(() => rows.map(r => ({ value: String(r.id), label: r.name })), [rows]);
 
   const handleAdd = () => {
     setEditingId(null);
@@ -131,14 +131,14 @@ export function LocationsScreen() {
   };
 
   const handleEdit = (item: any) => {
-    setEditingId(item.id);
+    setEditingId(String(item.id));
     switch (activeTab) {
-      case 'regions': setRegionForm({ id: item.id, name: item.name, description: item.description || '' }); break;
-      case 'campuses': setCampusForm({ id: item.id, name: item.name, description: item.description || '', region_id: item.region_id }); break;
-      case 'datacenters': setDcForm({ id: item.id, name: item.name, description: item.description || '', campus_id: item.campus_id }); break;
-      case 'halls': setHallForm({ id: item.id, name: item.name, description: item.description || '', datacenter_id: item.datacenter_id }); break;
-      case 'rows': setRowForm({ id: item.id, name: item.name, description: item.description || '', hall_id: item.hall_id }); break;
-      case 'racks': setRackForm({ id: item.id, name: item.name, description: item.description || '', row_id: item.row_id }); break;
+      case 'regions': setRegionForm({ id: String(item.id), name: item.name, description: item.description || '' }); break;
+      case 'campuses': setCampusForm({ id: String(item.id), name: item.name, description: item.description || '', region_id: String(item.region_id) }); break;
+      case 'datacenters': setDcForm({ id: String(item.id), name: item.name, description: item.description || '', campus_id: String(item.campus_id) }); break;
+      case 'halls': setHallForm({ id: String(item.id), name: item.name, description: item.description || '', datacenter_id: String(item.datacenter_id) }); break;
+      case 'rows': setRowForm({ id: String(item.id), name: item.name, description: item.description || '', hall_id: String(item.hall_id) }); break;
+      case 'racks': setRackForm({ id: String(item.id), name: item.name, description: item.description || '', row_id: String(item.row_id) }); break;
     }
     setShowForm(true);
   };

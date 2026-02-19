@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useLocalAddresses } from '@core';
 import type { NetworkInterface } from '@core';
 import { Modal } from './Modal';
+import { SelectField } from './SelectField';
 import { Button } from './Button';
 import { Icon } from './Icon';
 import QRCode from 'qrcode';
@@ -242,18 +243,13 @@ export function CodeGeneratorDialog({ isOpen, onClose }: Props) {
 
           {/* Barcode format selector */}
           {codeType === 'barcode' && (
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: '12px', fontWeight: 500 }}>Format</label>
-              <select
-                value={barcodeFormat}
-                onChange={e => { setBarcodeFormat(e.target.value as BarcodeFormat); setGeneratedImage(null); }}
-                style={{ fontSize: '13px' }}
-              >
-                {BARCODE_FORMATS.map(f => (
-                  <option key={f.value} value={f.value}>{f.label} — {f.description}</option>
-                ))}
-              </select>
-            </div>
+            <SelectField
+              label="Format"
+              name="barcode-format"
+              value={barcodeFormat}
+              options={BARCODE_FORMATS.map(f => ({ value: f.value, label: `${f.label} — ${f.description}` }))}
+              onChange={e => { setBarcodeFormat(e.target.value as BarcodeFormat); setGeneratedImage(null); }}
+            />
           )}
 
           {/* Server Interfaces */}

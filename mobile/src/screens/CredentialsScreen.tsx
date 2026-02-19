@@ -125,7 +125,7 @@ export function CredentialsScreen() {
 
       <FlatList
         data={credentials}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderCredential}
         ListEmptyComponent={<EmptyState message="No credentials" actionLabel="Add Credential" onAction={handleAdd} />}
         contentContainerStyle={credentials.length === 0 ? styles.emptyList : undefined}

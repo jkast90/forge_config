@@ -6,7 +6,8 @@ import { Card } from './Card';
 import { InfoSection } from './InfoSection';
 import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
-import { Icon, RefreshIcon, SpinnerIcon } from './Icon';
+import { Icon, SpinnerIcon } from './Icon';
+import { Tooltip } from './Tooltip';
 
 interface JobTemplatesPanelProps {
   templates: JobTemplate[];
@@ -17,10 +18,9 @@ interface JobTemplatesPanelProps {
   onEdit: (template: JobTemplate) => void;
   onDelete: (id: string) => Promise<boolean>;
   onToggleEnabled: (template: JobTemplate) => Promise<void>;
-  onRefresh: () => void;
 }
 
-export function JobTemplatesPanel({ templates, loading, deviceMap, actionMap, onRun, onEdit, onDelete, onToggleEnabled, onRefresh }: JobTemplatesPanelProps) {
+export function JobTemplatesPanel({ templates, loading, deviceMap, actionMap, onRun, onEdit, onDelete, onToggleEnabled }: JobTemplatesPanelProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [runningId, setRunningId] = useState<number | null>(null);
 
@@ -82,8 +82,12 @@ export function JobTemplatesPanel({ templates, loading, deviceMap, actionMap, on
         if (t.target_device_ids.length > 0) {
           const names = t.target_device_ids
             .map((id) => deviceMap.get(id)?.hostname || String(id))
-            .join(', ');
-          return <span title={names}>{t.target_device_ids.length} device{t.target_device_ids.length !== 1 ? 's' : ''}</span>;
+            .join('\n');
+          return (
+            <Tooltip content={names}>
+              <span>{t.target_device_ids.length} device{t.target_device_ids.length !== 1 ? 's' : ''}</span>
+            </Tooltip>
+          );
         }
         return <span className="text-muted">—</span>;
       },
@@ -147,11 +151,6 @@ export function JobTemplatesPanel({ templates, loading, deviceMap, actionMap, on
     <Card
       title="Job Templates"
       titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
-      headerAction={
-        <Button variant="secondary" onClick={onRefresh} disabled={loading}>
-          <RefreshIcon size={14} />
-        </Button>
-      }
     >
       <InfoSection open={showInfo}>
         <div>

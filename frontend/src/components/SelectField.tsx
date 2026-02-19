@@ -12,7 +12,7 @@ interface SelectFieldProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>,
   onChange?: (e: { target: { name: string; value: string } }) => void;
 }
 
-const SEARCH_THRESHOLD = 8;
+const SEARCH_THRESHOLD = 1;
 
 export function SelectField({ label, name, id, options, error, value, onChange, disabled, placeholder, icon, className, ...rest }: SelectFieldProps) {
   const fieldId = id || name;

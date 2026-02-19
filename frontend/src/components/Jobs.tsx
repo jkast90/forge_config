@@ -26,9 +26,8 @@ import {
   EMPTY_VENDOR_ACTION_FORM,
 } from '@core';
 import { ActionBar } from './ActionBar';
-import { Button } from './Button';
+import { Button, RefreshButton } from './Button';
 import { Card } from './Card';
-import { Checkbox } from './Checkbox';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { InfoSection } from './InfoSection';
@@ -40,7 +39,7 @@ import { Modal } from './Modal';
 import { OutputParsersPanel } from './OutputParsersPanel';
 import { Table, SimpleTable, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
-import { Icon, RefreshIcon, PlusIcon } from './Icon';
+import { Icon, PlusIcon } from './Icon';
 import { SaveAsTemplateDialog } from './SaveAsTemplateDialog';
 import { EditTemplateDialog } from './EditTemplateDialog';
 import { JobTemplatesPanel } from './JobTemplatesPanel';
@@ -194,7 +193,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
       return [];
     }
     const targetDevices = devices.filter((d) => targetDeviceIds.includes(d.id));
-    const vendorIds = new Set(targetDevices.map((d) => d.vendor).filter(Boolean));
+    const vendorIds = new Set(targetDevices.map((d) => d.vendor_id).filter(Boolean));
     if (vendorIds.size === 0) return vendorActions;
     return vendorActions.filter((a) => vendorIds.has(String(a.vendor_id)));
   }, [vendorActions, targetDeviceIds, devices, initialActionId]);
@@ -264,7 +263,7 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
         for (const deviceId of targetDeviceIds) {
           try {
             if (isWebhookAction && selectedAction) {
-              await services.devices.exec(deviceId, '', String(selectedAction.id));
+              await services.devices.exec(deviceId, '', selectedAction.id);
             } else {
               await services.devices.exec(deviceId, cmd);
             }
@@ -301,8 +300,8 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
       submitDisabled={!canSubmit}
       variant="wide"
     >
-      {/* Load from Template */}
-      {templates.length > 0 && (
+      {/* Load from Template — hidden for webhook actions */}
+      {templates.length > 0 && !isWebhookAction && (
         <SelectField
           label="From Template"
           name="template"
@@ -310,6 +309,43 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
           onChange={(e) => handleLoadTemplate(e.target.value)}
           options={templateOptions}
         />
+      )}
+
+      {/* Action / Command */}
+      <SelectField
+        label="Action"
+        name="action"
+        value={selectedActionId}
+        onChange={(e) => setSelectedActionId(e.target.value)}
+        options={actionOptions}
+      />
+
+      {!selectedAction && (
+        <FormField
+          label="Command"
+          name="command"
+          type="text"
+          value={customCommand}
+          onChange={(e) => setCustomCommand(e.target.value)}
+          placeholder="e.g., show version"
+          required
+        />
+      )}
+
+      {selectedAction && !isWebhookAction && (
+        <div className="form-group">
+          <label className="form-label">Command Preview</label>
+          <pre className="command-entry-output">{selectedAction.command}</pre>
+        </div>
+      )}
+
+      {selectedAction && isWebhookAction && (
+        <div className="form-group">
+          <label className="form-label">Webhook Preview</label>
+          <pre className="command-entry-output">
+            {selectedAction.webhook_method} {selectedAction.webhook_url}
+          </pre>
+        </div>
       )}
 
       {/* Target Mode — hidden for static webhooks */}
@@ -376,18 +412,17 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
                 <div className="text-muted text-sm">{deviceSearch ? 'No matching devices' : 'No devices available'}</div>
               ) : (
                 searchedDevices.map((device) => (
-                  <label key={device.id} className="run-job-device-item">
-                    <Checkbox
-                      checked={selectedDeviceIds.includes(device.id)}
-                      onChange={() => handleToggleDevice(device.id)}
-                    />
+                  <div key={device.id} className="run-job-device-item" onClick={() => handleToggleDevice(device.id)}>
+                    <div className={`toggle-track${selectedDeviceIds.includes(device.id) ? ' toggle-on' : ''}`} style={{ flexShrink: 0 }}>
+                      <div className="toggle-thumb" />
+                    </div>
                     <span className={`status-dot status-${device.status}`} />
                     <span className="run-job-device-name">{device.hostname}</span>
                     <span className="run-job-device-ip">{device.ip}</span>
                     {device.vendor && (
                       <span className="run-job-device-vendor">{device.vendor}</span>
                     )}
-                  </label>
+                  </div>
                 ))
               )}
             </div>
@@ -431,42 +466,6 @@ export function RunJobDialog({ isOpen, onClose, onSubmitted, initialActionId }: 
         </div>
       )}
 
-      {/* Action / Command */}
-      <SelectField
-        label="Action"
-        name="action"
-        value={selectedActionId}
-        onChange={(e) => setSelectedActionId(e.target.value)}
-        options={actionOptions}
-      />
-
-      {!selectedAction && (
-        <FormField
-          label="Command"
-          name="command"
-          type="text"
-          value={customCommand}
-          onChange={(e) => setCustomCommand(e.target.value)}
-          placeholder="e.g., show version"
-          required
-        />
-      )}
-
-      {selectedAction && !isWebhookAction && (
-        <div className="form-group">
-          <label className="form-label">Command Preview</label>
-          <pre className="command-entry-output">{selectedAction.command}</pre>
-        </div>
-      )}
-
-      {selectedAction && isWebhookAction && (
-        <div className="form-group">
-          <label className="form-label">Webhook Preview</label>
-          <pre className="command-entry-output">
-            {selectedAction.webhook_method} {selectedAction.webhook_url}
-          </pre>
-        </div>
-      )}
     </FormDialog>
   );
 }
@@ -766,6 +765,29 @@ export function Jobs() {
       searchValue: (job) => job.error || job.output || '',
     },
     {
+      header: 'Source',
+      accessor: (job) => (
+        <span style={{
+          display: 'inline-block',
+          padding: '1px 7px',
+          borderRadius: 10,
+          fontSize: 11,
+          fontWeight: 600,
+          background: job.triggered_by === 'scheduled'
+            ? 'var(--color-accent-blue, #4a9eff)22'
+            : 'var(--color-bg-hover, rgba(128,128,128,0.1))',
+          color: job.triggered_by === 'scheduled'
+            ? 'var(--color-accent-blue, #4a9eff)'
+            : 'var(--color-text-secondary)',
+          border: `1px solid ${job.triggered_by === 'scheduled' ? 'var(--color-accent-blue, #4a9eff)44' : 'var(--color-border)'}`,
+        }}>
+          {job.triggered_by ?? 'manual'}
+        </span>
+      ),
+      searchValue: (job) => job.triggered_by ?? 'manual',
+      width: '90px',
+    },
+    {
       header: 'Created',
       accessor: (job) => formatRelativeTime(job.created_at),
       searchable: false,
@@ -785,7 +807,7 @@ export function Jobs() {
         await services.devices.deployConfig(job.device_id);
       } else if (job.job_type === 'webhook') {
         if (job.device_id) {
-          await services.devices.exec(job.device_id, '', job.command);
+          await services.devices.exec(job.device_id, '', Number(job.command));
         } else {
           const action = actionMap.get(job.command);
           if (action) {
@@ -843,9 +865,20 @@ export function Jobs() {
     { id: 'parsers', label: 'Output Parsers', icon: 'data_object', count: outputParsers.length },
   ], [vendorActions.length, jobs.length, templates.length, credentials.length, outputParsers.length]);
 
+  const handleRefresh = useCallback(() => {
+    refresh();
+    refreshTemplates();
+    refreshCredentials();
+    refreshParsers();
+  }, [refresh, refreshTemplates, refreshCredentials, refreshParsers]);
+
   return (
     <LoadingState loading={loading && actionsLoading} error={error} loadingMessage="Loading...">
-      <Card title="Jobs" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="Jobs"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={<RefreshButton onClick={handleRefresh} />}
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>
@@ -925,9 +958,6 @@ export function Jobs() {
                       {jobStats.queued > 0 && Cell.badge(`${jobStats.queued} queued`, 'default')}
                     </div>
                   )}
-                  <Button variant="secondary" onClick={refresh}>
-                    <RefreshIcon size={14} />
-                  </Button>
                   <Button variant="primary" onClick={() => setShowRunDialog(true)}>
                     <PlusIcon size={14} />
                     Run Job
@@ -986,7 +1016,6 @@ export function Jobs() {
                   credential_id: t.credential_id,
                 });
               }}
-              onRefresh={refreshTemplates}
             />
           )}
 
@@ -997,7 +1026,6 @@ export function Jobs() {
               onCreate={createCredential}
               onUpdate={updateCredential}
               onDelete={deleteCredential}
-              onRefresh={refreshCredentials}
             />
           )}
 
@@ -1008,7 +1036,6 @@ export function Jobs() {
               onCreate={createOutputParser}
               onUpdate={updateOutputParser}
               onDelete={deleteOutputParser}
-              onRefresh={refreshParsers}
             />
           )}
         </SideTabs>
@@ -1120,7 +1147,7 @@ export function Jobs() {
             </div>
 
             <div className="form-hint">
-              Use <code>{'{{hostname}}'}</code>, <code>{'{{ip}}'}</code>, <code>{'{{mac}}'}</code>, <code>{'{{vendor}}'}</code>, <code>{'{{model}}'}</code>, <code>{'{{serial_number}}'}</code>, <code>{'{{device_id}}'}</code> for device variable substitution in URL and body.
+              Use <code>{'{{ip}}'}</code>, <code>{'{{hostname}}'}</code>, <code>{'{{mac}}'}</code>, <code>{'{{vendor}}'}</code>, <code>{'{{model}}'}</code>, <code>{'{{serial_number}}'}</code>, <code>{'{{device_id}}'}</code> for device variable substitution in URL and body. Both <code>{'{{ip}}'}</code> and <code>{'{{.ip}}'}</code> formats are supported.
             </div>
           </>
         )}

@@ -46,4 +46,8 @@ export class SettingsService extends BaseService {
   async deleteLogo(): Promise<void> {
     return this.delete<void>('/branding/logo');
   }
+
+  async broadcastWs(type: string, payload: unknown): Promise<{ clients: number }> {
+    return this.post<{ clients: number }>('/ws/broadcast', { type, payload });
+  }
 }

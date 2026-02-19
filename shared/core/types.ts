@@ -79,6 +79,7 @@ export interface Topology {
 }
 
 export interface TopologyFormData {
+  id?: string;
   name: string;
   description: string;
   region_id: string;
@@ -177,7 +178,7 @@ export interface Backup {
 }
 
 // UI State types
-export type Theme = 'dark' | 'light' | 'plain' | 'solarized' | 'dracula' | 'nord' | 'evergreen-dark' | 'evergreen-light' | 'ocean-dark' | 'ocean-light' | 'nautical-dark' | 'nautical-light' | 'contrast-dark' | 'contrast-light';
+export type Theme = 'dark' | 'light' | 'plain' | 'solarized' | 'evergreen-dark' | 'evergreen-light' | 'ocean-dark' | 'ocean-light' | 'nautical-dark' | 'nautical-light' | 'contrast-dark' | 'contrast-light';
 
 export interface Message {
   type: 'success' | 'error';
@@ -204,6 +205,7 @@ export interface Vendor {
 }
 
 export interface VendorFormData {
+  id?: string;
   name: string;
   backup_command: string;
   deploy_command: string;
@@ -231,6 +233,7 @@ export interface DhcpOption {
 }
 
 export interface DhcpOptionFormData {
+  id?: string;
   option_number: number;
   name: string;
   value: string;
@@ -263,6 +266,7 @@ export interface Template {
 }
 
 export interface TemplateFormData {
+  id?: string;
   name: string;
   description: string;
   vendor_id: string;
@@ -397,6 +401,7 @@ export interface VendorAction {
 }
 
 export interface VendorActionFormData {
+  id?: string;
   vendor_id: string;
   label: string;
   command: string;
@@ -427,6 +432,7 @@ export interface Job {
   output: string | null;
   error: string | null;
   credential_id?: string;
+  triggered_by: 'manual' | 'scheduled';
   created_at: string;
   started_at: string | null;
   completed_at: string | null;
@@ -493,6 +499,7 @@ export interface Credential {
 }
 
 export interface CredentialFormData {
+  id?: number;
   name: string;
   description: string;
   cred_type: string;
@@ -591,6 +598,7 @@ export interface IpamRegion {
 }
 
 export interface IpamRegionFormData {
+  id?: string;
   name: string;
   description: string;
 }
@@ -607,6 +615,7 @@ export interface IpamCampus {
 }
 
 export interface IpamCampusFormData {
+  id?: string;
   name: string;
   description: string;
   region_id: string;
@@ -626,6 +635,7 @@ export interface IpamDatacenter {
 }
 
 export interface IpamDatacenterFormData {
+  id?: string;
   name: string;
   description: string;
   campus_id: string;
@@ -643,6 +653,7 @@ export interface IpamHall {
 }
 
 export interface IpamHallFormData {
+  id?: string;
   name: string;
   description: string;
   datacenter_id: string;
@@ -660,6 +671,7 @@ export interface IpamRow {
 }
 
 export interface IpamRowFormData {
+  id?: string;
   name: string;
   description: string;
   hall_id: string;
@@ -680,6 +692,7 @@ export interface IpamRack {
 }
 
 export interface IpamRackFormData {
+  id?: string;
   name: string;
   description: string;
   row_id: string;
@@ -764,6 +777,7 @@ export interface IpamIpAddress {
 }
 
 export interface IpamIpAddressFormData {
+  id?: number;
   address: string;
   prefix_id: string;
   description: string;
@@ -872,6 +886,7 @@ export interface DeviceModel {
 }
 
 export interface DeviceModelFormData {
+  id?: string;
   vendor_id: string;
   model: string;
   display_name: string;

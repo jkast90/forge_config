@@ -93,7 +93,7 @@ export function ResolvedVariablesInspector() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <Card title="Variable Inspector" headerAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card title="Variable Inspector" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
         <InfoSection open={showInfo}>
           <div>
             <p>

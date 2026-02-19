@@ -110,7 +110,7 @@ pub(super) async fn compute_clos_preview(
             let mid = racks_per_row / 2;
             for k in 1..=racks_per_row {
                 if k == mid + 1 {
-                    let spine_rack_name = format!("Hall {} Row {} Spine Rack", h, r);
+                    let spine_rack_name = format!("Hall {} Row {} Network Rack", h, r);
                     racks.push(TopologyPreviewRack {
                         index: rack_index,
                         name: spine_rack_name.clone(),
@@ -961,8 +961,8 @@ pub async fn build_virtual_clos(
                     // Insert spine rack at the midpoint
                     if k == mid + 1 {
                         let spine_rack_req = crate::models::CreateIpamRackRequest {
-                            name: format!("Hall {} Row {} Spine Rack", h, r),
-                            description: Some("Auto-created by Virtual CLOS — spine switches".to_string()),
+                            name: format!("Hall {} Row {} Network Rack", h, r),
+                            description: Some("Auto-created by Virtual CLOS — network rack".to_string()),
                             row_id,
                             width_cm: req.rack_width_cm,
                             height_ru: req.rack_height_ru,

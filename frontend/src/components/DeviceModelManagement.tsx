@@ -22,7 +22,6 @@ import {
   getVendorName,
 } from '@core';
 import { usePageWidthOverride } from '../context';
-import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
 import { FormDialog } from './FormDialog';
@@ -84,39 +83,30 @@ function PortEditor({ port, onChange, onRemove }: PortEditorProps) {
         placeholder="Ethernet1"
         title="Port name"
       />
-      <select
-        className="chassis-editor-input chassis-editor-connector"
+      <SelectField
+        name="connector"
+        className="chassis-editor-connector"
         value={port.connector}
+        options={PORT_CONNECTOR_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
         onChange={(e) => onChange({ ...port, connector: e.target.value as PortConnector })}
-        title="Connector"
-      >
-        {PORT_CONNECTOR_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-      <select
-        className="chassis-editor-input chassis-editor-speed"
-        value={port.speed}
+      />
+      <SelectField
+        name="speed"
+        className="chassis-editor-speed"
+        value={String(port.speed)}
+        options={PORT_SPEED_OPTIONS.map(o => ({ value: String(o.value), label: o.label }))}
         onChange={(e) => onChange({ ...port, speed: parseInt(e.target.value) as PortSpeedMbps })}
-        title="Speed"
-      >
-        {PORT_SPEED_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-      <select
-        className="chassis-editor-input chassis-editor-role"
+      />
+      <SelectField
+        name="role"
+        className="chassis-editor-role"
         value={port.role || ''}
+        options={PORT_ROLE_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
         onChange={(e) => {
           const val = e.target.value as PortRole | '';
           onChange({ ...port, role: val || undefined });
         }}
-        title="Role"
-      >
-        {PORT_ROLE_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      />
       <button type="button" className="btn-icon btn-icon-danger" onClick={onRemove} title="Remove port">
         <TrashIcon size={14} />
       </button>
@@ -243,23 +233,31 @@ function SectionEditor({ section, onChange, onRemove }: SectionEditorProps) {
             <label>Start # <NumberInput size="sm" min={0} value={bulk.startIndex} onChange={(v) => setBulk({ ...bulk, startIndex: v })} /></label>
           </div>
           <div className="chassis-editor-bulk-row">
-            <label>Connector
-              <select value={bulk.connector} onChange={(e) => setBulk({ ...bulk, connector: e.target.value as PortConnector })}>
-                {PORT_CONNECTOR_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </label>
-            <label>Speed
-              <select value={bulk.speed} onChange={(e) => setBulk({ ...bulk, speed: parseInt(e.target.value) as PortSpeedMbps })}>
-                {PORT_SPEED_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </label>
-            <label>Numbering
-              <select value={bulk.oddEven} onChange={(e) => setBulk({ ...bulk, oddEven: e.target.value as BulkAddState['oddEven'] })}>
-                <option value="sequential">Sequential</option>
-                <option value="odd">Odd (1,3,5…)</option>
-                <option value="even">Even (2,4,6…)</option>
-              </select>
-            </label>
+            <SelectField
+              label="Connector"
+              name="bulk-connector"
+              value={bulk.connector}
+              options={PORT_CONNECTOR_OPTIONS.map(o => ({ value: o.value, label: o.label }))}
+              onChange={(e) => setBulk({ ...bulk, connector: e.target.value as PortConnector })}
+            />
+            <SelectField
+              label="Speed"
+              name="bulk-speed"
+              value={String(bulk.speed)}
+              options={PORT_SPEED_OPTIONS.map(o => ({ value: String(o.value), label: o.label }))}
+              onChange={(e) => setBulk({ ...bulk, speed: parseInt(e.target.value) as PortSpeedMbps })}
+            />
+            <SelectField
+              label="Numbering"
+              name="bulk-numbering"
+              value={bulk.oddEven}
+              options={[
+                { value: 'sequential', label: 'Sequential' },
+                { value: 'odd', label: 'Odd (1,3,5…)' },
+                { value: 'even', label: 'Even (2,4,6…)' },
+              ]}
+              onChange={(e) => setBulk({ ...bulk, oddEven: e.target.value as BulkAddState['oddEven'] })}
+            />
             <button type="button" className="btn btn-primary btn-sm" onClick={applyBulk}>Add {bulk.count} Ports</button>
           </div>
         </div>
@@ -470,14 +468,16 @@ export function DeviceModelManagement() {
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading device models...">
-      <ActionBar>
-        <Button onClick={form.openAdd}>
-          <PlusIcon size={16} />
-          Add Model
-        </Button>
-      </ActionBar>
-
-      <Card title="Device Models" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="Device Models"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <Button onClick={form.openAdd}>
+            <PlusIcon size={16} />
+            Add Model
+          </Button>
+        }
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>

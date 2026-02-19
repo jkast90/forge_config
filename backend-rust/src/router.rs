@@ -267,6 +267,7 @@ pub fn build(state: Arc<AppState>, frontend_dir: &str) -> Router {
         .route("/api/users/:id", delete(handlers::users::delete_user))
         // WebSocket route
         .route("/api/ws", get(crate::ws_upgrade_handler))
+        .route("/api/ws/broadcast", post(handlers::ws_broadcast::broadcast))
         // Config server route
         .route("/configs/:filename", get(handlers::configs::serve_config))
         // Static files (frontend)

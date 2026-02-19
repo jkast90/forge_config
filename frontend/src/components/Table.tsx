@@ -2,6 +2,7 @@ import { ReactNode, useState, useCallback, useMemo, useRef, useEffect, isValidEl
 import { useTableFeatures, getDefaultPageSize, getTablePageSize, setTablePageSize } from '@core';
 import type { ColumnFilterDef } from '@core';
 import { Checkbox } from './Checkbox';
+import { SelectField } from './SelectField';
 import { IconButton } from './IconButton';
 import { Tooltip } from './Tooltip';
 import { EditIcon, TrashIcon, Icon } from './Icon';
@@ -885,15 +886,12 @@ export function Table<T>({
           )}
           {paginate && (
             <div className="table-pagination-size">
-              <select
-                className="table-pagination-select"
-                value={pageSize}
+              <SelectField
+                name="page-size"
+                value={String(pageSize)}
+                options={pageSizeOptions.map((size) => ({ value: String(size), label: `${size} / page` }))}
                 onChange={(e) => handlePageSizeChange(Number(e.target.value))}
-              >
-                {pageSizeOptions.map((size) => (
-                  <option key={size} value={size}>{size} / page</option>
-                ))}
-              </select>
+              />
             </div>
           )}
         </div>

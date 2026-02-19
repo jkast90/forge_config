@@ -13,10 +13,9 @@ import {
   DHCP_OPTION_TYPES,
   EMPTY_DHCP_OPTION_FORM,
 } from '@core';
-import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
-import { Checkbox } from './Checkbox';
+import { Toggle } from './Toggle';
 import { useConfirm } from './ConfirmDialog';
 import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
@@ -31,6 +30,7 @@ import { PlusIcon, Icon } from './Icon';
 export function DhcpOptions() {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
   const [showInfo, setShowInfo] = useState(false);
+  const [showTableInfo, setShowTableInfo] = useState(false);
   const [filterVendor, setFilterVendor] = useState('');
   const {
     options,
@@ -192,26 +192,30 @@ export function DhcpOptions() {
 
   return (
     <LoadingState loading={loading} error={error} loadingMessage="Loading DHCP options...">
-      <ActionBar>
-        <Button onClick={form.openAdd}>
-          <PlusIcon size={16} />
-          Add Option
-        </Button>
-        <Button variant="secondary" onClick={handleReset}>
-          Reset to Defaults
-        </Button>
-        <SelectField
-          name="filter-vendor"
-          options={filterVendorOptions}
-          value={filterVendor}
-          onChange={(e) => setFilterVendor(e.target.value)}
-          placeholder="Filter: All Vendors"
-          icon="filter_list"
-          className="filter-dropdown"
-        />
-      </ActionBar>
-
-      <Card title="Quick Add Common Options" titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}>
+      <Card
+        title="Quick Add Common Options"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <SelectField
+              name="filter-vendor"
+              options={filterVendorOptions}
+              value={filterVendor}
+              onChange={(e) => setFilterVendor(e.target.value)}
+              placeholder="Filter: All Vendors"
+              icon="filter_list"
+              className="filter-dropdown"
+            />
+            <Button variant="secondary" onClick={handleReset}>
+              Reset to Defaults
+            </Button>
+            <Button onClick={form.openAdd}>
+              <PlusIcon size={16} />
+              Add Option
+            </Button>
+          </div>
+        }
+      >
         <InfoSection open={showInfo}>
           <div>
             <p>
@@ -245,7 +249,10 @@ export function DhcpOptions() {
         </div>
       </Card>
 
-      <Card title="DHCP Options">
+      <Card title="DHCP Options" titleAction={<InfoSection.Toggle open={showTableInfo} onToggle={setShowTableInfo} />}>
+        <InfoSection open={showTableInfo}>
+          <p>All configured DHCP options. Options can be enabled or disabled per vendor class to control what is sent during ZTP provisioning.</p>
+        </InfoSection>
         <Table
           data={filteredOptions}
           columns={optionColumns}
@@ -326,14 +333,12 @@ export function DhcpOptions() {
           placeholder="Optional description"
         />
 
-        <div className="form-group">
-          <Checkbox
-            label="Enabled"
-            name="enabled"
-            checked={form.formData.enabled}
-            onChange={(checked) => form.setField('enabled', checked)}
-          />
-        </div>
+        <Toggle
+          label="Enabled"
+          name="enabled"
+          checked={form.formData.enabled}
+          onChange={(checked) => form.setField('enabled', checked)}
+        />
       </FormDialog>
 
       <ConfirmDialogRenderer />

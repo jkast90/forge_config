@@ -29,7 +29,7 @@ export function DeviceFormFields({
   const vendorOptions = useMemo(() => {
     const options = [{ value: '', label: 'Select Vendor...' }];
     vendors.forEach((v) => {
-      options.push({ value: v.id, label: v.name });
+      options.push({ value: String(v.id), label: v.name });
     });
     return options;
   }, [vendors]);
@@ -39,7 +39,7 @@ export function DeviceFormFields({
     const options = [{ value: '', label: 'Select Template...' }];
     templates.forEach((t) => {
       const vendorSuffix = t.vendor_id ? ` (${t.vendor_id})` : ' (global)';
-      options.push({ value: t.id, label: `${t.name}${vendorSuffix}` });
+      options.push({ value: String(t.id), label: `${t.name}${vendorSuffix}` });
     });
     return options;
   }, [templates]);

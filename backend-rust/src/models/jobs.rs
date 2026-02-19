@@ -19,6 +19,10 @@ pub mod job_type {
     pub const APPLY_TEMPLATE: &str = "apply_template";
 }
 
+fn default_manual() -> String {
+    "manual".to_string()
+}
+
 /// Job represents an async task (command execution or config deploy)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Job {
@@ -38,6 +42,8 @@ pub struct Job {
     pub completed_at: Option<DateTime<Utc>>,
     #[serde(default)]
     pub credential_id: String,
+    #[serde(default = "default_manual")]
+    pub triggered_by: String,
 }
 
 /// CreateJobRequest for creating a new job
@@ -49,6 +55,8 @@ pub struct CreateJobRequest {
     pub command: String,
     #[serde(default)]
     pub credential_id: String,
+    #[serde(default = "default_manual")]
+    pub triggered_by: String,
 }
 
 // ========== Job Template Models ==========

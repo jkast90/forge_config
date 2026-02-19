@@ -87,7 +87,7 @@ export function TemplatesScreen() {
     return [
       { value: '', label: 'All Vendors' },
       { value: 'global', label: 'Global Only' },
-      ...vendors.map((v) => ({ value: v.id, label: v.name })),
+      ...vendors.map((v) => ({ value: String(v.id), label: v.name })),
     ];
   }, [vendors]);
 
@@ -148,10 +148,10 @@ export function TemplatesScreen() {
   const handleEdit = (template: Template) => {
     setEditingTemplate(template);
     setFormData({
-      id: template.id,
+      id: String(template.id),
       name: template.name,
       description: template.description || '',
-      vendor_id: template.vendor_id || '',
+      vendor_id: template.vendor_id ? String(template.vendor_id) : '',
       content: template.content,
     });
     setShowForm(true);
@@ -335,7 +335,7 @@ export function TemplatesScreen() {
           value={formData.vendor_id}
           options={[
             { value: '', label: 'All Vendors (Global)' },
-            ...vendors.map((v) => ({ value: v.id, label: v.name })),
+            ...vendors.map((v) => ({ value: String(v.id), label: v.name })),
           ]}
           onChange={(value) => setFormData((prev) => ({ ...prev, vendor_id: value }))}
           placeholder="All Vendors (Global)"

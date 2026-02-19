@@ -6,7 +6,8 @@ import { FormDialog } from './FormDialog';
 import { FormField } from './FormField';
 import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
-import { Icon, PlusIcon, RefreshIcon, SpinnerIcon } from './Icon';
+import { Icon, PlusIcon, SpinnerIcon } from './Icon';
+import { InfoSection } from './InfoSection';
 import { Toggle } from './Toggle';
 import { useConfirm } from './ConfirmDialog';
 
@@ -18,10 +19,10 @@ interface DeviceRolesPanelProps {
   onCreate: (data: DeviceRoleFormData) => Promise<boolean>;
   onUpdate: (id: number | string, data: DeviceRoleFormData) => Promise<boolean>;
   onDelete: (id: number | string) => Promise<boolean>;
-  onRefresh: () => void;
 }
 
-export function DeviceRolesPanel({ deviceRoles, templates, groups, loading, onCreate, onUpdate, onDelete, onRefresh }: DeviceRolesPanelProps) {
+export function DeviceRolesPanel({ deviceRoles, templates, groups, loading, onCreate, onUpdate, onDelete }: DeviceRolesPanelProps) {
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingRole, setEditingRole] = useState<DeviceRole | null>(null);
   const [formData, setFormData] = useState<DeviceRoleFormData>({ name: '', description: '', template_ids: [], group_names: [] });
@@ -147,18 +148,28 @@ export function DeviceRolesPanel({ deviceRoles, templates, groups, loading, onCr
     <>
       <Card
         title="Device Roles"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
         headerAction={
           <div style={{ display: 'flex', gap: '8px' }}>
             <Button variant="primary" onClick={openCreate}>
               <PlusIcon size={14} />
               Add Role
             </Button>
-            <Button variant="secondary" onClick={onRefresh} disabled={loading}>
-              <RefreshIcon size={14} />
-            </Button>
           </div>
         }
       >
+        <InfoSection open={showInfo}>
+          <div>
+            <p>
+              Device roles group templates and variable sets that are applied together to matching devices.
+              Assign roles to devices or groups to control which configurations are deployed.
+            </p>
+            <ul>
+              <li>Each role can reference one or more configuration templates</li>
+              <li>Roles can be scoped to device groups for targeted deployment</li>
+            </ul>
+          </div>
+        </InfoSection>
         {loading && deviceRoles.length === 0 ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '24px', justifyContent: 'center' }}>
             <SpinnerIcon size={16} /> Loading device roles...

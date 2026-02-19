@@ -19,9 +19,9 @@ import {
   INTERCONNECT_OPTIONS,
   GPU_CLUSTER_STATUS_OPTIONS,
 } from '@core';
-import { ActionBar } from './ActionBar';
 import { Button } from './Button';
 import { Card } from './Card';
+import { InfoSection } from './InfoSection';
 import { useConfirm } from './ConfirmDialog';
 import { DeviceList } from './DeviceList';
 import { Discovery } from './Discovery';
@@ -41,13 +41,15 @@ interface ResourcesProps {
   onDeleteDevice: (id: number) => Promise<boolean>;
   onBackupDevice: (id: number) => Promise<boolean>;
   onRefreshDevices: () => void;
+  onAddDevice: () => void;
   onAddDiscoveredDevice: (device: Partial<DeviceFormData>) => void;
 }
 
 type Tab = 'devices' | 'discovery' | 'containers' | 'tenants' | 'vrfs' | 'gpu-clusters';
 
-export function Resources({ onEditDevice, onDeleteDevice, onBackupDevice, onRefreshDevices, onAddDiscoveredDevice }: ResourcesProps) {
+export function Resources({ onEditDevice, onDeleteDevice, onBackupDevice, onRefreshDevices, onAddDevice, onAddDiscoveredDevice }: ResourcesProps) {
   const [activeTab, setActiveTab] = usePersistedTab<Tab>('devices', ['devices', 'discovery', 'containers', 'tenants', 'vrfs', 'gpu-clusters'], 'tab_resources');
+  const [showInfo, setShowInfo] = useState(false);
 
   const { devices } = useDevices();
   const { discovered } = useDiscovery();
@@ -69,27 +71,34 @@ export function Resources({ onEditDevice, onDeleteDevice, onBackupDevice, onRefr
   ];
 
   return (
-    <Card title="Devices & Tenants">
+    <Card
+      title="Devices & Tenants"
+      titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+    >
+      <InfoSection open={showInfo}>
+        <p>Manage all network devices, tenants, VRFs, and GPU clusters in your infrastructure.</p>
+        <ul>
+          <li><strong>Devices</strong> — inventory of all managed network equipment</li>
+          <li><strong>Discovery</strong> — auto-discovered devices pending onboarding</li>
+          <li><strong>Test Containers</strong> — containerized devices for lab testing</li>
+          <li><strong>Tenants</strong> — organizational units that own devices and IP space</li>
+          <li><strong>VRFs</strong> — virtual routing and forwarding instances</li>
+          <li><strong>GPU Clusters</strong> — GPU server clusters and their interconnects</li>
+        </ul>
+      </InfoSection>
       <SideTabs
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={(id) => setActiveTab(id as Tab)}
       >
         {activeTab === 'devices' && (
-          <>
-            <div className="actions-bar">
-              <Button onClick={onRefreshDevices}>
-                <RefreshIcon size={16} />
-                Refresh
-              </Button>
-            </div>
-            <DeviceList
-              onEdit={onEditDevice}
-              onDelete={onDeleteDevice}
-              onBackup={onBackupDevice}
-              onRefresh={onRefreshDevices}
-            />
-          </>
+          <DeviceList
+            onEdit={onEditDevice}
+            onDelete={onDeleteDevice}
+            onBackup={onBackupDevice}
+            onRefresh={onRefreshDevices}
+            onAdd={onAddDevice}
+          />
         )}
         {activeTab === 'discovery' && <Discovery onAddDevice={onAddDiscoveredDevice} />}
         {activeTab === 'containers' && <TestContainers />}
@@ -131,6 +140,7 @@ function TenantsTab({ tenants, createTenant, updateTenant, deleteTenant }: {
   deleteTenant: (id: string) => Promise<boolean>;
 }) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
+  const [showInfo, setShowInfo] = useState(false);
 
   const form = useModalForm<Tenant, TenantFormData>({
     emptyFormData: EMPTY_TENANT_FORM,
@@ -197,23 +207,30 @@ function TenantsTab({ tenants, createTenant, updateTenant, deleteTenant }: {
 
   return (
     <>
-      <ActionBar>
-        <Button onClick={form.openAdd}>
-          <PlusIcon size={16} />
-          Add Tenant
-        </Button>
-      </ActionBar>
-
-      <Table
-        data={tenants}
-        columns={columns}
-        actions={actions}
-        getRowKey={(t) => t.id}
-        searchable
-        searchPlaceholder="Search tenants..."
-        onRowClick={form.openEdit}
-        emptyMessage="No tenants configured"
-      />
+      <Card
+        title="Tenants"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <Button onClick={form.openAdd}>
+            <PlusIcon size={16} />
+            Add Tenant
+          </Button>
+        }
+      >
+        <InfoSection open={showInfo}>
+          <p>Tenants represent organizations or customers that own network resources. Assign tenants to VRFs and prefixes to track resource ownership.</p>
+        </InfoSection>
+        <Table
+          data={tenants}
+          columns={columns}
+          actions={actions}
+          getRowKey={(t) => t.id}
+          searchable
+          searchPlaceholder="Search tenants..."
+          onRowClick={form.openEdit}
+          emptyMessage="No tenants configured"
+        />
+      </Card>
 
       <FormDialog
         isOpen={form.isOpen}
@@ -242,6 +259,7 @@ function VrfsTab({ vrfs, tenants, ipam }: {
   ipam: ReturnType<typeof useIpam>;
 }) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
+  const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [vrfName, setVrfName] = useState('');
   const [vrfRd, setVrfRd] = useState('');
@@ -305,24 +323,31 @@ function VrfsTab({ vrfs, tenants, ipam }: {
 
   return (
     <>
-      <ActionBar>
-        <Button onClick={() => setShowForm(true)}>
-          <PlusIcon size={16} />
-          Add VRF
-        </Button>
-      </ActionBar>
-
-      <Table
-        data={vrfs}
-        columns={columns}
-        actions={actions}
-        getRowKey={(row) => row.id}
-        tableId="resources-vrfs"
-        emptyMessage="No VRFs defined."
-        emptyDescription="All prefixes are in the global routing table."
-        searchable
-        searchPlaceholder="Search VRFs..."
-      />
+      <Card
+        title="VRFs"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <Button onClick={() => setShowForm(true)}>
+            <PlusIcon size={16} />
+            Add VRF
+          </Button>
+        }
+      >
+        <InfoSection open={showInfo}>
+          <p>Virtual Routing and Forwarding instances isolate routing tables for multi-tenant or segmented networks. Prefixes can be assigned to a VRF to separate address spaces.</p>
+        </InfoSection>
+        <Table
+          data={vrfs}
+          columns={columns}
+          actions={actions}
+          getRowKey={(row) => row.id}
+          tableId="resources-vrfs"
+          emptyMessage="No VRFs defined."
+          emptyDescription="All prefixes are in the global routing table."
+          searchable
+          searchPlaceholder="Search VRFs..."
+        />
+      </Card>
 
       <FormDialog isOpen={showForm} onClose={() => setShowForm(false)} title="Create VRF" onSubmit={(e) => { e.preventDefault(); handleCreate(); }} submitText="Create">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -351,6 +376,7 @@ function GpuClustersTab({ gpuClusters, vrfs, topologies, createGpuCluster, updat
   deleteGpuCluster: (id: string) => Promise<boolean>;
 }) {
   const { confirm, ConfirmDialogRenderer } = useConfirm();
+  const [showInfo, setShowInfo] = useState(false);
 
   const form = useModalForm<GpuCluster, GpuClusterFormData>({
     emptyFormData: EMPTY_GPU_CLUSTER_FORM,
@@ -527,23 +553,30 @@ function GpuClustersTab({ gpuClusters, vrfs, topologies, createGpuCluster, updat
 
   return (
     <>
-      <ActionBar>
-        <Button onClick={form.openAdd}>
-          <PlusIcon size={16} />
-          Add GPU Cluster
-        </Button>
-      </ActionBar>
-
-      <Table
-        data={gpuClusters}
-        columns={columns}
-        actions={actions}
-        getRowKey={(c) => c.id}
-        searchable
-        searchPlaceholder="Search GPU clusters..."
-        onRowClick={form.openEdit}
-        emptyMessage="No GPU clusters configured"
-      />
+      <Card
+        title="GPU Clusters"
+        titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
+        headerAction={
+          <Button onClick={form.openAdd}>
+            <PlusIcon size={16} />
+            Add GPU Cluster
+          </Button>
+        }
+      >
+        <InfoSection open={showInfo}>
+          <p>GPU clusters group compute nodes for AI/ML workloads. Each cluster specifies the GPU model, node count, interconnect type, and optional network topology.</p>
+        </InfoSection>
+        <Table
+          data={gpuClusters}
+          columns={columns}
+          actions={actions}
+          getRowKey={(c) => c.id}
+          searchable
+          searchPlaceholder="Search GPU clusters..."
+          onRowClick={form.openEdit}
+          emptyMessage="No GPU clusters configured"
+        />
+      </Card>
 
       <FormDialog
         isOpen={form.isOpen}

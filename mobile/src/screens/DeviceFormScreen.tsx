@@ -87,7 +87,7 @@ export function DeviceFormScreen() {
         config_template: device.config_template,
         ssh_user: device.ssh_user || '',
         ssh_pass: device.ssh_pass || '',
-        topology_id: device.topology_id || '',
+        topology_id: device.topology_id ? String(device.topology_id) : '',
         topology_role: device.topology_role || '',
         device_type: device.device_type || 'internal',
       };
@@ -117,6 +117,7 @@ export function DeviceFormScreen() {
     async (data: DeviceFormData) => {
       const deviceData: Partial<Device> = {
         ...data,
+        topology_id: data.topology_id ? Number(data.topology_id) : undefined,
         topology_role: (data.topology_role || undefined) as TopologyRole | undefined,
       };
       if (isEditMode && deviceId != null) {
@@ -157,7 +158,7 @@ export function DeviceFormScreen() {
         config_template: device.config_template,
         ssh_user: device.ssh_user || '',
         ssh_pass: device.ssh_pass || '',
-        topology_id: device.topology_id || '',
+        topology_id: device.topology_id ? String(device.topology_id) : '',
         topology_role: device.topology_role || '',
         device_type: device.device_type || 'internal',
       });

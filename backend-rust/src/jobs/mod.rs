@@ -139,6 +139,7 @@ impl JobService {
                             job_type: crate::models::job_type::WEBHOOK.to_string(),
                             command: tmpl.action_id.to_string(),
                             credential_id: credential_id_str.clone(),
+                            triggered_by: "scheduled".to_string(),
                         };
                         if let Ok(job) = svc.store.create_job(&job_id, &req).await {
                             if let Some(ref hub) = svc.ws_hub {
@@ -172,6 +173,7 @@ impl JobService {
                                 job_type: jt,
                                 command,
                                 credential_id: credential_id_str.clone(),
+                                triggered_by: "scheduled".to_string(),
                             };
 
                             if let Ok(job) = svc.store.create_job(&job_id, &req).await {
@@ -710,14 +712,28 @@ pub fn render_config(
         .map_err(|e| anyhow::anyhow!("Template rendering failed: {}", e))
 }
 
-/// Simple variable substitution for webhook URLs/bodies using {{variable}} syntax
+/// Variable substitution for webhook URLs/bodies.
+/// Supports {{var}}, {{.var}} (Go template style), and case-insensitive matching.
 fn substitute_device_vars(template: &str, device: &Device) -> String {
-    template
-        .replace("{{device_id}}", &device.id.to_string())
-        .replace("{{hostname}}", &device.hostname)
-        .replace("{{ip}}", &device.ip)
-        .replace("{{mac}}", device.mac.as_deref().unwrap_or(""))
-        .replace("{{vendor}}", device.vendor.as_deref().unwrap_or(""))
-        .replace("{{model}}", device.model.as_deref().unwrap_or(""))
-        .replace("{{serial_number}}", device.serial_number.as_deref().unwrap_or(""))
+    use regex_lite::Regex;
+
+    let device_id = device.id.to_string();
+    let vars: &[(&str, &str)] = &[
+        ("device_id", &device_id),
+        ("hostname", &device.hostname),
+        ("ip", &device.ip),
+        ("mac", device.mac.as_deref().unwrap_or("")),
+        ("vendor", device.vendor.as_deref().unwrap_or("")),
+        ("model", device.model.as_deref().unwrap_or("")),
+        ("serial_number", device.serial_number.as_deref().unwrap_or("")),
+    ];
+
+    let mut result = template.to_string();
+    for (name, value) in vars {
+        // Matches {{name}} and {{.name}}, case-insensitive
+        if let Ok(re) = Regex::new(&format!(r"(?i)\{{\{{\.?{}\}}\}}", name)) {
+            result = re.replace_all(&result, *value).into_owned();
+        }
+    }
+    result
 }

@@ -9,7 +9,7 @@ import { InfoSection } from './InfoSection';
 import { SelectField } from './SelectField';
 import { Table, Cell } from './Table';
 import type { TableColumn, TableAction } from './Table';
-import { Icon, PlusIcon, RefreshIcon, SpinnerIcon } from './Icon';
+import { Icon, PlusIcon, SpinnerIcon } from './Icon';
 
 interface CredentialsPanelProps {
   credentials: Credential[];
@@ -17,19 +17,40 @@ interface CredentialsPanelProps {
   onCreate: (data: CredentialFormData) => Promise<boolean>;
   onUpdate: (id: number | string, data: CredentialFormData) => Promise<boolean>;
   onDelete: (id: number | string) => Promise<boolean>;
-  onRefresh: () => void;
 }
 
-export function CredentialsPanel({ credentials, loading, onCreate, onUpdate, onDelete, onRefresh }: CredentialsPanelProps) {
+function PasswordCell({ password }: { password: string }) {
+  const [show, setShow] = useState(false);
+  if (!password) return <span className="text-muted">-</span>;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <span style={{ fontFamily: 'monospace', fontSize: '13px' }}>
+        {show ? password : '••••••••'}
+      </span>
+      <button
+        type="button"
+        onClick={() => setShow(s => !s)}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', opacity: 0.7 }}
+        title={show ? 'Hide password' : 'Show password'}
+      >
+        <Icon name={show ? 'visibility_off' : 'visibility'} size={14} />
+      </button>
+    </div>
+  );
+}
+
+export function CredentialsPanel({ credentials, loading, onCreate, onUpdate, onDelete }: CredentialsPanelProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingCred, setEditingCred] = useState<Credential | null>(null);
   const [formData, setFormData] = useState<CredentialFormData>({ name: '', description: '', cred_type: 'ssh', username: '', password: '' });
   const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const openCreate = () => {
     setEditingCred(null);
     setFormData({ name: '', description: '', cred_type: 'ssh', username: '', password: '' });
+    setShowPassword(false);
     setShowForm(true);
   };
 
@@ -42,6 +63,7 @@ export function CredentialsPanel({ credentials, loading, onCreate, onUpdate, onD
       username: cred.username,
       password: cred.password,
     });
+    setShowPassword(false);
     setShowForm(true);
   };
 
@@ -84,6 +106,12 @@ export function CredentialsPanel({ credentials, loading, onCreate, onUpdate, onD
       width: '140px',
     },
     {
+      header: 'Password',
+      accessor: (c) => <PasswordCell password={c.password} />,
+      searchValue: (c) => c.password,
+      width: '160px',
+    },
+    {
       header: 'Description',
       accessor: (c) => c.description || <span className="text-muted">-</span>,
       searchValue: (c) => c.description || '',
@@ -118,15 +146,10 @@ export function CredentialsPanel({ credentials, loading, onCreate, onUpdate, onD
         title="Credentials"
         titleAction={<InfoSection.Toggle open={showInfo} onToggle={setShowInfo} />}
         headerAction={
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Button variant="primary" onClick={openCreate}>
-              <PlusIcon size={14} />
-              Add Credential
-            </Button>
-            <Button variant="secondary" onClick={onRefresh} disabled={loading}>
-              <RefreshIcon size={14} />
-            </Button>
-          </div>
+          <Button variant="primary" onClick={openCreate}>
+            <PlusIcon size={14} />
+            Add Credential
+          </Button>
         }
       >
         <InfoSection open={showInfo}>
@@ -194,14 +217,28 @@ export function CredentialsPanel({ credentials, loading, onCreate, onUpdate, onD
           onChange={(e) => setFormData({ ...formData, username: e.target.value })}
           placeholder="SSH username"
         />
-        <FormField
-          label="Password"
-          name="password"
-          type="password"
-          value={formData.password}
-          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-          placeholder="SSH password or API key"
-        />
+        <div className="form-group">
+          <label htmlFor="password">Password</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              id="password"
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              placeholder="SSH password or API key"
+              style={{ paddingRight: '36px', width: '100%', boxSizing: 'border-box' }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(s => !s)}
+              style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center' }}
+              title={showPassword ? 'Hide password' : 'Show password'}
+            >
+              <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={16} />
+            </button>
+          </div>
+        </div>
         <FormField
           label="Description"
           name="description"
